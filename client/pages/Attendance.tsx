@@ -197,8 +197,8 @@ export default function Attendance() {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
-                <TableHead>Student</TableHead>
-                <TableHead>Class</TableHead>
+                <TableHead>Member</TableHead>
+                <TableHead>Event</TableHead>
                 <TableHead>Check-in</TableHead>
                 <TableHead>Check-out</TableHead>
                 <TableHead>Status</TableHead>

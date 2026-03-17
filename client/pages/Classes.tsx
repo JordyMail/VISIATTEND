@@ -199,9 +199,11 @@ export default function Classes() {
               <SelectValue placeholder="Filter by semester" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Semesters</SelectItem>
-              <SelectItem value="ganjil">Odd (Ganjil)</SelectItem>
-              <SelectItem value="genap">Even (Genap)</SelectItem>
+              <SelectItem value="all">All Period</SelectItem> 
+                <SelectItem value="Day">Day</SelectItem>
+                <SelectItem value="Week">Week</SelectItem>
+                <SelectItem value="Month">Month</SelectItem>
+                <SelectItem value="Year">Year</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -214,9 +216,9 @@ export default function Classes() {
             <TableHeader>
               <TableRow>
                 <TableHead>BS Week</TableHead>
-                <TableHead>Class Name</TableHead>
-                <TableHead>Lecturer</TableHead>
-                <TableHead>Semester</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead>Preacher</TableHead>
+                <TableHead>Date</TableHead>
                 <TableHead>Year</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -232,9 +234,10 @@ export default function Classes() {
                       {getLecturerName(cls.lecturerId)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">
-                        {cls.semester === "ganjil" ? "Odd" : "Even"}
-                      </Badge>
+                      {new Date(cls.createdAt).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })} 
                     </TableCell>
                     <TableCell>{cls.academicYear}</TableCell>
                     <TableCell>
@@ -303,17 +306,17 @@ export default function Classes() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {isEditDialogOpen ? "Edit Class" : "Add New Class"}
+              {isEditDialogOpen ? "Edit Event" : "Add New Event"}
             </DialogTitle>
             <DialogDescription>
               {isEditDialogOpen
-                ? "Update the class information below"
-                : "Fill in the details to create a new class"}
+                ? "Update the event information below"
+                : "Fill in the details to create a new event"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="classCode">Class Code</Label>
+              <Label htmlFor="classCode">Event Code</Label>
               <Input
                 id="classCode"
                 value={formData.classCode}
@@ -324,7 +327,7 @@ export default function Classes() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="className">Class Name</Label>
+              <Label htmlFor="className">Event Name</Label>
               <Input
                 id="className"
                 value={formData.className}
@@ -346,12 +349,12 @@ export default function Classes() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="lecturer">Lecturer</Label>
+              <Label htmlFor="Preacher">Preacher</Label>
               <Select value={formData.lecturerId} onValueChange={(value) =>
                 setFormData({ ...formData, lecturerId: value })
               }>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select lecturer" />
+                  <SelectValue placeholder="Select preacher" />
                 </SelectTrigger>
                 <SelectContent>
                   {mockUsers.filter((u) => u.role === "lecturer").map((lecturer) => (
@@ -363,13 +366,13 @@ export default function Classes() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="semester">Semester</Label>
+              <Label htmlFor="semester">Period Date</Label>
               <Select
                 value={formData.semester}
                 onValueChange={(value) =>
                   setFormData({
                     ...formData,
-                    semester: value as "ganjil" | "genap",
+                    // semester: value as "ganjil" | "genap",
                   })
                 }
               >
@@ -413,22 +416,28 @@ export default function Classes() {
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Lecturer</p>
+                <p className="text-sm text-muted-foreground">Preacher</p>
                 <p className="font-medium">
                   {selectedClass ? getLecturerName(selectedClass.lecturerId) : "-"}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Semester</p>
+                <p className="text-sm text-muted-foreground">Date</p>
                 <p className="font-medium">
-                  {selectedClass?.semester === "ganjil" ? "Odd" : "Even"}
+                  {selectedClass
+                    ? new Date(selectedClass.createdAt).toLocaleDateString(undefined, {
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                    : "-"}
                 </p>
               </div>
             </div>
 
             <div>
               <h3 className="font-semibold mb-3">
-                Enrolled Students ({classStudents.length})
+                Attended Member ({classStudents.length})
               </h3>
               <div className="border rounded-lg overflow-hidden">
                 {classStudents.length > 0 ? (
@@ -436,7 +445,7 @@ export default function Classes() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Name</TableHead>
-                        <TableHead>Student ID</TableHead>
+                        <TableHead>Member ID</TableHead>
                         <TableHead>Email</TableHead>
                       </TableRow>
                     </TableHeader>

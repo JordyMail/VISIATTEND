@@ -20,7 +20,7 @@ export interface Class {
   description?: string;
   lecturerId: number;
   academicYear: string;
-  semester: "ganjil" | "genap";
+  semester: "ganjil" | "genap" ;
   isActive: boolean;
   createdAt: string;
 }
