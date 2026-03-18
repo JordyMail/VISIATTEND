@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Bell, LogOut, Settings, User, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
 
 interface HeaderNavProps {
   onMenuClick?: () => void;
@@ -26,7 +25,13 @@ export function HeaderNav({
   userRole = "Administrator",
   userAvatar,
 }: HeaderNavProps) {
+  const navigate = useNavigate();
   const [hasNotifications] = useState(true);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    navigate("/login");
+  };
 
   return (
     <header className="flex items-center justify-between h-16 px-6 bg-background border-b border-border shadow-sm">
@@ -77,6 +82,7 @@ export function HeaderNav({
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
+
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="flex flex-col space-y-1">
               <p className="text-sm font-medium leading-none">{userName}</p>
@@ -84,21 +90,35 @@ export function HeaderNav({
                 {userRole}
               </p>
             </DropdownMenuLabel>
+
             <DropdownMenuSeparator />
+
             <DropdownMenuItem asChild>
-              <Link to="/settings" className="flex items-center gap-2 cursor-pointer">
+              <Link
+                to="/settings"
+                className="flex items-center gap-2 cursor-pointer"
+              >
                 <User className="w-4 h-4" />
                 <span>Profile</span>
               </Link>
             </DropdownMenuItem>
+
             <DropdownMenuItem asChild>
-              <Link to="/settings" className="flex items-center gap-2 cursor-pointer">
+              <Link
+                to="/settings"
+                className="flex items-center gap-2 cursor-pointer"
+              >
                 <Settings className="w-4 h-4" />
                 <span>Settings</span>
               </Link>
             </DropdownMenuItem>
+
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive">
+
+            <DropdownMenuItem
+              className="flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
+              onClick={handleLogout}
+            >
               <LogOut className="w-4 h-4" />
               <span>Log out</span>
             </DropdownMenuItem>

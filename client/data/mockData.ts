@@ -5,7 +5,7 @@ export interface User {
   memberId: string;
   fullName: string;
   email: string;
-  role: "admin" | "preacher" | "member" | "staff";
+  role: "admin" | "preacher" | "member" | "staff"; 
   profilePhoto?: string;
   phoneNumber?: string;
   isActive: boolean;
