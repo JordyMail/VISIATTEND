@@ -15,6 +15,8 @@ import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
+import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +41,10 @@ const App = () => (
               <Layout><Dashboard /></Layout>
             </ProtectedRoute>
           } />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+
+          
           <Route path="/members" element={
             <ProtectedRoute>
               <Layout><Members /></Layout>

@@ -1,6 +1,6 @@
 // pages/Login.tsx
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, LogIn, Mail, Lock, Shield } from "lucide-react";
 import { encryptData, setSecureCookie, setSession, clearSession } from "@/lib/auth";
 
@@ -226,26 +226,32 @@ export default function Login() {
                 </div>
               </div>
 
-              {/* Remember Me & Forgot Password */}
+
               <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer group">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 transition-all duration-200 cursor-pointer"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                  />
-                  <span className="text-sm text-gray-600 group-hover:text-gray-900 transition-colors">
-                    Remember me
-                  </span>
-                </label>
-                <button 
-                  type="button" 
-                  className="text-sm text-blue-600 hover:text-blue-700 hover:underline transition-all duration-200"
-                >
-                  Forgot password?
-                </button>
-              </div>
+                {/* Remember Me */}
+                <div className="flex items-center">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                    <input 
+                        type="checkbox" 
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 transition-all duration-200 cursor-pointer"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                    />
+                    <span className="text-sm text-gray-600 group-hover:text-gray-900 transition-colors">
+                        Remember me
+                    </span>
+                    </label>
+                    
+                </div>
+                <div>
+                    <Link 
+                    to="/forgot-password" 
+                    className="text-sm text-blue-600 hover:text-blue-700 hover:underline block transition-colors"
+                    >
+                    Forgot Password?
+                    </Link>
+                </div>
+            </div>
 
               {/* Security Info */}
               <div className="bg-blue-50/50 rounded-lg p-3 border border-blue-100">
@@ -273,6 +279,27 @@ export default function Login() {
                   </div>
                 )}
               </button>
+
+              {/* Links untuk Forgot Password dan Register */}
+              <div className="text-center space-y-3 pt-2">
+
+                
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-200"></div>
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="px-2 bg-white/80 text-gray-500">New to VISIATTEND?</span>
+                  </div>
+                </div>
+                
+                <Link 
+                  to="/register" 
+                  className="inline-flex items-center justify-center w-full px-4 py-2.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  Create New Account
+                </Link>
+              </div>
             </form>
           ) : (
             <form onSubmit={handleTwoFactorSubmit} className="space-y-6">
