@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
@@ -27,11 +28,26 @@ const queryClient = new QueryClient({
   },
 });
 
+// Komponen untuk auto scroll ke atas saat route berubah
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth" // Memberikan efek smooth scroll
+    });
+  }, [pathname]);
+
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <BrowserRouter>
+        <ScrollToTop /> {/* Tambahkan komponen ini di sini */}
         <Routes>
           <Route path="/login" element={<Login />} />
           
