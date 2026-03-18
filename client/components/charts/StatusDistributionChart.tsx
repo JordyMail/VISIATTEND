@@ -11,39 +11,39 @@ import { getAttendanceStats } from "@/data/mockData";
 
 interface StatusDistributionChartProps {
   userId?: number;
-  classId?: number;
+  eventId?: number;
 }
 
 export function StatusDistributionChart({
   userId,
-  classId,
+  eventId,
 }: StatusDistributionChartProps) {
-  const stats = getAttendanceStats(userId, classId);
+  const stats = getAttendanceStats(userId, eventId);
 
   const data = [
     {
       name: "Present",
-      value: stats.hadir,
+      value: stats.present,
       color: "hsl(142 71% 45%)", // success green
     },
     {
       name: "Late",
-      value: stats.terlambat,
+      value: stats.late,
       color: "hsl(38 92% 50%)", // warning orange
     },
     {
       name: "Excused",
-      value: stats.izin,
+      value: stats.excused,
       color: "hsl(216 98% 52%)", // info blue
     },
     {
       name: "Sick",
-      value: stats.sakit,
+      value: stats.sick,
       color: "hsl(54 100% 50%)", // yellow
     },
     {
       name: "Absent",
-      value: stats.alpha,
+      value: stats.absent,
       color: "hsl(0 84% 60%)", // error red
     },
   ].filter((item) => item.value > 0);
@@ -77,7 +77,7 @@ export function StatusDistributionChart({
                 borderRadius: "8px",
               }}
               labelStyle={{ color: "hsl(var(--foreground))" }}
-              formatter={(value) => `${value} students`}
+              formatter={(value) => `${value} members`}
             />
             <Legend />
           </PieChart>

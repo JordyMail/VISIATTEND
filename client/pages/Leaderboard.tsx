@@ -6,11 +6,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { mockClasses, getLeaderboardData, mockAchievements, mockUserAchievements } from "@/data/mockData";
+import { mockEvents, getLeaderboardData, mockAchievements } from "@/data/mockData";
 
 const MEDALS = {
   1: "🥇",
@@ -19,13 +18,13 @@ const MEDALS = {
 };
 
 export default function Leaderboard() {
-  const [selectedClass, setSelectedClass] = useState<string>(
-    mockClasses[0].id.toString()
+  const [selectedEvent, setSelectedEvent] = useState<string>(
+    mockEvents[0]?.id.toString() || "1"
   );
-  const [period, setPeriod] = useState<"week" | "month" | "year">("year");
+  const [period, setPeriod] = useState<"week" | "month" | "semester">("semester");
 
   const leaderboardData = getLeaderboardData(
-    parseInt(selectedClass),
+    parseInt(selectedEvent),
     period
   );
 
@@ -45,7 +44,7 @@ export default function Leaderboard() {
       <div>
         <h1 className="text-3xl md:text-4xl font-bold">Leaderboard</h1>
         <p className="text-muted-foreground mt-1">
-          Student rankings and achievements
+          Member rankings and achievements by event attendance
         </p>
       </div>
 
@@ -53,14 +52,14 @@ export default function Leaderboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="text-sm font-medium mb-2 block">Select Event</label>
-          <Select value={selectedClass} onValueChange={setSelectedClass}>
+          <Select value={selectedEvent} onValueChange={setSelectedEvent}>
             <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>  
+              <SelectValue placeholder="Select an event" />
+            </SelectTrigger>
             <SelectContent>
-              {mockClasses.map((cls) => (
-                <SelectItem key={cls.id} value={cls.id.toString()}>
-                  {cls.classCode} - {cls.className}
+              {mockEvents.map((event) => (
+                <SelectItem key={event.id} value={event.id.toString()}>
+                  {event.eventCode} - {event.eventName}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -72,7 +71,7 @@ export default function Leaderboard() {
           <Select
             value={period}
             onValueChange={(value) =>
-              setPeriod(value as "week" | "month" | "year")
+              setPeriod(value as "week" | "month" | "semester")
             }
           >
             <SelectTrigger>
@@ -81,7 +80,7 @@ export default function Leaderboard() {
             <SelectContent>
               <SelectItem value="week">This Week</SelectItem>
               <SelectItem value="month">This Month</SelectItem>
-              <SelectItem value="year">This Year</SelectItem>
+              <SelectItem value="semester">This Season</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -89,9 +88,9 @@ export default function Leaderboard() {
 
       {/* Top 3 Winners */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {leaderboardData.slice(0, 3).map((student, index) => (
+        {leaderboardData.slice(0, 3).map((member, index) => (
           <Card
-            key={student.userId}
+            key={member.userId}
             className="p-6 relative overflow-hidden"
           >
             {/* Medal Background */}
@@ -105,29 +104,29 @@ export default function Leaderboard() {
                 {MEDALS[index + 1 as keyof typeof MEDALS]}
               </div>
               <div className="mb-4">
-                <p className="font-semibold text-lg">{student.fullName}</p>
+                <p className="font-semibold text-lg">{member.fullName}</p>
                 <p className="text-sm text-muted-foreground">
-                  {student.studentId}
+                  {member.memberId}
                 </p>
               </div>
 
               <div className="space-y-2 mb-4">
                 <div>
                   <p className="text-3xl font-bold text-primary">
-                    {student.attendancePercentage.toFixed(1)}%
+                    {member.attendancePercentage.toFixed(1)}%
                   </p>
                   <p className="text-xs text-muted-foreground">Attendance</p>
                 </div>
                 <Progress
-                  value={student.attendancePercentage}
+                  value={member.attendancePercentage}
                   className="h-2"
                 />
               </div>
 
               {/* Achievements */}
-              {student.achievements.length > 0 && (
+              {member.achievements.length > 0 && (
                 <div className="flex gap-2 justify-center flex-wrap">
-                  {student.achievements.map((ach) =>
+                  {member.achievements.map((ach) =>
                     getAchievementBadge(ach)
                   )}
                 </div>
@@ -150,7 +149,7 @@ export default function Leaderboard() {
                   Name
                 </th>
                 <th className="px-6 py-3 text-left text-sm font-semibold">
-                  ID
+                  Member ID
                 </th>
                 <th className="px-6 py-3 text-left text-sm font-semibold">
                   Present
@@ -167,9 +166,9 @@ export default function Leaderboard() {
               </tr>
             </thead>
             <tbody>
-              {leaderboardData.map((student, index) => (
+              {leaderboardData.map((member, index) => (
                 <tr
-                  key={student.userId}
+                  key={member.userId}
                   className="border-b border-border hover:bg-muted/50 transition-colors"
                 >
                   <td className="px-6 py-4">
@@ -185,37 +184,37 @@ export default function Leaderboard() {
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 font-medium">{student.fullName}</td>
+                  <td className="px-6 py-4 font-medium">{member.fullName}</td>
                   <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {student.studentId}
+                    {member.memberId}
                   </td>
                   <td className="px-6 py-4">
-                    <Badge variant="outline" className="bg-status-success/20 text-status-success">
-                      {student.totalHadir}
+                    <Badge variant="outline" className="bg-green-500/20 text-green-600 dark:text-green-400">
+                      {member.totalPresent}
                     </Badge>
                   </td>
                   <td className="px-6 py-4">
-                    <Badge variant="outline" className="bg-status-warning/20 text-status-warning">
-                      {student.totalTerlambat}
+                    <Badge variant="outline" className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400">
+                      {member.totalLate}
                     </Badge>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <div className="w-24">
                         <Progress
-                          value={student.attendancePercentage}
+                          value={member.attendancePercentage}
                           className="h-2"
                         />
                       </div>
                       <span className="text-sm font-medium min-w-12">
-                        {student.attendancePercentage.toFixed(1)}%
+                        {member.attendancePercentage.toFixed(1)}%
                       </span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex gap-1 flex-wrap">
-                      {student.achievements.length > 0 ? (
-                        student.achievements.map((ach) =>
+                      {member.achievements.length > 0 ? (
+                        member.achievements.map((ach) =>
                           getAchievementBadge(ach)
                         )
                       ) : (

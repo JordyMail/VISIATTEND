@@ -19,12 +19,12 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { mockAttendances, mockUsers, mockClasses, Attendance } from "@/data/mockData";
+import { mockAttendances, mockUsers, mockEvents, Attendance } from "@/data/mockData";
 
 export default function Attendance() {
   const [attendances, setAttendances] = useState<Attendance[]>(mockAttendances);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterClass, setFilterClass] = useState<string>("all");
+  const [filterEvent, setFilterEvent] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterDate, setFilterDate] = useState<string>("");
 
@@ -33,13 +33,13 @@ export default function Attendance() {
     const user = mockUsers.find((u) => u.id === record.userId);
     const matchSearch =
       (user?.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user?.studentId.toLowerCase().includes(searchTerm.toLowerCase())) ?? false;
+        user?.memberId.toLowerCase().includes(searchTerm.toLowerCase())) ?? false;
 
-    const matchClass = filterClass === "all" || record.classId.toString() === filterClass;
+    const matchEvent = filterEvent === "all" || record.eventId.toString() === filterEvent;
     const matchStatus = filterStatus === "all" || record.status === filterStatus;
     const matchDate = !filterDate || record.attendanceDate === filterDate;
 
-    return matchSearch && matchClass && matchStatus && matchDate;
+    return matchSearch && matchEvent && matchStatus && matchDate;
   });
 
   const getUserName = (userId: number) => {
@@ -47,36 +47,36 @@ export default function Attendance() {
     return user?.fullName || "Unknown";
   };
 
-  const getClassName = (classId: number) => {
-    const cls = mockClasses.find((c) => c.id === classId);
-    return cls?.classCode || "Unknown";
+  const getEventName = (eventId: number) => {
+    const event = mockEvents.find((e) => e.id === eventId);
+    return event?.eventCode || "Unknown";
   };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: "default" | "secondary" | "outline"; className: string }> = {
-      hadir: {
+      present: {
         variant: "outline",
         className: "bg-status-success/20 text-status-success border-status-success/20",
       },
-      terlambat: {
+      late: {
         variant: "outline",
         className: "bg-status-warning/20 text-status-warning border-status-warning/20",
       },
-      izin: {
+      excused: {
         variant: "outline",
         className: "bg-accent/20 text-accent border-accent/20",
       },
-      sakit: {
+      sick: {
         variant: "outline",
         className: "bg-yellow-500/20 text-yellow-700 border-yellow-500/20",
       },
-      alpha: {
+      absent: {
         variant: "outline",
         className: "bg-status-error/20 text-status-error border-status-error/20",
       },
     };
 
-    const config = variants[status] || variants.hadir;
+    const config = variants[status] || variants.present;
     return (
       <Badge variant={config.variant} className={config.className}>
         {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -102,11 +102,11 @@ export default function Attendance() {
   };
 
   const handleExportCSV = () => {
-    const headers = ["Date", "Student", "Class", "Check-in", "Check-out", "Status"];
+    const headers = ["Date", "Member", "Event", "Check-in", "Check-out", "Status"];
     const rows = filteredAttendances.map((record) => [
       record.attendanceDate,
       getUserName(record.userId),
-      getClassName(record.classId),
+      getEventName(record.eventId),
       formatTime(record.checkInTime),
       record.checkOutTime ? formatTime(record.checkOutTime) : "-",
       record.status,
@@ -155,15 +155,15 @@ export default function Attendance() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Select value={filterClass} onValueChange={setFilterClass}>
+          <Select value={filterEvent} onValueChange={setFilterEvent}>
             <SelectTrigger>
-              <SelectValue placeholder="Filter by class" />
+              <SelectValue placeholder="Filter by event" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Classes</SelectItem>
-              {mockClasses.map((cls) => (
-                <SelectItem key={cls.id} value={cls.id.toString()}>
-                  {cls.classCode}
+              <SelectItem value="all">All Events</SelectItem>
+              {mockEvents.map((evt) => (
+                <SelectItem key={evt.id} value={evt.id.toString()}>
+                  {evt.eventCode}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -174,11 +174,11 @@ export default function Attendance() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="hadir">Present</SelectItem>
-              <SelectItem value="terlambat">Late</SelectItem>
-              <SelectItem value="izin">Excused</SelectItem>
-              <SelectItem value="sakit">Sick</SelectItem>
-              <SelectItem value="alpha">Absent</SelectItem>
+              <SelectItem value="present">Present</SelectItem>
+              <SelectItem value="late">Late</SelectItem>
+              <SelectItem value="excused">Excused</SelectItem>
+              <SelectItem value="sick">Sick</SelectItem>
+              <SelectItem value="absent">Absent</SelectItem>
             </SelectContent>
           </Select>
           <Input
@@ -214,7 +214,7 @@ export default function Attendance() {
                     </TableCell>
                     <TableCell>{getUserName(record.userId)}</TableCell>
                     <TableCell className="text-sm">
-                      {getClassName(record.classId)}
+                      {getEventName(record.eventId)}
                     </TableCell>
                     <TableCell className="text-sm">
                       {formatTime(record.checkInTime)}
@@ -253,25 +253,25 @@ export default function Attendance() {
         <Card className="p-4">
           <p className="text-sm text-muted-foreground mb-1">Present</p>
           <p className="text-2xl font-bold text-status-success">
-            {filteredAttendances.filter((a) => a.status === "hadir").length}
+            {filteredAttendances.filter((a) => a.status === "present").length}
           </p>
         </Card>
         <Card className="p-4">
           <p className="text-sm text-muted-foreground mb-1">Late</p>
           <p className="text-2xl font-bold text-status-warning">
-            {filteredAttendances.filter((a) => a.status === "terlambat").length}
+            {filteredAttendances.filter((a) => a.status === "late").length}
           </p>
         </Card>
         <Card className="p-4">
           <p className="text-sm text-muted-foreground mb-1">Excused</p>
           <p className="text-2xl font-bold text-accent">
-            {filteredAttendances.filter((a) => a.status === "izin" || a.status === "sakit").length}
+            {filteredAttendances.filter((a) => a.status === "excused" || a.status === "sick").length}
           </p>
         </Card>
         <Card className="p-4">
           <p className="text-sm text-muted-foreground mb-1">Absent</p>
           <p className="text-2xl font-bold text-status-error">
-            {filteredAttendances.filter((a) => a.status === "alpha").length}
+            {filteredAttendances.filter((a) => a.status === "absent").length}
           </p>
         </Card>
       </div>

@@ -38,118 +38,129 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { mockClasses, mockUsers, getStudentsInClass, Class } from "@/data/mockData";
+import { mockEvents, mockUsers, getMembersInEvent, Event } from "@/data/mockData";
 
-export default function Classes() {
-  const [classes, setClasses] = useState<Class[]>(mockClasses);
+export default function Events() {
+  const [events, setEvents] = useState<Event[]>(mockEvents);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterSemester, setFilterSemester] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
-  const [selectedClass, setSelectedClass] = useState<Class | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [formData, setFormData] = useState({
-    classCode: "",
-    className: "",
+    eventCode: "",
+    eventName: "",
     description: "",
-    lecturerId: "",
-    academicYear: "2023/2024",
-    semester: "ganjil" as const,
+    preacherId: "",
+    season: "2024 Season",
+    eventType: "worship" as const,
   });
 
-  // Filter classes
-  const filteredClasses = classes.filter((cls) => {
+  // Filter events
+  const filteredEvents = events.filter((evt) => {
     const matchSearch =
-      cls.className.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cls.classCode.toLowerCase().includes(searchTerm.toLowerCase());
+      evt.eventName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      evt.eventCode.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchSemester =
-      filterSemester === "all" || cls.semester === filterSemester;
+    const matchType =
+      filterType === "all" || evt.eventType === filterType;
 
-    return matchSearch && matchSemester;
+    return matchSearch && matchType;
   });
 
-  const handleAddClass = () => {
-    if (formData.classCode && formData.className) {
-      const newClass: Class = {
-        id: Math.max(...classes.map((c) => c.id), 0) + 1,
+  const handleAddEvent = () => {
+    if (formData.eventCode && formData.eventName) {
+      const newEvent: Event = {
+        id: Math.max(...events.map((e) => e.id), 0) + 1,
         ...formData,
-        lecturerId: parseInt(formData.lecturerId) || 0,
+        preacherId: parseInt(formData.preacherId) || 0,
         isActive: true,
         createdAt: new Date().toISOString(),
       };
-      setClasses([...classes, newClass]);
+      setEvents([...events, newEvent]);
       setIsAddDialogOpen(false);
       setFormData({
-        classCode: "",
-        className: "",
+        eventCode: "",
+        eventName: "",
         description: "",
-        lecturerId: "",
-        academicYear: "2023/2024",
-        semester: "ganjil",
+        preacherId: "",
+        season: "2024 Season",
+        eventType: "worship",
       });
     }
   };
 
-  const handleEditClass = () => {
-    if (selectedClass) {
-      setClasses(
-        classes.map((c) =>
-          c.id === selectedClass.id
+  const handleEditEvent = () => {
+    if (selectedEvent) {
+      setEvents(
+        events.map((e) =>
+          e.id === selectedEvent.id
             ? {
-                ...selectedClass,
+                ...selectedEvent,
                 ...formData,
-                lecturerId: parseInt(formData.lecturerId) || selectedClass.lecturerId,
+                preacherId: parseInt(formData.preacherId) || selectedEvent.preacherId,
               }
-            : c
+            : e
         )
       );
       setIsEditDialogOpen(false);
-      setSelectedClass(null);
+      setSelectedEvent(null);
       setFormData({
-        classCode: "",
-        className: "",
+        eventCode: "",
+        eventName: "",
         description: "",
-        lecturerId: "",
-        academicYear: "2023/2024",
-        semester: "ganjil",
+        preacherId: "",
+        season: "2024 Season",
+        eventType: "worship",
       });
     }
   };
 
-  const handleDeleteClass = () => {
-    if (selectedClass) {
-      setClasses(classes.filter((c) => c.id !== selectedClass.id));
+  const handleDeleteEvent = () => {
+    if (selectedEvent) {
+      setEvents(events.filter((e) => e.id !== selectedEvent.id));
       setIsDeleteDialogOpen(false);
-      setSelectedClass(null);
+      setSelectedEvent(null);
     }
   };
 
-  const handleOpenEdit = (cls: Class) => {
-    setSelectedClass(cls);
+  const handleOpenEdit = (evt: Event) => {
+    setSelectedEvent(evt);
     setFormData({
-      classCode: cls.classCode,
-      className: cls.className,
-      description: cls.description || "",
-      lecturerId: cls.lecturerId.toString(),
-      academicYear: cls.academicYear,
-      semester: cls.semester,
+      eventCode: evt.eventCode,
+      eventName: evt.eventName,
+      description: evt.description || "",
+      preacherId: evt.preacherId.toString(),
+      season: evt.season,
+      eventType: evt.eventType,
     });
     setIsEditDialogOpen(true);
   };
 
-  const handleOpenDetail = (cls: Class) => {
-    setSelectedClass(cls);
+  const handleOpenDetail = (evt: Event) => {
+    setSelectedEvent(evt);
     setIsDetailDialogOpen(true);
   };
 
-  const getLecturerName = (lecturerId: number) => {
-    const lecturer = mockUsers.find((u) => u.id === lecturerId);
-    return lecturer?.fullName || "Unassigned";
+  const getPreacherName = (preacherId: number) => {
+    const preacher = mockUsers.find((u) => u.id === preacherId);
+    return preacher?.fullName || "Unassigned";
   };
 
-  const classStudents = selectedClass ? getStudentsInClass(selectedClass.id) : [];
+  const getEventTypeBadgeColor = (type: string) => {
+    const colors: Record<string, string> = {
+      worship: "bg-blue-500/20 text-blue-700 border-blue-200",
+      meeting: "bg-green-500/20 text-green-700 border-green-200",
+      study: "bg-purple-500/20 text-purple-700 border-purple-200",
+      fellowship: "bg-orange-500/20 text-orange-700 border-orange-200",
+      outreach: "bg-red-500/20 text-red-700 border-red-200",
+    };
+    return colors[type] || "bg-gray-500/20 text-gray-700 border-gray-200";
+  };
+
+  const eventMembers = selectedEvent ? getMembersInEvent(selectedEvent.id) : [];
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -158,19 +169,19 @@ export default function Classes() {
         <div>
           <h1 className="text-3xl md:text-4xl font-bold">Events Management</h1>
           <p className="text-muted-foreground mt-1">
-            Create and manage events
+            Create and manage church events
           </p>
         </div>
         <Button
           className="gap-2 bg-primary hover:bg-primary/90 w-full md:w-auto"
           onClick={() => {
             setFormData({
-              classCode: "",
-              className: "",
+              eventCode: "",
+              eventName: "",
               description: "",
-              lecturerId: "",
-              academicYear: "2023/2024",
-              semester: "ganjil",
+              preacherId: "",
+              season: "2024 Season",
+              eventType: "worship",
             });
             setIsAddDialogOpen(true);
           }}
@@ -194,62 +205,62 @@ export default function Classes() {
               />
             </div>
           </div>
-          <Select value={filterSemester} onValueChange={setFilterSemester}>
+          <Select value={filterType} onValueChange={setFilterType}>
             <SelectTrigger className="w-full md:w-40">
-              <SelectValue placeholder="Filter by semester" />
+              <SelectValue placeholder="Filter by type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Period</SelectItem> 
-                <SelectItem value="Day">Day</SelectItem>
-                <SelectItem value="Week">Week</SelectItem>
-                <SelectItem value="Month">Month</SelectItem>
-                <SelectItem value="Year">Year</SelectItem>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="worship">Worship</SelectItem>
+              <SelectItem value="meeting">Meeting</SelectItem>
+              <SelectItem value="study">Study</SelectItem>
+              <SelectItem value="fellowship">Fellowship</SelectItem>
+              <SelectItem value="outreach">Outreach</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </Card>
 
-      {/* Classes Table */}
+      {/* Events Table */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>BS Week</TableHead>
-                <TableHead>Title</TableHead>
+                <TableHead>Event Code</TableHead>
+                <TableHead>Event Name</TableHead>
                 <TableHead>Preacher</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Year</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Season</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredClasses.length > 0 ? (
-                filteredClasses.map((cls) => (
-                  <TableRow key={cls.id}>
-                    <TableCell className="font-medium">{cls.classCode}</TableCell>
-                    <TableCell>{cls.className}</TableCell>
+              {filteredEvents.length > 0 ? (
+                filteredEvents.map((evt) => (
+                  <TableRow key={evt.id}>
+                    <TableCell className="font-medium">{evt.eventCode}</TableCell>
+                    <TableCell>{evt.eventName}</TableCell>
                     <TableCell className="text-sm">
-                      {getLecturerName(cls.lecturerId)}
+                      {getPreacherName(evt.preacherId)}
                     </TableCell>
                     <TableCell>
-                      {new Date(cls.createdAt).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                      })} 
+                      <Badge variant="outline" className={getEventTypeBadgeColor(evt.eventType)}>
+                        {evt.eventType.charAt(0).toUpperCase() + evt.eventType.slice(1)}
+                      </Badge>
                     </TableCell>
-                    <TableCell>{cls.academicYear}</TableCell>
+                    <TableCell>{evt.season}</TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"
                         className={
-                          cls.isActive
+                          evt.isActive
                             ? "bg-status-success/20 text-status-success border-status-success/20"
                             : "bg-status-error/20 text-status-error border-status-error/20"
                         }
                       >
-                        {cls.isActive ? "Active" : "Inactive"}
+                        {evt.isActive ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -257,14 +268,14 @@ export default function Classes() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleOpenDetail(cls)}
+                          onClick={() => handleOpenDetail(evt)}
                         >
                           <UsersIcon className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleOpenEdit(cls)}
+                          onClick={() => handleOpenEdit(evt)}
                         >
                           <Edit2 className="w-4 h-4" />
                         </Button>
@@ -273,7 +284,7 @@ export default function Classes() {
                           size="sm"
                           className="text-destructive hover:text-destructive"
                           onClick={() => {
-                            setSelectedClass(cls);
+                            setSelectedEvent(evt);
                             setIsDeleteDialogOpen(true);
                           }}
                         >
@@ -286,7 +297,7 @@ export default function Classes() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No classes found
+                    No events found
                   </TableCell>
                 </TableRow>
               )}
@@ -300,7 +311,7 @@ export default function Classes() {
         if (!open) {
           setIsAddDialogOpen(false);
           setIsEditDialogOpen(false);
-          setSelectedClass(null);
+          setSelectedEvent(null);
         }
       }}>
         <DialogContent>
@@ -316,25 +327,25 @@ export default function Classes() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="classCode">Event Code</Label>
+              <Label htmlFor="eventCode">Event Code</Label>
               <Input
-                id="classCode"
-                value={formData.classCode}
+                id="eventCode"
+                value={formData.eventCode}
                 onChange={(e) =>
-                  setFormData({ ...formData, classCode: e.target.value })
+                  setFormData({ ...formData, eventCode: e.target.value })
                 }
-                placeholder="e.g., CS101"
+                placeholder="e.g., EVT001"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="className">Event Name</Label>
+              <Label htmlFor="eventName">Event Name</Label>
               <Input
-                id="className"
-                value={formData.className}
+                id="eventName"
+                value={formData.eventName}
                 onChange={(e) =>
-                  setFormData({ ...formData, className: e.target.value })
+                  setFormData({ ...formData, eventName: e.target.value })
                 }
-                placeholder="e.g., Introduction to Programming"
+                placeholder="e.g., Sunday Worship Service"
               />
             </div>
             <div className="space-y-2">
@@ -345,34 +356,34 @@ export default function Classes() {
                 onChange={(e) =>
                   setFormData({ ...formData, description: e.target.value })
                 }
-                placeholder="Brief class description"
+                placeholder="Brief event description"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="Preacher">Preacher</Label>
-              <Select value={formData.lecturerId} onValueChange={(value) =>
-                setFormData({ ...formData, lecturerId: value })
+              <Label htmlFor="preacher">Preacher</Label>
+              <Select value={formData.preacherId} onValueChange={(value) =>
+                setFormData({ ...formData, preacherId: value })
               }>
                 <SelectTrigger>
                   <SelectValue placeholder="Select preacher" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockUsers.filter((u) => u.role === "lecturer").map((lecturer) => (
-                    <SelectItem key={lecturer.id} value={lecturer.id.toString()}>
-                      {lecturer.fullName}
+                  {mockUsers.filter((u) => u.role === "preacher").map((preacher) => (
+                    <SelectItem key={preacher.id} value={preacher.id.toString()}>
+                      {preacher.fullName}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="semester">Period Date</Label>
+              <Label htmlFor="eventType">Event Type</Label>
               <Select
-                value={formData.semester}
+                value={formData.eventType}
                 onValueChange={(value) =>
                   setFormData({
                     ...formData,
-                    // semester: value as "ganjil" | "genap",
+                    eventType: value as "worship" | "meeting" | "study" | "fellowship" | "outreach",
                   })
                 }
               >
@@ -380,8 +391,11 @@ export default function Classes() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ganjil">Odd (Ganjil)</SelectItem>
-                  <SelectItem value="genap">Even (Genap)</SelectItem>
+                  <SelectItem value="worship">Worship</SelectItem>
+                  <SelectItem value="meeting">Meeting</SelectItem>
+                  <SelectItem value="study">Bible Study</SelectItem>
+                  <SelectItem value="fellowship">Fellowship</SelectItem>
+                  <SelectItem value="outreach">Outreach</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -398,9 +412,9 @@ export default function Classes() {
             </Button>
             <Button
               className="bg-primary hover:bg-primary/90"
-              onClick={isEditDialogOpen ? handleEditClass : handleAddClass}
+              onClick={isEditDialogOpen ? handleEditEvent : handleAddEvent}
             >
-              {isEditDialogOpen ? "Update Class" : "Add Class"}
+              {isEditDialogOpen ? "Update Event" : "Add Event"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -410,37 +424,31 @@ export default function Classes() {
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{selectedClass?.className}</DialogTitle>
-            <DialogDescription>{selectedClass?.classCode}</DialogDescription>
+            <DialogTitle>{selectedEvent?.eventName}</DialogTitle>
+            <DialogDescription>{selectedEvent?.eventCode}</DialogDescription>
           </DialogHeader>
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Preacher</p>
                 <p className="font-medium">
-                  {selectedClass ? getLecturerName(selectedClass.lecturerId) : "-"}
+                  {selectedEvent ? getPreacherName(selectedEvent.preacherId) : "-"}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Date</p>
+                <p className="text-sm text-muted-foreground">Event Type</p>
                 <p className="font-medium">
-                  {selectedClass
-                    ? new Date(selectedClass.createdAt).toLocaleDateString(undefined, {
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })
-                    : "-"}
+                  {selectedEvent?.eventType.charAt(0).toUpperCase() + selectedEvent?.eventType.slice(1)}
                 </p>
               </div>
             </div>
 
             <div>
               <h3 className="font-semibold mb-3">
-                Attended Member ({classStudents.length})
+                Enrolled Members ({eventMembers.length})
               </h3>
               <div className="border rounded-lg overflow-hidden">
-                {classStudents.length > 0 ? (
+                {eventMembers.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -450,16 +458,16 @@ export default function Classes() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {classStudents.map((student) => (
-                        <TableRow key={student.id}>
+                      {eventMembers.map((member) => (
+                        <TableRow key={member.id}>
                           <TableCell className="font-medium">
-                            {student.fullName}
+                            {member.fullName}
                           </TableCell>
                           <TableCell className="text-sm">
-                            {student.studentId}
+                            {member.memberId}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {student.email}
+                            {member.email}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -467,7 +475,7 @@ export default function Classes() {
                   </Table>
                 ) : (
                   <div className="p-4 text-center text-muted-foreground">
-                    No students enrolled yet
+                    No members enrolled yet
                   </div>
                 )}
               </div>
@@ -488,15 +496,15 @@ export default function Classes() {
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Class</AlertDialogTitle>
+            <AlertDialogTitle>Delete Event</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedClass?.className}? This action cannot be undone.
+              Are you sure you want to delete {selectedEvent?.eventName}? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDeleteClass}
+              onClick={handleDeleteEvent}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete

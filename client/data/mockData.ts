@@ -1,15 +1,27 @@
-// Mock data for VISIATTEND Dashboard
+// Mock data for VISIATTEND Dashboard - Church Organization
 
 export interface User {
   id: number;
-  studentId: string;
+  memberId: string;
   fullName: string;
   email: string;
-  role: "admin" | "lecturer" | "student" | "employee" | "preacher" | "participant" | "foreign" | "member";
+  role: "admin" | "preacher" | "member" | "staff";
   profilePhoto?: string;
   phoneNumber?: string;
   isActive: boolean;
   lastLogin?: string;
+  createdAt: string;
+}
+
+export interface Event {
+  id: number;
+  eventCode: string;
+  eventName: string;
+  description?: string;
+  preacherId: number;
+  season: string; // e.g., "2024 Season"
+  eventType: "worship" | "meeting" | "study" | "fellowship" | "outreach"; // Type of event
+  isActive: boolean;
   createdAt: string;
 }
 
@@ -18,16 +30,53 @@ export interface Class {
   classCode: string;
   className: string;
   description?: string;
-  lecturerId: number;
-  academicYear: string;
-  semester: "ganjil" | "genap" ;
+  teacherId?: number;
+  academicYear?: string;
   isActive: boolean;
-  createdAt: string;
 }
 
-export interface ClassEnrollment {
+export const mockClasses: Class[] = [
+  {
+    id: 1,
+    classCode: "C101",
+    className: "Sunday School - Beginners",
+    description: "Sunday School class for ages 4-7",
+    teacherId: 8,
+    academicYear: "2024",
+    isActive: true,
+  },
+  {
+    id: 2,
+    classCode: "C102",
+    className: "Sunday School - Juniors",
+    description: "Sunday School class for ages 8-12",
+    teacherId: 2,
+    academicYear: "2024",
+    isActive: true,
+  },
+  {
+    id: 3,
+    classCode: "C103",
+    className: "Youth Bible Study",
+    description: "Bible study class for teenagers",
+    teacherId: 2,
+    academicYear: "2024",
+    isActive: true,
+  },
+  {
+    id: 4,
+    classCode: "C104",
+    className: "Adult Fellowship",
+    description: "Fellowship and study for adults",
+    teacherId: 8,
+    academicYear: "2024",
+    isActive: true,
+  },
+];
+
+export interface EventEnrollment {
   id: number;
-  classId: number;
+  eventId: number;
   userId: number;
   enrollmentDate: string;
   isActive: boolean;
@@ -36,11 +85,11 @@ export interface ClassEnrollment {
 export interface Attendance {
   id: number;
   userId: number;
-  classId: number;
+  eventId: number;
   attendanceDate: string;
   checkInTime: string;
   checkOutTime?: string;
-  status: "hadir" | "terlambat" | "izin" | "sakit" | "alpha";
+  status: "present" | "late" | "excused" | "sick" | "absent";
   confidenceScore?: number;
   livenessVerified: boolean;
   deviceInfo?: string;
@@ -64,11 +113,11 @@ export interface Achievement {
   icon: string;
 }
 
-// Mock Users
+// Mock Users (Members)
 export const mockUsers: User[] = [
   {
     id: 1,
-    studentId: "ADM001",
+    memberId: "ADM001",
     fullName: "Admin User",
     email: "admin@visiattend.com",
     role: "admin",
@@ -79,10 +128,10 @@ export const mockUsers: User[] = [
   },
   {
     id: 2,
-    studentId: "LEC001",
-    fullName: "Brusche Zach",
-    email: "Brusche.Zach@gmail.com",
-    role: "lecturer",
+    memberId: "PREACH001",
+    fullName: "Pastor Michael Johnson",
+    email: "michael.johnson@church.com",
+    role: "preacher",
     phoneNumber: "08234567890",
     isActive: true,
     lastLogin: "2024-03-17T09:15:00",
@@ -90,10 +139,10 @@ export const mockUsers: User[] = [
   },
   {
     id: 3,
-    studentId: "STU001",
-    fullName: "Yobel Fernindo Simbolon",
-    email: "yobel.simbolon@gmail.com",
-    role: "student",
+    memberId: "MEM001",
+    fullName: "John Smith",
+    email: "john.smith@member.com",
+    role: "member",
     phoneNumber: "08345678901",
     isActive: true,
     lastLogin: "2024-03-17T07:45:00",
@@ -101,10 +150,10 @@ export const mockUsers: User[] = [
   },
   {
     id: 4,
-    studentId: "STU002",
-    fullName: "Jordy Kastello Mail",
-    email: "jordy.kastello@gmail.com",
-    role: "student",
+    memberId: "MEM002",
+    fullName: "Sarah Johnson",
+    email: "sarah.johnson@member.com",
+    role: "member",
     phoneNumber: "08456789012",
     isActive: true,
     lastLogin: "2024-03-16T14:20:00",
@@ -112,10 +161,10 @@ export const mockUsers: User[] = [
   },
   {
     id: 5,
-    studentId: "STU003",
-    fullName: "Berliano Keio Angerah Tari",
-    email: "Berliano.Keio@gmail.com",
-    role: "student",
+    memberId: "MEM003",
+    fullName: "David Williams",
+    email: "david.williams@member.com",
+    role: "member",
     phoneNumber: "08567890123",
     isActive: true,
     lastLogin: "2024-03-17T06:50:00",
@@ -123,10 +172,10 @@ export const mockUsers: User[] = [
   },
   {
     id: 6,
-    studentId: "STU004",
-    fullName: "Fetrik Cola",
-    email: "fetrik.cola@gmail.com",
-    role: "student",
+    memberId: "MEM004",
+    fullName: "Emily Davis",
+    email: "emily.davis@member.com",
+    role: "member",
     phoneNumber: "08678901234",
     isActive: true,
     lastLogin: "2024-03-15T11:30:00",
@@ -134,10 +183,10 @@ export const mockUsers: User[] = [
   },
   {
     id: 7,
-    studentId: "STU005",
-    fullName: "Albertus Ahmad Rizaldi",
-    email: "ahmad.rizaldi@gmail.com",
-    role: "student",
+    memberId: "MEM005",
+    fullName: "James Brown",
+    email: "james.brown@member.com",
+    role: "member",
     phoneNumber: "08789012345",
     isActive: false,
     lastLogin: "2024-03-10T13:00:00",
@@ -145,42 +194,9 @@ export const mockUsers: User[] = [
   },
   {
     id: 8,
-    studentId: "LEC002",
-    fullName: "Pande Naingolan",
-    email: "pande.naingolan@gmail.com",
-    role: "lecturer",
-    phoneNumber: "08890123456",
-    isActive: true,
-    lastLogin: "2024-03-17T08:00:00",
-    createdAt: "2024-01-10T00:00:00",
-  },
-    {
-    id: 9,
-    studentId: "LEC002",
-    fullName: "Jeconiah Lunardi",
-    email: "jeconiah.lunardi@gmail.com",
-    role: "preacher",
-    phoneNumber: "08890123456",
-    isActive: true,
-    lastLogin: "2024-03-17T08:00:00",
-    createdAt: "2024-01-10T00:00:00",
-  },
-    {
-    id: 10,
-    studentId: "LEC002",
-    fullName: "Pieter Kurnia",
-    email: "pieter.kurnia@gmail.com",
-    role: "preacher",
-    phoneNumber: "08890123456",
-    isActive: true,
-    lastLogin: "2024-03-17T08:00:00",
-    createdAt: "2024-01-10T00:00:00",
-  },
-      {
-    id: 11,
-    studentId: "LEC002",
-    fullName: "Franky Hutapea",
-    email: "franky.hutapea@gmail.com",
+    memberId: "PREACH002",
+    fullName: "Rev. Patricia Anderson",
+    email: "patricia.anderson@church.com",
     role: "preacher",
     phoneNumber: "08890123456",
     isActive: true,
@@ -189,79 +205,79 @@ export const mockUsers: User[] = [
   },
 ];
 
-// Mock Classes
-export const mockClasses: Class[] = [
+// Mock Events
+export const mockEvents: Event[] = [
   {
     id: 1,
-    classCode: "101",
-    className: "Predestination",
-    description: "Learn the fundamentals of programming with Python",
-    lecturerId: 9,
-    academicYear: "2023/2024",
-    semester: "ganjil",
+    eventCode: "EVT001",
+    eventName: "Sunday Worship Service",
+    description: "Weekly Sunday morning worship and praise service",
+    preacherId: 2,
+    season: "2024 Season",
+    eventType: "worship",
     isActive: true,
     createdAt: "2024-01-05T00:00:00",
   },
   {
     id: 2,
-    classCode: "102",
-    className: "Irresestible Gods",
-    description: "Understanding data structures and algorithms",
-    lecturerId: 10,
-    academicYear: "2023/2024",
-    semester: "ganjil",
+    eventCode: "EVT002",
+    eventName: "Wednesday Prayer Meeting",
+    description: "Midweek prayer and intercession gathering",
+    preacherId: 2,
+    season: "2024 Season",
+    eventType: "meeting",
     isActive: true,
     createdAt: "2024-01-05T00:00:00",
   },
   {
     id: 3,
-    classCode: "103",
-    className: "Thrinity",
-    description: "Design and implementation of database systems",
-    lecturerId: 11,
-    academicYear: "2023/2024",
-    semester: "ganjil",
+    eventCode: "EVT003",
+    eventName: "Bible Study Group",
+    description: "In-depth study of Scripture and Christian teachings",
+    preacherId: 8,
+    season: "2024 Season",
+    eventType: "study",
     isActive: true,
     createdAt: "2024-01-05T00:00:00",
   },
   {
     id: 4,
-    classCode: "104",
-    className: "Old Testament",
-    description: "Modern web development with React and Node.js",
-    lecturerId: 10,
-    academicYear: "2023/2024",
-    semester: "ganjil",
+    eventCode: "EVT004",
+    eventName: "Youth Fellowship",
+    description: "Fellowship and spiritual growth for young adults",
+    preacherId: 8,
+    season: "2024 Season",
+    eventType: "fellowship",
     isActive: true,
     createdAt: "2024-01-05T00:00:00",
   },
 ];
 
-// Mock Class Enrollments
-export const mockClassEnrollments: ClassEnrollment[] = [
-  { id: 1, classId: 1, userId: 3, enrollmentDate: "2024-01-15", isActive: true },
-  { id: 2, classId: 1, userId: 4, enrollmentDate: "2024-01-15", isActive: true },
-  { id: 3, classId: 1, userId: 5, enrollmentDate: "2024-01-15", isActive: true },
-  { id: 4, classId: 1, userId: 6, enrollmentDate: "2024-01-15", isActive: true },
-  { id: 5, classId: 1, userId: 7, enrollmentDate: "2024-01-15", isActive: true },
-  { id: 6, classId: 2, userId: 3, enrollmentDate: "2024-01-15", isActive: true },
-  { id: 7, classId: 2, userId: 4, enrollmentDate: "2024-01-15", isActive: true },
-  { id: 8, classId: 2, userId: 5, enrollmentDate: "2024-01-15", isActive: true },
-  { id: 9, classId: 3, userId: 6, enrollmentDate: "2024-01-15", isActive: true },
-  { id: 10, classId: 3, userId: 7, enrollmentDate: "2024-01-15", isActive: true },
-  { id: 11, classId: 4, userId: 3, enrollmentDate: "2024-01-15", isActive: true },
-  { id: 12, classId: 4, userId: 4, enrollmentDate: "2024-01-15", isActive: true },
+// Mock Event Enrollments
+export const mockEventEnrollments: EventEnrollment[] = [
+  { id: 1, eventId: 1, userId: 3, enrollmentDate: "2024-01-15", isActive: true },
+  { id: 2, eventId: 1, userId: 4, enrollmentDate: "2024-01-15", isActive: true },
+  { id: 3, eventId: 1, userId: 5, enrollmentDate: "2024-01-15", isActive: true },
+  { id: 4, eventId: 1, userId: 6, enrollmentDate: "2024-01-15", isActive: true },
+  { id: 5, eventId: 1, userId: 7, enrollmentDate: "2024-01-15", isActive: true },
+  { id: 6, eventId: 2, userId: 3, enrollmentDate: "2024-01-15", isActive: true },
+  { id: 7, eventId: 2, userId: 4, enrollmentDate: "2024-01-15", isActive: true },
+  { id: 8, eventId: 2, userId: 5, enrollmentDate: "2024-01-15", isActive: true },
+  { id: 9, eventId: 3, userId: 6, enrollmentDate: "2024-01-15", isActive: true },
+  { id: 10, eventId: 3, userId: 7, enrollmentDate: "2024-01-15", isActive: true },
+  { id: 11, eventId: 4, userId: 3, enrollmentDate: "2024-01-15", isActive: true },
+  { id: 12, eventId: 4, userId: 4, enrollmentDate: "2024-01-15", isActive: true },
 ];
 
 // Mock Attendances - Generate for last 7 days
 export const mockAttendances: Attendance[] = (() => {
   const attendances: Attendance[] = [];
-  const statuses: Array<"hadir" | "terlambat" | "izin" | "sakit" | "alpha"> = [
-    "hadir",
-    "terlambat",
-    "izin",
-    "sakit",
-    "alpha",
+  const statuses: Array<"present" | "late" | "excused" | "sick" | "absent"> = [
+    "present",
+    "late",
+    "excused",
+    "sick",
+    "absent",
   ];
   let id = 1;
 
@@ -271,27 +287,27 @@ export const mockAttendances: Attendance[] = (() => {
     date.setDate(date.getDate() - dayOffset);
     const dateStr = date.toISOString().split("T")[0];
 
-    // Only generate for weekdays (Monday-Friday)
-    if (date.getDay() >= 1 && date.getDay() <= 5) {
-      // Generate for each student in each class
-      for (let classId = 1; classId <= 2; classId++) {
+    // Generate for weekdays (events can happen any day)
+    if (date.getDay() >= 0 && date.getDay() <= 6) {
+      // Generate for each member in each event
+      for (let eventId = 1; eventId <= 2; eventId++) {
         for (let userId = 3; userId <= 7; userId++) {
-          const isEnrolled = mockClassEnrollments.some(
-            (e) => e.classId === classId && e.userId === userId && e.isActive
+          const isEnrolled = mockEventEnrollments.some(
+            (e) => e.eventId === eventId && e.userId === userId && e.isActive
           );
 
           if (isEnrolled) {
             const status = statuses[Math.floor(Math.random() * statuses.length)];
-            const hour = 7 + Math.floor(Math.random() * 3);
+            const hour = 8 + Math.floor(Math.random() * 3);
             const minute = Math.floor(Math.random() * 60);
 
             attendances.push({
               id: id++,
               userId,
-              classId,
+              eventId,
               attendanceDate: dateStr,
               checkInTime: `${dateStr}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`,
-              checkOutTime: `${dateStr}T${String(hour + 2).padStart(2, "0")}:${String(Math.floor(Math.random() * 60)).padStart(2, "0")}:00`,
+              checkOutTime: `${dateStr}T${String(hour + 1).padStart(2, "0")}:${String(Math.floor(Math.random() * 60)).padStart(2, "0")}:00`,
               status,
               confidenceScore: Math.random() * (99.99 - 85.5) + 85.5,
               livenessVerified: Math.random() > 0.1,
@@ -315,7 +331,7 @@ export const mockActivityLogs: ActivityLog[] = [
     action: "CHECK_IN",
     entityType: "Attendance",
     entityId: 1,
-    description: "Andi Wijaya checked in to CS101",
+    description: "John Smith checked in to Sunday Worship Service",
     createdAt: "2024-03-17T07:45:00",
   },
   {
@@ -324,7 +340,7 @@ export const mockActivityLogs: ActivityLog[] = [
     action: "CHECK_IN",
     entityType: "Attendance",
     entityId: 2,
-    description: "Siti Nurhaliza checked in to CS101",
+    description: "Sarah Johnson checked in to Sunday Worship Service",
     createdAt: "2024-03-17T07:50:00",
   },
   {
@@ -333,7 +349,7 @@ export const mockActivityLogs: ActivityLog[] = [
     action: "CHECK_IN",
     entityType: "Attendance",
     entityId: 3,
-    description: "Riko Pratama checked in to Data Structures",
+    description: "David Williams checked in to Wednesday Prayer Meeting",
     createdAt: "2024-03-17T07:42:00",
   },
   {
@@ -342,101 +358,101 @@ export const mockActivityLogs: ActivityLog[] = [
     action: "CHECK_IN",
     entityType: "Attendance",
     entityId: 4,
-    description: "Dewi Lestari checked in to Database Systems",
+    description: "Emily Davis checked in to Bible Study Group",
     createdAt: "2024-03-17T07:30:00",
   },
   {
     id: 5,
     userId: 1,
     action: "CREATE",
-    entityType: "Class",
+    entityType: "Event",
     entityId: 4,
-    description: "Admin created new class: Web Development",
+    description: "Admin created new event: Youth Fellowship",
     createdAt: "2024-03-16T14:20:00",
   },
 ];
 
-// Mock Achievements/Badges
+// Mock Achievements/Badges - Faith-based
 export const mockAchievements: Achievement[] = [
   {
-    id: "perfect-attendance",
-    name: "Perfect Attendance",
+    id: "faithful-attendee",
+    name: "Faithful Attendee",
     description: "100% attendance for one month",
-    icon: "🏆",
+    icon: "✝️",
   },
   {
-    id: "early-bird",
-    name: "Early Bird",
-    description: "Always arrive on time",
-    icon: "🐦",
+    id: "devoted-member",
+    name: "Devoted Member",
+    description: "Always arrive early to events",
+    icon: "🙏",
   },
   {
-    id: "most-improved",
-    name: "Most Improved",
+    id: "growing-in-faith",
+    name: "Growing in Faith",
     description: "Highest improvement in attendance",
     icon: "📈",
   },
   {
-    id: "streak-master",
-    name: "Streak Master",
+    id: "prayer-warrior",
+    name: "Prayer Warrior",
     description: "30 consecutive days of attendance",
-    icon: "🔥",
+    icon: "⛪",
   },
   {
-    id: "super-student",
-    name: "Super Student",
-    description: "Enrolled in 4 or more classes",
+    id: "dedicated-disciple",
+    name: "Dedicated Disciple",
+    description: "Attending 4 or more events",
     icon: "⭐",
   },
 ];
 
-// Mock User Achievements (which users have which badges)
+// Mock User Achievements (which members have which badges)
 export const mockUserAchievements: Record<number, string[]> = {
-  3: ["perfect-attendance", "early-bird", "streak-master"],
-  4: ["perfect-attendance", "super-student"],
-  5: ["most-improved"],
-  6: ["perfect-attendance", "early-bird"],
+  3: ["faithful-attendee", "devoted-member", "prayer-warrior"],
+  4: ["faithful-attendee", "dedicated-disciple"],
+  5: ["growing-in-faith"],
+  6: ["faithful-attendee", "devoted-member"],
   7: [],
 };
 
 // Helper functions
-export function getClassById(id: number): Class | undefined {
-  return mockClasses.find((c) => c.id === id);
+export function getEventById(id: number): Event | undefined {
+  return mockEvents.find((e) => e.id === id);
 }
 
 export function getUserById(id: number): User | undefined {
   return mockUsers.find((u) => u.id === id);
 }
 
-export function getStudentsInClass(classId: number): User[] {
-  const enrollmentUserIds = mockClassEnrollments
-    .filter((e) => e.classId === classId && e.isActive)
+export function getMembersInEvent(eventId: number): User[] {
+  const enrollmentUserIds = mockEventEnrollments
+    .filter((e) => e.eventId === eventId && e.isActive)
     .map((e) => e.userId);
   return mockUsers.filter((u) => enrollmentUserIds.includes(u.id));
 }
 
-export function getClassesForUser(userId: number): Class[] {
-  const classIds = mockClassEnrollments
+export function getEventsForUser(userId: number): Event[] {
+  const eventIds = mockEventEnrollments
     .filter((e) => e.userId === userId && e.isActive)
-    .map((e) => e.classId);
-  return mockClasses.filter((c) => classIds.includes(c.id));
+    .map((e) => e.eventId);
+  return mockEvents.filter((e) => eventIds.includes(e.id));
 }
 
-export function getAttendanceStats(userId?: number, classId?: number) {
+export function getAttendanceStats(userId?: number, eventId?: number) {
   const filtered = mockAttendances.filter(
-    (a) => (!userId || a.userId === userId) && (!classId || a.classId === classId)
+    (a) => (!userId || a.userId === userId) && (!eventId || a.eventId === eventId)
   );
 
   const stats = {
     totalAttendance: filtered.length,
-    hadir: filtered.filter((a) => a.status === "hadir").length,
-    terlambat: filtered.filter((a) => a.status === "terlambat").length,
-    izin: filtered.filter((a) => a.status === "izin").length,
-    sakit: filtered.filter((a) => a.status === "sakit").length,
-    alpha: filtered.filter((a) => a.status === "alpha").length,
+    present: filtered.filter((a) => a.status === "present").length,
+    late: filtered.filter((a) => a.status === "late").length,
+    excused: filtered.filter((a) => a.status === "excused").length,
+    sick: filtered.filter((a) => a.status === "sick").length,
+    absent: filtered.filter((a) => a.status === "absent").length,
   };
 
-  const presentCount = stats.hadir + stats.terlambat;
+  const presentCount = stats.present + stats.late;
   const attendancePercentage = stats.totalAttendance > 0
     ? ((presentCount / stats.totalAttendance) * 100).toFixed(2)
     : "0.00";
@@ -457,14 +473,14 @@ export function getTodayAttendanceStats(): {
     (a) => a.attendanceDate === today
   );
   
-  const totalStudents = mockUsers.filter((u) => u.role === "student" && u.isActive).length;
+  const totalMembers = mockUsers.filter((u) => u.role === "member" && u.isActive).length;
 
   return {
     checkedIn: todayAttendances.filter(
-      (a) => a.status === "hadir" || a.status === "terlambat"
+      (a) => a.status === "present" || a.status === "late"
     ).length,
-    pending: totalStudents - todayAttendances.length,
-    absent: todayAttendances.filter((a) => a.status === "alpha").length,
+    pending: totalMembers - todayAttendances.length,
+    absent: todayAttendances.filter((a) => a.status === "absent").length,
   };
 }
 
@@ -472,7 +488,7 @@ export function getRecentActivities(limit: number = 10): ActivityLog[] {
   return mockActivityLogs.slice(0, limit);
 }
 
-export function getAttendanceTrend(days: number = 7, classId?: number) {
+export function getAttendanceTrend(days: number = 7, eventId?: number) {
   const trend: Record<string, number> = {};
 
   for (let i = days - 1; i >= 0; i--) {
@@ -482,33 +498,33 @@ export function getAttendanceTrend(days: number = 7, classId?: number) {
 
     const dayAttendances = mockAttendances.filter((a) => {
       const match = a.attendanceDate === dateStr;
-      return classId ? match && a.classId === classId : match;
+      return eventId ? match && a.eventId === eventId : match;
     });
 
-    const hadirCount = dayAttendances.filter(
-      (a) => a.status === "hadir" || a.status === "terlambat"
+    const presentCount = dayAttendances.filter(
+      (a) => a.status === "present" || a.status === "late"
     ).length;
 
-    trend[dateStr] = hadirCount;
+    trend[dateStr] = presentCount;
   }
 
   return trend;
 }
 
-export function getLeaderboardData(classId?: number, period: "week" | "month" | "year" = "year") {
-  const students = mockUsers.filter((u) => u.role === "student" && u.isActive);
+export function getLeaderboardData(eventId?: number, period: "week" | "month" | "season" = "season") {
+  const members = mockUsers.filter((u) => u.role === "member" && u.isActive);
 
-  return students
-    .map((student) => {
-      const stats = getAttendanceStats(student.id, classId);
-      const achievements = mockUserAchievements[student.id] || [];
+  return members
+    .map((member) => {
+      const stats = getAttendanceStats(member.id, eventId);
+      const achievements = mockUserAchievements[member.id] || [];
 
       return {
-        userId: student.id,
-        studentId: student.studentId,
-        fullName: student.fullName,
-        totalHadir: stats.hadir,
-        totalTerlambat: stats.terlambat,
+        userId: member.id,
+        memberId: member.memberId,
+        fullName: member.fullName,
+        totalPresent: stats.present,
+        totalLate: stats.late,
         attendancePercentage: stats.attendancePercentage,
         achievements,
       };

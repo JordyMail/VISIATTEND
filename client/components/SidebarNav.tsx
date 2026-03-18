@@ -20,13 +20,13 @@ const navigation = [
     icon: LayoutDashboard,
   },
   {
-    name: "Users",
-    href: "/users",
+    name: "Members",
+    href: "/members",
     icon: Users,
   },
   {
-    name: "Event",
-    href: "/classes",
+    name: "Events",
+    href: "/events",
     icon: BookOpen,
   },
   {

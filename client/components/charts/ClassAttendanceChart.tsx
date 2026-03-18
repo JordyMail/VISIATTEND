@@ -9,23 +9,23 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { mockClasses, getAttendanceStats } from "@/data/mockData";
+import { mockEvents, getAttendanceStats } from "@/data/mockData";
 
 export function ClassAttendanceChart() {
-  const data = mockClasses.map((cls) => {
-    const stats = getAttendanceStats(undefined, cls.id);
+  const data = mockEvents.map((evt) => {
+    const stats = getAttendanceStats(undefined, evt.id);
     return {
-      name: cls.classCode,
-      present: stats.hadir + stats.terlambat,
-      absent: stats.alpha,
-      excused: stats.izin + stats.sakit,
+      name: evt.eventCode,
+      present: stats.present + stats.late,
+      absent: stats.absent,
+      excused: stats.excused + stats.sick,
     };
   });
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Attendance by Class</CardTitle>
+        <CardTitle className="text-lg">Attendance by Event</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>

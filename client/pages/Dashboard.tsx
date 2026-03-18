@@ -16,7 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   mockUsers,
-  mockClasses,
+  mockEvents,
   getTodayAttendanceStats,
   getAttendanceStats,
   getRecentActivities,
@@ -28,23 +28,23 @@ export default function Dashboard() {
   const todayStats = getTodayAttendanceStats();
   const overallStats = getAttendanceStats();
   const recentActivities = getRecentActivities(5);
-  const activeStudents = mockUsers.filter(
-    (u) => u.role === "student" && u.isActive
+  const activeMembers = mockUsers.filter(
+    (u) => u.role === "member" && u.isActive
   ).length;
-  const activeClasses = mockClasses.filter((c) => c.isActive).length;
+  const activeEvents = mockEvents.filter((e) => e.isActive).length;
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "hadir":
+      case "present":
       case "CHECK_IN":
         return "bg-status-success/20 text-status-success";
-      case "terlambat":
+      case "late":
         return "bg-status-warning/20 text-status-warning";
-      case "alpha":
+      case "absent":
       case "ABSENT":
         return "bg-status-error/20 text-status-error";
-      case "izin":
-      case "sakit":
+      case "excused":
+      case "sick":
         return "bg-accent/20 text-accent";
       default:
         return "bg-muted/20 text-muted-foreground";
@@ -58,7 +58,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-3xl md:text-4xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground mt-1">
-            Welcome back! Here's your attendance overview.
+            Welcome back! Here's your church attendance overview.
           </p>
         </div>
         <div className="flex gap-3">
@@ -76,24 +76,24 @@ export default function Dashboard() {
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total Students"
-          value={activeStudents}
+          title="Total Members"
+          value={activeMembers}
           icon={Users}
           color="primary"
-          description="Active student accounts"
+          description="Active member accounts"
           trend={{ value: 12, direction: "up", label: "vs last month" }}
         />
         <StatCard
-          title="Active Classes"
-          value={activeClasses}
+          title="Active Events"
+          value={activeEvents}
           icon={BookOpen}
           color="info"
-          description="Classes in session"
+          description="Events in session"
           trend={{ value: 5, direction: "up", label: "vs last month" }}
         />
         <StatCard
           title="Today's Attendance"
-          value={`${todayStats.checkedIn}/${activeStudents}`}
+          value={`${todayStats.checkedIn}/${activeMembers}`}
           icon={CalendarCheck}
           color="success"
           description={`${todayStats.pending} pending, ${todayStats.absent} absent`}
@@ -193,7 +193,7 @@ export default function Dashboard() {
                   <div
                     className="bg-status-success h-2 rounded-full"
                     style={{
-                      width: `${(todayStats.checkedIn / activeStudents) * 100}%`,
+                      width: `${(todayStats.checkedIn / activeMembers) * 100}%`,
                     }}
                   />
                 </div>
@@ -212,7 +212,7 @@ export default function Dashboard() {
                   <div
                     className="bg-status-warning h-2 rounded-full"
                     style={{
-                      width: `${(todayStats.pending / activeStudents) * 100}%`,
+                      width: `${(todayStats.pending / activeMembers) * 100}%`,
                     }}
                   />
                 </div>
@@ -231,7 +231,7 @@ export default function Dashboard() {
                   <div
                     className="bg-status-error h-2 rounded-full"
                     style={{
-                      width: `${(todayStats.absent / activeStudents) * 100}%`,
+                      width: `${(todayStats.absent / activeMembers) * 100}%`,
                     }}
                   />
                 </div>
@@ -247,25 +247,25 @@ export default function Dashboard() {
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Present</span>
                 <span className="font-semibold text-status-success">
-                  {overallStats.hadir}
+                  {overallStats.present}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Late</span>
                 <span className="font-semibold text-status-warning">
-                  {overallStats.terlambat}
+                  {overallStats.late}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Excused</span>
                 <span className="font-semibold text-accent">
-                  {overallStats.izin + overallStats.sakit}
+                  {overallStats.excused + overallStats.sick}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Absent</span>
                 <span className="font-semibold text-status-error">
-                  {overallStats.alpha}
+                  {overallStats.absent}
                 </span>
               </div>
             </CardContent>

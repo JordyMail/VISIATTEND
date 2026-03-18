@@ -13,21 +13,21 @@ import { getAttendanceTrend } from "@/data/mockData";
 
 interface AttendanceTrendChartProps {
   days?: number;
-  classId?: number;
+  eventId?: number;
 }
 
 export function AttendanceTrendChart({
   days = 7,
-  classId,
+  eventId,
 }: AttendanceTrendChartProps) {
-  const trend = getAttendanceTrend(days, classId);
-  
+  const trend = getAttendanceTrend(days, eventId);
+
   const data = Object.entries(trend).map(([date, count]) => ({
     date: new Date(date).toLocaleDateString("id-ID", {
       month: "short",
       day: "numeric",
     }),
-    hadir: count,
+    present: count,
   }));
 
   return (
@@ -59,7 +59,7 @@ export function AttendanceTrendChart({
             <Legend />
             <Line
               type="monotone"
-              dataKey="hadir"
+              dataKey="present"
               stroke="hsl(var(--primary))"
               strokeWidth={2}
               dot={{ fill: "hsl(var(--primary))", r: 4 }}

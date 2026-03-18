@@ -8,8 +8,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import Dashboard from "./pages/Dashboard";
-import Users from "./pages/Users";
-import Classes from "./pages/Classes";
+import Members from "./pages/Members";
+import Events from "./pages/Events";
 import Attendance from "./pages/Attendance";
 import Leaderboard from "./pages/Leaderboard";
 import Reports from "./pages/Reports";
@@ -34,18 +34,18 @@ const App = () => (
             }
           />
           <Route
-            path="/users"
+            path="/members"
             element={
               <Layout>
-                <Users />
+                <Members />
               </Layout>
             }
           />
           <Route
-            path="/classes"
+            path="/events"
             element={
               <Layout>
-                <Classes />
+                <Events />
               </Layout>
             }
           />

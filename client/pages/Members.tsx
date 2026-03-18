@@ -40,7 +40,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { mockUsers, User } from "@/data/mockData";
 
-export default function Users() {
+export default function Members() {
   const [users, setUsers] = useState<User[]>(mockUsers);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRole, setFilterRole] = useState<string>("all");
@@ -51,9 +51,9 @@ export default function Users() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({
     fullName: "",
-    studentId: "",
+    memberId: "",
     email: "",
-    role: "student" as User["role"],
+    role: "member" as User["role"],
     phoneNumber: "",
   });
 
@@ -61,7 +61,7 @@ export default function Users() {
   const filteredUsers = users.filter((user) => {
     const matchSearch =
       user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.studentId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.memberId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchRole = filterRole === "all" || user.role === filterRole;
@@ -74,7 +74,7 @@ export default function Users() {
   });
 
   const handleAddUser = () => {
-    if (formData.fullName && formData.studentId && formData.email) {
+    if (formData.fullName && formData.memberId && formData.email) {
       const newUser: User = {
         id: Math.max(...users.map((u) => u.id)) + 1,
         ...formData,
@@ -85,9 +85,9 @@ export default function Users() {
       setIsAddDialogOpen(false);
       setFormData({
         fullName: "",
-        studentId: "",
+        memberId: "",
         email: "",
-        role: "student",
+        role: "member",
         phoneNumber: "",
       });
     }
@@ -104,9 +104,9 @@ export default function Users() {
       setSelectedUser(null);
       setFormData({
         fullName: "",
-        studentId: "",
+        memberId: "",
         email: "",
-        role: "student",
+        role: "member",
         phoneNumber: "",
       });
     }
@@ -124,7 +124,7 @@ export default function Users() {
     setSelectedUser(user);
     setFormData({
       fullName: user.fullName,
-      studentId: user.studentId,
+      memberId: user.memberId,
       email: user.email,
       role: user.role,
       phoneNumber: user.phoneNumber || "",
@@ -143,9 +143,9 @@ export default function Users() {
   const getRoleBadge = (role: User["role"]) => {
     const variants: Record<User["role"], "default" | "secondary" | "outline"> = {
       admin: "default",
-      lecturer: "secondary",
-      student: "outline",
-      employee: "outline",
+      preacher: "secondary",
+      member: "outline",
+      staff: "outline",
     };
     return <Badge variant={variants[role]}>{role}</Badge>;
   };
@@ -155,9 +155,9 @@ export default function Users() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold">Users Management</h1>
+          <h1 className="text-3xl md:text-4xl font-bold">Members Management</h1>
           <p className="text-muted-foreground mt-1">
-            Manage all users, their roles, and statuses in the system
+            Manage church members, preachers, and staff accounts
           </p>
         </div>
         <Button
@@ -165,16 +165,16 @@ export default function Users() {
           onClick={() => {
             setFormData({
               fullName: "",
-              studentId: "",
+              memberId: "",
               email: "",
-              role: "student",
+              role: "member",
               phoneNumber: "",
             });
             setIsAddDialogOpen(true);
           }}
         >
           <Plus className="w-4 h-4" />
-          Add New User
+          Add New Member
         </Button>
       </div>
 
@@ -200,9 +200,9 @@ export default function Users() {
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="Participant">Participant</SelectItem>
-                <SelectItem value="Foreign">Foreign</SelectItem>
-                <SelectItem value="Member">Member</SelectItem>
+                <SelectItem value="preacher">Preacher</SelectItem>
+                <SelectItem value="member">Member</SelectItem>
+                <SelectItem value="staff">Staff</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -219,14 +219,14 @@ export default function Users() {
         </div>
       </Card>
 
-      {/* Users Table */}
+      {/* Members Table */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Student ID</TableHead>
+                <TableHead>Member ID</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Phone</TableHead>
@@ -239,7 +239,7 @@ export default function Users() {
                 filteredUsers.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.fullName}</TableCell>
-                    <TableCell className="text-sm">{user.studentId}</TableCell>
+                    <TableCell className="text-sm">{user.memberId}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {user.email}
                     </TableCell>
@@ -293,7 +293,7 @@ export default function Users() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No users found matching your filters
+                    No members found matching your filters
                   </TableCell>
                 </TableRow>
               )}
@@ -313,12 +313,12 @@ export default function Users() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {isEditDialogOpen ? "Edit User" : "Add New User"}
+              {isEditDialogOpen ? "Edit Member" : "Add New Member"}
             </DialogTitle>
             <DialogDescription>
               {isEditDialogOpen
-                ? "Update the user information below"
-                : "Fill in the details to create a new user"}
+                ? "Update the member information below"
+                : "Fill in the details to create a new member"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -334,14 +334,14 @@ export default function Users() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="studentId">Student ID</Label>
+              <Label htmlFor="memberId">Member ID</Label>
               <Input
-                id="studentId"
-                value={formData.studentId}
+                id="memberId"
+                value={formData.memberId}
                 onChange={(e) =>
-                  setFormData({ ...formData, studentId: e.target.value })
+                  setFormData({ ...formData, memberId: e.target.value })
                 }
-                placeholder="Enter student ID"
+                placeholder="Enter member ID"
               />
             </div>
             <div className="space-y-2">
@@ -366,9 +366,9 @@ export default function Users() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="lecturer">Lecturer</SelectItem>
-                  <SelectItem value="student">Student</SelectItem>
-                  <SelectItem value="employee">Employee</SelectItem>
+                  <SelectItem value="preacher">Preacher</SelectItem>
+                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value="staff">Staff</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -398,7 +398,7 @@ export default function Users() {
               className="bg-primary hover:bg-primary/90"
               onClick={isEditDialogOpen ? handleEditUser : handleAddUser}
             >
-              {isEditDialogOpen ? "Update User" : "Add User"}
+              {isEditDialogOpen ? "Update Member" : "Add Member"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -408,7 +408,7 @@ export default function Users() {
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogTitle>Delete Member</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete {selectedUser?.fullName}? This action cannot be undone.
             </AlertDialogDescription>
