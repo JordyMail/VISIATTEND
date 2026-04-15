@@ -8,3 +8,6 @@ npm install js-cookie crypto-js
 npm install @types/js-cookie @types/crypto-js
 npm install framer-motion
 
+
+pnpm add mssql bcrypt jsonwebtoken
+pnpm add -D @types/bcrypt @types/jsonwebtoken

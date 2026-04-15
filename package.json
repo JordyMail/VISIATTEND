@@ -16,6 +16,9 @@
     "build:client": "vite build",
     "build:server": "vite build --config vite.config.server.ts",
     "start": "node dist/server/node-build.mjs",
+    "db:migrate": "tsx server/db/migrate.ts",
+    "db:seed": "tsx server/db/seed.ts",
+    "db:setup": "npm run db:migrate && npm run db:seed",
     "test": "vitest --run",
     "format.fix": "prettier --write .",
     "typecheck": "tsc"

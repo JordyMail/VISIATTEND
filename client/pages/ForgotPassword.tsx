@@ -1,4 +1,4 @@
-// pages/ForgotPassword.tsx
+// client/pages/ForgotPassword.tsx
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Mail, ArrowLeft, Shield, CheckCircle, AlertCircle } from "lucide-react";

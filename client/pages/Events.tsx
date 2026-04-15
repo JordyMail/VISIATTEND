@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Search, Edit2, Trash2, Users as UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,10 +38,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { mockEvents, mockUsers, getMembersInEvent, Event } from "@/data/mockData";
+import { eventApi, userApi } from "@/services/api";
+import { toast } from "@/components/ui/use-toast";
+
+interface Event {
+  id: number;
+  event_code: string;
+  event_name: string;
+  description?: string;
+  preacher_id: number;
+  preacher_name?: string;
+  season: string;
+  event_type: 'worship' | 'meeting' | 'study' | 'fellowship' | 'outreach';
+  is_active: boolean;
+  created_at: string;
+}
+
+interface User {
+  id: number;
+  full_name: string;
+}
 
 export default function Events() {
-  const [events, setEvents] = useState<Event[]>(mockEvents);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [preachers, setPreachers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -49,6 +69,8 @@ export default function Events() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [eventMembers, setEventMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     eventCode: "",
     eventName: "",
@@ -58,28 +80,67 @@ export default function Events() {
     eventType: "worship" as const,
   });
 
-  // Filter events
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [eventsRes, preachersRes] = await Promise.all([
+        eventApi.getAll(),
+        userApi.getAll({ role: 'preacher' }),
+      ]);
+      setEvents(eventsRes.data.data);
+      setPreachers(preachersRes.data.data);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load events",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredEvents = events.filter((evt) => {
     const matchSearch =
-      evt.eventName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      evt.eventCode.toLowerCase().includes(searchTerm.toLowerCase());
+      evt.event_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      evt.event_code.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchType =
-      filterType === "all" || evt.eventType === filterType;
+      filterType === "all" || evt.event_type === filterType;
 
     return matchSearch && matchType;
   });
 
-  const handleAddEvent = () => {
-    if (formData.eventCode && formData.eventName) {
-      const newEvent: Event = {
-        id: Math.max(...events.map((e) => e.id), 0) + 1,
-        ...formData,
-        preacherId: parseInt(formData.preacherId) || 0,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      };
-      setEvents([...events, newEvent]);
+  const handleAddEvent = async () => {
+    if (!formData.eventCode || !formData.eventName) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await eventApi.create({
+        eventCode: formData.eventCode,
+        eventName: formData.eventName,
+        description: formData.description,
+        preacherId: parseInt(formData.preacherId),
+        season: formData.season,
+        eventType: formData.eventType,
+      });
+      
+      toast({
+        title: "Success",
+        description: "Event added successfully",
+      });
+      
       setIsAddDialogOpen(false);
       setFormData({
         eventCode: "",
@@ -89,64 +150,99 @@ export default function Events() {
         season: "2024 Season",
         eventType: "worship",
       });
-    }
-  };
-
-  const handleEditEvent = () => {
-    if (selectedEvent) {
-      setEvents(
-        events.map((e) =>
-          e.id === selectedEvent.id
-            ? {
-                ...selectedEvent,
-                ...formData,
-                preacherId: parseInt(formData.preacherId) || selectedEvent.preacherId,
-              }
-            : e
-        )
-      );
-      setIsEditDialogOpen(false);
-      setSelectedEvent(null);
-      setFormData({
-        eventCode: "",
-        eventName: "",
-        description: "",
-        preacherId: "",
-        season: "2024 Season",
-        eventType: "worship",
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to add event",
+        variant: "destructive",
       });
     }
   };
 
-  const handleDeleteEvent = () => {
-    if (selectedEvent) {
-      setEvents(events.filter((e) => e.id !== selectedEvent.id));
+  const handleEditEvent = async () => {
+    if (!selectedEvent) return;
+
+    try {
+      await eventApi.update(selectedEvent.id, {
+        eventName: formData.eventName,
+        description: formData.description,
+        preacherId: parseInt(formData.preacherId),
+        eventType: formData.eventType,
+      });
+      
+      toast({
+        title: "Success",
+        description: "Event updated successfully",
+      });
+      
+      setIsEditDialogOpen(false);
+      setSelectedEvent(null);
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update event",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!selectedEvent) return;
+
+    try {
+      await eventApi.delete(selectedEvent.id);
+      
+      toast({
+        title: "Success",
+        description: "Event deleted successfully",
+      });
+      
       setIsDeleteDialogOpen(false);
       setSelectedEvent(null);
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete event",
+        variant: "destructive",
+      });
     }
   };
 
   const handleOpenEdit = (evt: Event) => {
     setSelectedEvent(evt);
     setFormData({
-      eventCode: evt.eventCode,
-      eventName: evt.eventName,
+      eventCode: evt.event_code,
+      eventName: evt.event_name,
       description: evt.description || "",
-      preacherId: evt.preacherId.toString(),
+      preacherId: evt.preacher_id.toString(),
       season: evt.season,
-      eventType: evt.eventType,
+      eventType: evt.event_type,
     });
     setIsEditDialogOpen(true);
   };
 
-  const handleOpenDetail = (evt: Event) => {
+  const handleOpenDetail = async (evt: Event) => {
     setSelectedEvent(evt);
-    setIsDetailDialogOpen(true);
+    try {
+      const response = await eventApi.getEnrolledMembers(evt.id);
+      setEventMembers(response.data.data);
+      setIsDetailDialogOpen(true);
+    } catch (error) {
+      console.error('Error fetching event members:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load event members",
+        variant: "destructive",
+      });
+    }
   };
 
   const getPreacherName = (preacherId: number) => {
-    const preacher = mockUsers.find((u) => u.id === preacherId);
-    return preacher?.fullName || "Unassigned";
+    const preacher = preachers.find((p) => p.id === preacherId);
+    return preacher?.full_name || "Unassigned";
   };
 
   const getEventTypeBadgeColor = (type: string) => {
@@ -160,7 +256,13 @@ export default function Events() {
     return colors[type] || "bg-gray-500/20 text-gray-700 border-gray-200";
   };
 
-  const eventMembers = selectedEvent ? getMembersInEvent(selectedEvent.id) : [];
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -240,14 +342,14 @@ export default function Events() {
               {filteredEvents.length > 0 ? (
                 filteredEvents.map((evt) => (
                   <TableRow key={evt.id}>
-                    <TableCell className="font-medium">{evt.eventCode}</TableCell>
-                    <TableCell>{evt.eventName}</TableCell>
+                    <TableCell className="font-medium">{evt.event_code}</TableCell>
+                    <TableCell>{evt.event_name}</TableCell>
                     <TableCell className="text-sm">
-                      {getPreacherName(evt.preacherId)}
+                      {getPreacherName(evt.preacher_id)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={getEventTypeBadgeColor(evt.eventType)}>
-                        {evt.eventType.charAt(0).toUpperCase() + evt.eventType.slice(1)}
+                      <Badge variant="outline" className={getEventTypeBadgeColor(evt.event_type)}>
+                        {evt.event_type.charAt(0).toUpperCase() + evt.event_type.slice(1)}
                       </Badge>
                     </TableCell>
                     <TableCell>{evt.season}</TableCell>
@@ -255,12 +357,12 @@ export default function Events() {
                       <Badge
                         variant="outline"
                         className={
-                          evt.isActive
+                          evt.is_active
                             ? "bg-status-success/20 text-status-success border-status-success/20"
                             : "bg-status-error/20 text-status-error border-status-error/20"
                         }
                       >
-                        {evt.isActive ? "Active" : "Inactive"}
+                        {evt.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -306,7 +408,7 @@ export default function Events() {
         </div>
       </Card>
 
-      {/* Add/Edit Dialog */}
+      {/* Add/Edit Dialog - same as before but with updated handlers */}
       <Dialog open={isAddDialogOpen || isEditDialogOpen} onOpenChange={(open) => {
         if (!open) {
           setIsAddDialogOpen(false);
@@ -335,6 +437,7 @@ export default function Events() {
                   setFormData({ ...formData, eventCode: e.target.value })
                 }
                 placeholder="e.g., EVT001"
+                disabled={isEditDialogOpen}
               />
             </div>
             <div className="space-y-2">
@@ -368,9 +471,9 @@ export default function Events() {
                   <SelectValue placeholder="Select preacher" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockUsers.filter((u) => u.role === "preacher").map((preacher) => (
+                  {preachers.map((preacher) => (
                     <SelectItem key={preacher.id} value={preacher.id.toString()}>
-                      {preacher.fullName}
+                      {preacher.full_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -424,21 +527,21 @@ export default function Events() {
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{selectedEvent?.eventName}</DialogTitle>
-            <DialogDescription>{selectedEvent?.eventCode}</DialogDescription>
+            <DialogTitle>{selectedEvent?.event_name}</DialogTitle>
+            <DialogDescription>{selectedEvent?.event_code}</DialogDescription>
           </DialogHeader>
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Preacher</p>
                 <p className="font-medium">
-                  {selectedEvent ? getPreacherName(selectedEvent.preacherId) : "-"}
+                  {selectedEvent ? getPreacherName(selectedEvent.preacher_id) : "-"}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Event Type</p>
                 <p className="font-medium">
-                  {selectedEvent?.eventType.charAt(0).toUpperCase() + selectedEvent?.eventType.slice(1)}
+                  {selectedEvent?.event_type.charAt(0).toUpperCase() + selectedEvent?.event_type.slice(1)}
                 </p>
               </div>
             </div>
@@ -461,10 +564,10 @@ export default function Events() {
                       {eventMembers.map((member) => (
                         <TableRow key={member.id}>
                           <TableCell className="font-medium">
-                            {member.fullName}
+                            {member.full_name}
                           </TableCell>
                           <TableCell className="text-sm">
-                            {member.memberId}
+                            {member.member_id}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {member.email}
@@ -498,7 +601,7 @@ export default function Events() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Event</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedEvent?.eventName}? This action cannot be undone.
+              Are you sure you want to delete {selectedEvent?.event_name}? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

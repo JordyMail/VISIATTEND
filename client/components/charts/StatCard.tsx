@@ -1,3 +1,4 @@
+// client/components/charts/StatCard.tsx
 import { cn } from "@/lib/utils";
 import { ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";

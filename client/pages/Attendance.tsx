@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Search, Download, Pencil, Trash2, CalendarIcon } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Search, Download, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -35,20 +35,13 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { mockAttendances, mockUsers, mockEvents, Attendance } from "@/data/mockData";
+import { attendanceApi, userApi, eventApi } from "@/services/api";
+import { toast } from "@/components/ui/use-toast";
 
-// Form validation schema - tanpa confidence
 const attendanceFormSchema = z.object({
   attendanceDate: z.date({
     required_error: "Date is required",
@@ -70,16 +63,47 @@ const attendanceFormSchema = z.object({
 
 type AttendanceFormValues = z.infer<typeof attendanceFormSchema>;
 
+interface AttendanceRecord {
+  id: number;
+  user_id: number;
+  user_name?: string;
+  event_id: number;
+  event_name?: string;
+  event_code?: string;
+  attendance_date: string;
+  check_in_time: string;
+  check_out_time?: string;
+  status: string;
+  confidence_score?: number;
+  liveness_verified?: boolean;
+  device_info?: string;
+  created_at: string;
+}
+
+interface User {
+  id: number;
+  full_name: string;
+  member_id: string;
+}
+
+interface Event {
+  id: number;
+  event_code: string;
+  event_name: string;
+}
+
 export default function Attendance() {
-  const [attendances, setAttendances] = useState<Attendance[]>(mockAttendances);
+  const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterEvent, setFilterEvent] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterDate, setFilterDate] = useState<string>("");
+  const [loading, setLoading] = useState(true);
   
-  // Dialog states
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<Attendance | null>(null);
+  const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<number | null>(null);
 
@@ -95,16 +119,42 @@ export default function Attendance() {
     },
   });
 
-  // Reset form and set values when editing
-  const openEditDialog = (record: Attendance) => {
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [attendanceRes, usersRes, eventsRes] = await Promise.all([
+        attendanceApi.getAll(),
+        userApi.getAll({ role: 'member' }),
+        eventApi.getAll({ isActive: true }),
+      ]);
+      setAttendances(attendanceRes.data.data);
+      setUsers(usersRes.data.data);
+      setEvents(eventsRes.data.data);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load attendance data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openEditDialog = (record: AttendanceRecord) => {
     setEditingRecord(record);
     form.reset({
-      attendanceDate: new Date(record.attendanceDate + "T00:00:00"),
-      userId: record.userId.toString(),
-      eventId: record.eventId.toString(),
-      checkInTime: record.checkInTime.split("T")[1].substring(0, 5),
-      checkOutTime: record.checkOutTime ? record.checkOutTime.split("T")[1].substring(0, 5) : "",
-      status: record.status,
+      attendanceDate: new Date(record.attendance_date),
+      userId: record.user_id.toString(),
+      eventId: record.event_id.toString(),
+      checkInTime: record.check_in_time.split("T")[1].substring(0, 5),
+      checkOutTime: record.check_out_time ? record.check_out_time.split("T")[1].substring(0, 5) : "",
+      status: record.status as any,
     });
     setIsDialogOpen(true);
   };
@@ -122,86 +172,91 @@ export default function Attendance() {
     setIsDialogOpen(true);
   };
 
-  const openDeleteDialog = (id: number) => {
-    setRecordToDelete(id);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (recordToDelete) {
-      setAttendances(attendances.filter(a => a.id !== recordToDelete));
-      setDeleteDialogOpen(false);
-      setRecordToDelete(null);
+      try {
+        await attendanceApi.delete(recordToDelete);
+        toast({
+          title: "Success",
+          description: "Attendance record deleted successfully",
+        });
+        fetchData();
+        setDeleteDialogOpen(false);
+        setRecordToDelete(null);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to delete attendance record",
+          variant: "destructive",
+        });
+      }
     }
   };
 
-  const onSubmit = (data: AttendanceFormValues) => {
-    const dateStr = format(data.attendanceDate, "yyyy-MM-dd");
-    const checkInDateTime = `${dateStr}T${data.checkInTime}:00`;
-    const checkOutDateTime = data.checkOutTime ? `${dateStr}T${data.checkOutTime}:00` : undefined;
+  const onSubmit = async (data: AttendanceFormValues) => {
+    try {
+      const dateStr = format(data.attendanceDate, "yyyy-MM-dd");
+      const checkInDateTime = `${dateStr}T${data.checkInTime}:00`;
+      const checkOutDateTime = data.checkOutTime ? `${dateStr}T${data.checkOutTime}:00` : undefined;
 
-    if (editingRecord) {
-      // Update existing record - pertahankan confidence score yang sudah ada
-      const updatedAttendances = attendances.map(a => 
-        a.id === editingRecord.id 
-          ? {
-              ...a,
-              userId: parseInt(data.userId),
-              eventId: parseInt(data.eventId),
-              attendanceDate: dateStr,
-              checkInTime: checkInDateTime,
-              checkOutTime: checkOutDateTime,
-              status: data.status,
-              // confidenceScore tetap menggunakan nilai yang sudah ada
-            }
-          : a
-      );
-      setAttendances(updatedAttendances);
-    } else {
-      // Create new record
-      const newId = Math.max(...attendances.map(a => a.id), 0) + 1;
-      const newAttendance: Attendance = {
-        id: newId,
-        userId: parseInt(data.userId),
-        eventId: parseInt(data.eventId),
-        attendanceDate: dateStr,
-        checkInTime: checkInDateTime,
-        checkOutTime: checkOutDateTime,
-        status: data.status,
-        confidenceScore: 95.0, // default value untuk record baru
-        livenessVerified: true,
-        deviceInfo: "Manual Entry - Web",
-        createdAt: new Date().toISOString(),
-      };
-      setAttendances([newAttendance, ...attendances]);
+      if (editingRecord) {
+        await attendanceApi.update(editingRecord.id, {
+          checkOutTime: checkOutDateTime,
+          status: data.status,
+        });
+        toast({
+          title: "Success",
+          description: "Attendance record updated successfully",
+        });
+      } else {
+        await attendanceApi.create({
+          userId: parseInt(data.userId),
+          eventId: parseInt(data.eventId),
+          attendanceDate: dateStr,
+          checkInTime: checkInDateTime,
+          checkOutTime: checkOutDateTime,
+          status: data.status,
+          deviceInfo: "Manual Entry - Web",
+        });
+        toast({
+          title: "Success",
+          description: "Attendance record created successfully",
+        });
+      }
+
+      setIsDialogOpen(false);
+      setEditingRecord(null);
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to save attendance record",
+        variant: "destructive",
+      });
     }
-
-    setIsDialogOpen(false);
-    setEditingRecord(null);
   };
 
-  // Filter attendances
   const filteredAttendances = attendances.filter((record) => {
-    const user = mockUsers.find((u) => u.id === record.userId);
+    const user = users.find((u) => u.id === record.user_id);
     const matchSearch =
-      (user?.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user?.memberId.toLowerCase().includes(searchTerm.toLowerCase())) ?? false;
+      (user?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user?.member_id.toLowerCase().includes(searchTerm.toLowerCase())) ?? false;
 
-    const matchEvent = filterEvent === "all" || record.eventId.toString() === filterEvent;
+    const matchEvent = filterEvent === "all" || record.event_id.toString() === filterEvent;
     const matchStatus = filterStatus === "all" || record.status === filterStatus;
-    const matchDate = !filterDate || record.attendanceDate === filterDate;
+    const matchDate = !filterDate || record.attendance_date === filterDate;
 
     return matchSearch && matchEvent && matchStatus && matchDate;
   });
 
   const getUserName = (userId: number) => {
-    const user = mockUsers.find((u) => u.id === userId);
-    return user?.fullName || "Unknown";
+    const user = users.find((u) => u.id === userId);
+    return user?.full_name || "Unknown";
   };
 
   const getEventName = (eventId: number) => {
-    const event = mockEvents.find((e) => e.id === eventId);
-    return event?.eventCode || "Unknown";
+    const event = events.find((e) => e.id === eventId);
+    return event?.event_code || "Unknown";
   };
 
   const getStatusBadge = (status: string) => {
@@ -245,7 +300,7 @@ export default function Attendance() {
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString + "T00:00:00");
+    const date = new Date(dateString);
     return date.toLocaleDateString("id-ID", {
       year: "numeric",
       month: "short",
@@ -256,13 +311,13 @@ export default function Attendance() {
   const handleExportCSV = () => {
     const headers = ["Date", "Member", "Event", "Check-in", "Check-out", "Status", "Confidence"];
     const rows = filteredAttendances.map((record) => [
-      record.attendanceDate,
-      getUserName(record.userId),
-      getEventName(record.eventId),
-      formatTime(record.checkInTime),
-      record.checkOutTime ? formatTime(record.checkOutTime) : "-",
+      record.attendance_date,
+      getUserName(record.user_id),
+      getEventName(record.event_id),
+      formatTime(record.check_in_time),
+      record.check_out_time ? formatTime(record.check_out_time) : "-",
       record.status,
-      record.confidenceScore ? `${record.confidenceScore.toFixed(2)}%` : "-",
+      record.confidence_score ? `${record.confidence_score.toFixed(2)}%` : "-",
     ]);
 
     const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
@@ -273,6 +328,21 @@ export default function Attendance() {
     a.download = `attendance_report_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
+
+  // Summary stats
+  const totalRecords = filteredAttendances.length;
+  const presentCount = filteredAttendances.filter((a) => a.status === "present").length;
+  const lateCount = filteredAttendances.filter((a) => a.status === "late").length;
+  const excusedSickCount = filteredAttendances.filter((a) => a.status === "excused" || a.status === "sick").length;
+  const absentCount = filteredAttendances.filter((a) => a.status === "absent").length;
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -314,9 +384,9 @@ export default function Attendance() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Events</SelectItem>
-              {mockEvents.map((evt) => (
+              {events.map((evt) => (
                 <SelectItem key={evt.id} value={evt.id.toString()}>
-                  {evt.eventCode} - {evt.eventName}
+                  {evt.event_code} - {evt.event_name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -364,24 +434,24 @@ export default function Attendance() {
                 filteredAttendances.map((record) => (
                   <TableRow key={record.id}>
                     <TableCell className="font-medium">
-                      {formatDate(record.attendanceDate)}
+                      {formatDate(record.attendance_date)}
                     </TableCell>
-                    <TableCell>{getUserName(record.userId)}</TableCell>
+                    <TableCell>{getUserName(record.user_id)}</TableCell>
                     <TableCell className="text-sm">
-                      {getEventName(record.eventId)}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {formatTime(record.checkInTime)}
+                      {getEventName(record.event_id)}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {record.checkOutTime
-                        ? formatTime(record.checkOutTime)
+                      {formatTime(record.check_in_time)}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {record.check_out_time
+                        ? formatTime(record.check_out_time)
                         : "-"}
                     </TableCell>
                     <TableCell>{getStatusBadge(record.status)}</TableCell>
                     <TableCell className="text-sm">
-                      {record.confidenceScore
-                        ? `${record.confidenceScore.toFixed(2)}%`
+                      {record.confidence_score
+                        ? `${record.confidence_score.toFixed(2)}%`
                         : "-"}
                     </TableCell>
                     <TableCell className="text-right">
@@ -397,7 +467,10 @@ export default function Attendance() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => openDeleteDialog(record.id)}
+                          onClick={() => {
+                            setRecordToDelete(record.id);
+                            setDeleteDialogOpen(true);
+                          }}
                           className="h-8 w-8"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -422,39 +495,31 @@ export default function Attendance() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card className="p-4">
           <p className="text-sm text-muted-foreground mb-1">Total Records</p>
-          <p className="text-2xl font-bold">{filteredAttendances.length}</p>
+          <p className="text-2xl font-bold">{totalRecords}</p>
         </Card>
         <Card className="p-4">
           <p className="text-sm text-muted-foreground mb-1">Present</p>
-          <p className="text-2xl font-bold text-status-success">
-            {filteredAttendances.filter((a) => a.status === "present").length}
-          </p>
+          <p className="text-2xl font-bold text-status-success">{presentCount}</p>
         </Card>
         <Card className="p-4">
           <p className="text-sm text-muted-foreground mb-1">Late</p>
-          <p className="text-2xl font-bold text-status-warning">
-            {filteredAttendances.filter((a) => a.status === "late").length}
-          </p>
+          <p className="text-2xl font-bold text-status-warning">{lateCount}</p>
         </Card>
         <Card className="p-4">
           <p className="text-sm text-muted-foreground mb-1">Excused/Sick</p>
-          <p className="text-2xl font-bold text-accent">
-            {filteredAttendances.filter((a) => a.status === "excused" || a.status === "sick").length}
-          </p>
+          <p className="text-2xl font-bold text-accent">{excusedSickCount}</p>
         </Card>
         <Card className="p-4">
           <p className="text-sm text-muted-foreground mb-1">Absent</p>
-          <p className="text-2xl font-bold text-status-error">
-            {filteredAttendances.filter((a) => a.status === "absent").length}
-          </p>
+          <p className="text-2xl font-bold text-status-error">{absentCount}</p>
         </Card>
       </div>
 
-      {/* Manual Entry / Edit Dialog - Diperkecil ukurannya */}
+      {/* Form Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] max-h-[120vh]">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle className="text-xl">
+            <DialogTitle>
               {editingRecord ? "Edit Attendance Record" : "Manual Attendance Entry"}
             </DialogTitle>
             <DialogDescription>
@@ -470,8 +535,8 @@ export default function Attendance() {
                 control={form.control}
                 name="attendanceDate" 
                 render={({ field }) => (
-                  <FormItem className="flex flex-col ">
-                    <FormLabel className="text-sm">Date</FormLabel>
+                  <FormItem>
+                    <FormLabel>Date</FormLabel>
                     <FormControl>
                       <Input
                         type="date"
@@ -480,7 +545,6 @@ export default function Attendance() {
                           const date = e.target.value ? new Date(e.target.value) : null;
                           field.onChange(date);
                         }}
-                        className="h-9"
                       />
                     </FormControl>
                     <FormMessage />
@@ -493,19 +557,19 @@ export default function Attendance() {
                 name="userId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm">Member</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormLabel>Member</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger className="h-9">
+                        <SelectTrigger>
                           <SelectValue placeholder="Select a member" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {mockUsers
-                          .filter(u => u.role === "member" && u.isActive)
+                        {users
+                          .filter(u => u.id)
                           .map((user) => (
                             <SelectItem key={user.id} value={user.id.toString()}>
-                              {user.fullName} ({user.memberId})
+                              {user.full_name} ({user.member_id})
                             </SelectItem>
                           ))}
                       </SelectContent>
@@ -520,17 +584,17 @@ export default function Attendance() {
                 name="eventId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm">Event</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormLabel>Event</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger className="h-9">
+                        <SelectTrigger>
                           <SelectValue placeholder="Select an event" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {mockEvents.map((event) => (
+                        {events.map((event) => (
                           <SelectItem key={event.id} value={event.id.toString()}>
-                            {event.eventCode} - {event.eventName}
+                            {event.event_code} - {event.event_name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -546,9 +610,9 @@ export default function Attendance() {
                   name="checkInTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm">Check-in</FormLabel>
+                      <FormLabel>Check-in</FormLabel>
                       <FormControl>
-                        <Input type="time" {...field} className="h-9" />
+                        <Input type="time" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -560,9 +624,9 @@ export default function Attendance() {
                   name="checkOutTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm">Check-out</FormLabel>
+                      <FormLabel>Check-out</FormLabel>
                       <FormControl>
-                        <Input type="time" {...field} className="h-9" />
+                        <Input type="time" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -575,10 +639,10 @@ export default function Attendance() {
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm">Status</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger className="h-9">
+                        <SelectTrigger>
                           <SelectValue placeholder="Select status" />
                         </SelectTrigger>
                       </FormControl>
@@ -595,11 +659,11 @@ export default function Attendance() {
                 )}
               />
 
-              <DialogFooter className="mt-4">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} size="sm">
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" size="sm">
+                <Button type="submit">
                   {editingRecord ? "Update" : "Create"}
                 </Button>
               </DialogFooter>
@@ -610,18 +674,18 @@ export default function Attendance() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Attendance Record</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete this attendance record? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} size="sm">
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete} size="sm">
+            <Button variant="destructive" onClick={handleDelete}>
               Delete
             </Button>
           </DialogFooter>

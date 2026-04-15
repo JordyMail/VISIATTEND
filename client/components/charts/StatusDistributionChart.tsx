@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   PieChart,
   Pie,
@@ -7,7 +8,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAttendanceStats } from "@/data/mockData";
+import { attendanceApi } from "@/services/api";
 
 interface StatusDistributionChartProps {
   userId?: number;
@@ -18,35 +19,55 @@ export function StatusDistributionChart({
   userId,
   eventId,
 }: StatusDistributionChartProps) {
-  const stats = getAttendanceStats(userId, eventId);
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const data = [
-    {
-      name: "Present",
-      value: stats.present,
-      color: "hsl(142 71% 45%)", // success green
-    },
-    {
-      name: "Late",
-      value: stats.late,
-      color: "hsl(38 92% 50%)", // warning orange
-    },
-    {
-      name: "Excused",
-      value: stats.excused,
-      color: "hsl(216 98% 52%)", // info blue
-    },
-    {
-      name: "Sick",
-      value: stats.sick,
-      color: "hsl(54 100% 50%)", // yellow
-    },
-    {
-      name: "Absent",
-      value: stats.absent,
-      color: "hsl(0 84% 60%)", // error red
-    },
-  ].filter((item) => item.value > 0);
+  useEffect(() => {
+    fetchStats();
+  }, [userId, eventId]);
+
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      const response = await attendanceApi.getAll({ userId, eventId });
+      const attendances = response.data.data;
+      
+      const stats = {
+        present: attendances.filter((a: any) => a.status === 'present').length,
+        late: attendances.filter((a: any) => a.status === 'late').length,
+        excused: attendances.filter((a: any) => a.status === 'excused').length,
+        sick: attendances.filter((a: any) => a.status === 'sick').length,
+        absent: attendances.filter((a: any) => a.status === 'absent').length,
+      };
+      
+      const chartData = [
+        { name: "Present", value: stats.present, color: "hsl(142 71% 45%)" },
+        { name: "Late", value: stats.late, color: "hsl(38 92% 50%)" },
+        { name: "Excused", value: stats.excused, color: "hsl(216 98% 52%)" },
+        { name: "Sick", value: stats.sick, color: "hsl(54 100% 50%)" },
+        { name: "Absent", value: stats.absent, color: "hsl(0 84% 60%)" },
+      ].filter((item) => item.value > 0);
+      
+      setData(chartData);
+    } catch (error) {
+      console.error('Error fetching status distribution:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Attendance Status Distribution</CardTitle>
+        </CardHeader>
+        <CardContent className="h-[300px] flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

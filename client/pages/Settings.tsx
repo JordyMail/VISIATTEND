@@ -1,3 +1,4 @@
+// client/pages/Settings.tsx
 import { useState } from "react";
 import { Save, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";

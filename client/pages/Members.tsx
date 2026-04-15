@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Search, Filter, Edit2, Trash2, Eye } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Search, Edit2, Trash2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,10 +38,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { mockUsers, User } from "@/data/mockData";
+import { userApi } from "@/services/api";
+import { toast } from "@/components/ui/use-toast";
+
+interface User {
+  id: number;
+  full_name: string;
+  member_id: string;
+  email: string;
+  role: 'admin' | 'preacher' | 'member' | 'staff';
+  phone_number?: string;
+  is_active: boolean;
+  created_at: string;
+}
 
 export default function Members() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRole, setFilterRole] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -49,95 +61,175 @@ export default function Members() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     fullName: "",
     memberId: "",
     email: "",
+    password: "",
     role: "member" as User["role"],
     phoneNumber: "",
   });
 
-  // Filter users
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const response = await userApi.getAll();
+      setUsers(response.data.data);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load members",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredUsers = users.filter((user) => {
     const matchSearch =
-      user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.memberId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.member_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchRole = filterRole === "all" || user.role === filterRole;
     const matchStatus =
       filterStatus === "all" ||
-      (filterStatus === "active" && user.isActive) ||
-      (filterStatus === "inactive" && !user.isActive);
+      (filterStatus === "active" && user.is_active) ||
+      (filterStatus === "inactive" && !user.is_active);
 
     return matchSearch && matchRole && matchStatus;
   });
 
-  const handleAddUser = () => {
-    if (formData.fullName && formData.memberId && formData.email) {
-      const newUser: User = {
-        id: Math.max(...users.map((u) => u.id)) + 1,
-        ...formData,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      };
-      setUsers([...users, newUser]);
+  const handleAddUser = async () => {
+    if (!formData.fullName || !formData.memberId || !formData.email || !formData.password) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await userApi.create({
+        fullName: formData.fullName,
+        memberId: formData.memberId,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        phoneNumber: formData.phoneNumber,
+      });
+      
+      toast({
+        title: "Success",
+        description: "Member added successfully",
+      });
+      
       setIsAddDialogOpen(false);
       setFormData({
         fullName: "",
         memberId: "",
         email: "",
+        password: "",
         role: "member",
         phoneNumber: "",
+      });
+      fetchUsers();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to add member",
+        variant: "destructive",
       });
     }
   };
 
-  const handleEditUser = () => {
-    if (selectedUser) {
-      setUsers(
-        users.map((u) =>
-          u.id === selectedUser.id ? { ...selectedUser, ...formData } : u
-        )
-      );
+  const handleEditUser = async () => {
+    if (!selectedUser) return;
+
+    try {
+      await userApi.update(selectedUser.id, {
+        fullName: formData.fullName,
+        email: formData.email,
+        phoneNumber: formData.phoneNumber,
+        role: formData.role,
+      });
+      
+      toast({
+        title: "Success",
+        description: "Member updated successfully",
+      });
+      
       setIsEditDialogOpen(false);
       setSelectedUser(null);
-      setFormData({
-        fullName: "",
-        memberId: "",
-        email: "",
-        role: "member",
-        phoneNumber: "",
+      fetchUsers();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update member",
+        variant: "destructive",
       });
     }
   };
 
-  const handleDeleteUser = () => {
-    if (selectedUser) {
-      setUsers(users.filter((u) => u.id !== selectedUser.id));
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+
+    try {
+      await userApi.delete(selectedUser.id);
+      
+      toast({
+        title: "Success",
+        description: "Member deleted successfully",
+      });
+      
       setIsDeleteDialogOpen(false);
       setSelectedUser(null);
+      fetchUsers();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete member",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleToggleStatus = async (user: User) => {
+    try {
+      await userApi.toggleStatus(user.id);
+      fetchUsers();
+      toast({
+        title: "Success",
+        description: `Member ${user.is_active ? 'deactivated' : 'activated'} successfully`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to toggle member status",
+        variant: "destructive",
+      });
     }
   };
 
   const handleOpenEdit = (user: User) => {
     setSelectedUser(user);
     setFormData({
-      fullName: user.fullName,
-      memberId: user.memberId,
+      fullName: user.full_name,
+      memberId: user.member_id,
       email: user.email,
+      password: "",
       role: user.role,
-      phoneNumber: user.phoneNumber || "",
+      phoneNumber: user.phone_number || "",
     });
     setIsEditDialogOpen(true);
-  };
-
-  const handleToggleStatus = (user: User) => {
-    setUsers(
-      users.map((u) =>
-        u.id === user.id ? { ...u, isActive: !u.isActive } : u
-      )
-    );
   };
 
   const getRoleBadge = (role: User["role"]) => {
@@ -149,6 +241,14 @@ export default function Members() {
     };
     return <Badge variant={variants[role]}>{role}</Badge>;
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -167,6 +267,7 @@ export default function Members() {
               fullName: "",
               memberId: "",
               email: "",
+              password: "",
               role: "member",
               phoneNumber: "",
             });
@@ -238,25 +339,25 @@ export default function Members() {
               {filteredUsers.length > 0 ? (
                 filteredUsers.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.fullName}</TableCell>
-                    <TableCell className="text-sm">{user.memberId}</TableCell>
+                    <TableCell className="font-medium">{user.full_name}</TableCell>
+                    <TableCell className="text-sm">{user.member_id}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {user.email}
                     </TableCell>
                     <TableCell>{getRoleBadge(user.role)}</TableCell>
                     <TableCell className="text-sm">
-                      {user.phoneNumber || "-"}
+                      {user.phone_number || "-"}
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={user.isActive ? "outline" : "secondary"}
+                        variant={user.is_active ? "outline" : "secondary"}
                         className={
-                          user.isActive
+                          user.is_active
                             ? "bg-status-success/20 text-status-success border-status-success/20"
                             : "bg-status-error/20 text-status-error border-status-error/20"
                         }
                       >
-                        {user.isActive ? "Active" : "Inactive"}
+                        {user.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -323,7 +424,7 @@ export default function Members() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="fullName">Full Name</Label>
+              <Label htmlFor="fullName">Full Name *</Label>
               <Input
                 id="fullName"
                 value={formData.fullName}
@@ -334,7 +435,7 @@ export default function Members() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="memberId">Member ID</Label>
+              <Label htmlFor="memberId">Member ID *</Label>
               <Input
                 id="memberId"
                 value={formData.memberId}
@@ -345,7 +446,7 @@ export default function Members() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
                 type="email"
@@ -356,6 +457,20 @@ export default function Members() {
                 placeholder="Enter email address"
               />
             </div>
+            {!isEditDialogOpen && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Password *</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                  placeholder="Enter password"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="role">Role</Label>
               <Select value={formData.role} onValueChange={(value) =>
@@ -410,7 +525,7 @@ export default function Members() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Member</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedUser?.fullName}? This action cannot be undone.
+              Are you sure you want to delete {selectedUser?.full_name}? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

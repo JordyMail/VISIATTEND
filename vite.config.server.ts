@@ -1,3 +1,5 @@
+// vite.config.server.ts
+
 import { defineConfig } from "vite";
 import path from "path";
 

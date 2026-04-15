@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   BarChart,
   Bar,
@@ -9,18 +10,67 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { mockEvents, getAttendanceStats } from "@/data/mockData";
+import { eventApi, attendanceApi } from "@/services/api";
+
+interface ClassData {
+  name: string;
+  present: number;
+  absent: number;
+  excused: number;
+}
 
 export function ClassAttendanceChart() {
-  const data = mockEvents.map((evt) => {
-    const stats = getAttendanceStats(undefined, evt.id);
-    return {
-      name: evt.eventCode,
-      present: stats.present + stats.late,
-      absent: stats.absent,
-      excused: stats.excused + stats.sick,
-    };
-  });
+  const [data, setData] = useState<ClassData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchClassData();
+  }, []);
+
+  const fetchClassData = async () => {
+    try {
+      setLoading(true);
+      const eventsRes = await eventApi.getAll({ isActive: true });
+      const events = eventsRes.data.data;
+      
+      const classData: ClassData[] = [];
+      
+      for (const event of events) {
+        const statsRes = await attendanceApi.getAll({ eventId: event.id });
+        const attendances = statsRes.data.data;
+        
+        const present = attendances.filter((a: any) => a.status === 'present' || a.status === 'late').length;
+        const absent = attendances.filter((a: any) => a.status === 'absent').length;
+        const excused = attendances.filter((a: any) => a.status === 'excused' || a.status === 'sick').length;
+        
+        classData.push({
+          name: event.event_code,
+          present,
+          absent,
+          excused,
+        });
+      }
+      
+      setData(classData);
+    } catch (error) {
+      console.error('Error fetching class data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Attendance by Event</CardTitle>
+        </CardHeader>
+        <CardContent className="h-[300px] flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

@@ -1,4 +1,4 @@
-// pages/Register.tsx
+// client/pages/Register.tsx
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, User, Mail, Lock, Phone, Shield, ArrowLeft, CheckCircle, XCircle } from "lucide-react";

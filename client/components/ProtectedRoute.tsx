@@ -1,4 +1,4 @@
-// components/ProtectedRoute.tsx
+// client/components/ProtectedRoute.tsx
 import { Navigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getSession, refreshAccessToken } from "@/lib/auth";

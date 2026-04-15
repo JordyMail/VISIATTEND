@@ -1,3 +1,4 @@
+// client/components/HeaderNav.tsx
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Bell, LogOut, Settings, User, Menu } from "lucide-react";

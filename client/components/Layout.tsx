@@ -1,3 +1,4 @@
+// client/components/Layout.tsx
 import { ReactNode, useState } from "react";
 import { SidebarNav } from "./SidebarNav";
 import { HeaderNav } from "./HeaderNav";

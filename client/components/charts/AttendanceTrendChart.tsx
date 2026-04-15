@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   LineChart,
   Line,
@@ -9,7 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAttendanceTrend } from "@/data/mockData";
+import { attendanceApi } from "@/services/api";
 
 interface AttendanceTrendChartProps {
   days?: number;
@@ -20,15 +21,47 @@ export function AttendanceTrendChart({
   days = 7,
   eventId,
 }: AttendanceTrendChartProps) {
-  const trend = getAttendanceTrend(days, eventId);
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const data = Object.entries(trend).map(([date, count]) => ({
-    date: new Date(date).toLocaleDateString("id-ID", {
-      month: "short",
-      day: "numeric",
-    }),
-    present: count,
-  }));
+  useEffect(() => {
+    fetchTrend();
+  }, [days, eventId]);
+
+  const fetchTrend = async () => {
+    try {
+      setLoading(true);
+      const response = await attendanceApi.getTrend(days, eventId);
+      const trendData = response.data.data;
+      
+      const chartData = Object.entries(trendData).map(([date, count]) => ({
+        date: new Date(date).toLocaleDateString("id-ID", {
+          month: "short",
+          day: "numeric",
+        }),
+        present: count,
+      }));
+      
+      setData(chartData);
+    } catch (error) {
+      console.error('Error fetching attendance trend:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Attendance Trend</CardTitle>
+        </CardHeader>
+        <CardContent className="h-[300px] flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

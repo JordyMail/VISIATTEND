@@ -1,4 +1,4 @@
-// pages/Login.tsx
+// client/pages/Login.tsx
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, LogIn, Mail, Lock, Shield } from "lucide-react";
