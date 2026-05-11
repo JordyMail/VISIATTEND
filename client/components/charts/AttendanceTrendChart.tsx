@@ -14,34 +14,35 @@ import { attendanceApi } from "@/services/api";
 
 interface AttendanceTrendChartProps {
   days?: number;
-  eventId?: number;
+  userId?: number;
 }
 
 export function AttendanceTrendChart({
   days = 7,
-  eventId,
+  userId,
 }: AttendanceTrendChartProps) {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchTrend();
-  }, [days, eventId]);
+  }, [days, userId]);
 
   const fetchTrend = async () => {
     try {
       setLoading(true);
-      const response = await attendanceApi.getTrend(days, eventId);
-      const trendData = response.data.data;
-      
-      const chartData = Object.entries(trendData).map(([date, count]) => ({
-        date: new Date(date).toLocaleDateString("id-ID", {
+      const response = await attendanceApi.getTrend(days, userId);
+      const trendData = response.data.data ?? [];
+
+      const chartData = trendData.map((item: any) => ({
+        date: new Date(item.attendance_date).toLocaleDateString("id-ID", {
           month: "short",
           day: "numeric",
         }),
-        present: count,
+        present: item.total_present ?? 0,
+        absent: item.total_absent ?? 0,
       }));
-      
+
       setData(chartData);
     } catch (error) {
       console.error('Error fetching attendance trend:', error);
@@ -98,6 +99,15 @@ export function AttendanceTrendChart({
               dot={{ fill: "hsl(var(--primary))", r: 4 }}
               activeDot={{ r: 6 }}
               name="Present"
+            />
+            <Line
+              type="monotone"
+              dataKey="absent"
+              stroke="hsl(0 84% 60%)"
+              strokeWidth={2}
+              dot={{ fill: "hsl(0 84% 60%)", r: 4 }}
+              activeDot={{ r: 6 }}
+              name="Absent"
             />
           </LineChart>
         </ResponsiveContainer>

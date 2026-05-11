@@ -39,7 +39,7 @@ import { format } from "date-fns";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { attendanceApi, userApi, eventApi } from "@/services/api";
+import { attendanceApi, userApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
 
 const attendanceFormSchema = z.object({
@@ -48,9 +48,6 @@ const attendanceFormSchema = z.object({
   }),
   userId: z.string({
     required_error: "Member is required",
-  }),
-  eventId: z.string({
-    required_error: "Event is required",
   }),
   checkInTime: z.string({
     required_error: "Check-in time is required",
@@ -67,9 +64,6 @@ interface AttendanceRecord {
   id: number;
   user_id: number;
   user_name?: string;
-  event_id: number;
-  event_name?: string;
-  event_code?: string;
   attendance_date: string;
   check_in_time: string;
   check_out_time?: string;
@@ -83,21 +77,13 @@ interface AttendanceRecord {
 interface User {
   id: number;
   full_name: string;
-  member_id: string;
-}
-
-interface Event {
-  id: number;
-  event_code: string;
-  event_name: string;
+  user_id: string;
 }
 
 export default function Attendance() {
   const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterEvent, setFilterEvent] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterDate, setFilterDate] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -112,7 +98,6 @@ export default function Attendance() {
     defaultValues: {
       attendanceDate: new Date(),
       userId: "",
-      eventId: "",
       checkInTime: "07:00",
       checkOutTime: "09:30",
       status: "present",
@@ -126,14 +111,12 @@ export default function Attendance() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [attendanceRes, usersRes, eventsRes] = await Promise.all([
+      const [attendanceRes, usersRes] = await Promise.all([
         attendanceApi.getAll(),
         userApi.getAll({ role: 'member' }),
-        eventApi.getAll({ isActive: true }),
       ]);
       setAttendances(attendanceRes.data.data);
       setUsers(usersRes.data.data);
-      setEvents(eventsRes.data.data);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -151,7 +134,6 @@ export default function Attendance() {
     form.reset({
       attendanceDate: new Date(record.attendance_date),
       userId: record.user_id.toString(),
-      eventId: record.event_id.toString(),
       checkInTime: record.check_in_time.split("T")[1].substring(0, 5),
       checkOutTime: record.check_out_time ? record.check_out_time.split("T")[1].substring(0, 5) : "",
       status: record.status as any,
@@ -164,7 +146,6 @@ export default function Attendance() {
     form.reset({
       attendanceDate: new Date(),
       userId: "",
-      eventId: "",
       checkInTime: "07:00",
       checkOutTime: "09:30",
       status: "present",
@@ -211,7 +192,6 @@ export default function Attendance() {
       } else {
         await attendanceApi.create({
           userId: parseInt(data.userId),
-          eventId: parseInt(data.eventId),
           attendanceDate: dateStr,
           checkInTime: checkInDateTime,
           checkOutTime: checkOutDateTime,
@@ -240,23 +220,17 @@ export default function Attendance() {
     const user = users.find((u) => u.id === record.user_id);
     const matchSearch =
       (user?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user?.member_id.toLowerCase().includes(searchTerm.toLowerCase())) ?? false;
+        user?.user_id.toLowerCase().includes(searchTerm.toLowerCase())) ?? false;
 
-    const matchEvent = filterEvent === "all" || record.event_id.toString() === filterEvent;
     const matchStatus = filterStatus === "all" || record.status === filterStatus;
     const matchDate = !filterDate || record.attendance_date === filterDate;
 
-    return matchSearch && matchEvent && matchStatus && matchDate;
+    return matchSearch && matchStatus && matchDate;
   });
 
   const getUserName = (userId: number) => {
     const user = users.find((u) => u.id === userId);
     return user?.full_name || "Unknown";
-  };
-
-  const getEventName = (eventId: number) => {
-    const event = events.find((e) => e.id === eventId);
-    return event?.event_code || "Unknown";
   };
 
   const getStatusBadge = (status: string) => {
@@ -309,11 +283,10 @@ export default function Attendance() {
   };
 
   const handleExportCSV = () => {
-    const headers = ["Date", "Member", "Event", "Check-in", "Check-out", "Status", "Confidence"];
+    const headers = ["Date", "Member", "Check-in", "Check-out", "Status", "Confidence"];
     const rows = filteredAttendances.map((record) => [
       record.attendance_date,
       getUserName(record.user_id),
-      getEventName(record.event_id),
       formatTime(record.check_in_time),
       record.check_out_time ? formatTime(record.check_out_time) : "-",
       record.status,
@@ -368,7 +341,7 @@ export default function Attendance() {
 
       {/* Filters */}
       <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -378,19 +351,6 @@ export default function Attendance() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Select value={filterEvent} onValueChange={setFilterEvent}>
-            <SelectTrigger>
-              <SelectValue placeholder="Filter by event" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Events</SelectItem>
-              {events.map((evt) => (
-                <SelectItem key={evt.id} value={evt.id.toString()}>
-                  {evt.event_code} - {evt.event_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger>
               <SelectValue placeholder="Filter by status" />
@@ -421,7 +381,6 @@ export default function Attendance() {
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Member</TableHead>
-                <TableHead>Event</TableHead>
                 <TableHead>Check-in</TableHead>
                 <TableHead>Check-out</TableHead>
                 <TableHead>Status</TableHead>
@@ -437,9 +396,6 @@ export default function Attendance() {
                       {formatDate(record.attendance_date)}
                     </TableCell>
                     <TableCell>{getUserName(record.user_id)}</TableCell>
-                    <TableCell className="text-sm">
-                      {getEventName(record.event_id)}
-                    </TableCell>
                     <TableCell className="text-sm">
                       {formatTime(record.check_in_time)}
                     </TableCell>
@@ -481,7 +437,7 @@ export default function Attendance() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     No attendance records found
                   </TableCell>
                 </TableRow>
@@ -569,34 +525,9 @@ export default function Attendance() {
                           .filter(u => u.id)
                           .map((user) => (
                             <SelectItem key={user.id} value={user.id.toString()}>
-                              {user.full_name} ({user.member_id})
+                              {user.full_name} ({user.user_id})
                             </SelectItem>
                           ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="eventId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Event</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select an event" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {events.map((event) => (
-                          <SelectItem key={event.id} value={event.id.toString()}>
-                            {event.event_code} - {event.event_name}
-                          </SelectItem>
-                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

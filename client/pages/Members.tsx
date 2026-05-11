@@ -44,7 +44,7 @@ import { toast } from "@/components/ui/use-toast";
 interface User {
   id: number;
   full_name: string;
-  member_id: string;
+  user_id: string;
   email: string;
   role: 'admin' | 'preacher' | 'member' | 'staff';
   phone_number?: string;
@@ -64,7 +64,7 @@ export default function Members() {
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     fullName: "",
-    memberId: "",
+    userId: "",
     email: "",
     password: "",
     role: "member" as User["role"],
@@ -95,7 +95,7 @@ export default function Members() {
   const filteredUsers = users.filter((user) => {
     const matchSearch =
       user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.member_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchRole = filterRole === "all" || user.role === filterRole;
@@ -108,7 +108,7 @@ export default function Members() {
   });
 
   const handleAddUser = async () => {
-    if (!formData.fullName || !formData.memberId || !formData.email || !formData.password) {
+    if (!formData.fullName || !formData.userId || !formData.email || !formData.password) {
       toast({
         title: "Validation Error",
         description: "Please fill all required fields",
@@ -120,7 +120,7 @@ export default function Members() {
     try {
       await userApi.create({
         fullName: formData.fullName,
-        memberId: formData.memberId,
+        userId: formData.userId,
         email: formData.email,
         password: formData.password,
         role: formData.role,
@@ -135,7 +135,7 @@ export default function Members() {
       setIsAddDialogOpen(false);
       setFormData({
         fullName: "",
-        memberId: "",
+        userId: "",
         email: "",
         password: "",
         role: "member",
@@ -223,7 +223,7 @@ export default function Members() {
     setSelectedUser(user);
     setFormData({
       fullName: user.full_name,
-      memberId: user.member_id,
+      userId: user.user_id,
       email: user.email,
       password: "",
       role: user.role,
@@ -265,7 +265,7 @@ export default function Members() {
           onClick={() => {
             setFormData({
               fullName: "",
-              memberId: "",
+              userId: "",
               email: "",
               password: "",
               role: "member",
@@ -340,7 +340,7 @@ export default function Members() {
                 filteredUsers.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.full_name}</TableCell>
-                    <TableCell className="text-sm">{user.member_id}</TableCell>
+                    <TableCell className="text-sm">{user.user_id}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {user.email}
                     </TableCell>
@@ -435,14 +435,14 @@ export default function Members() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="memberId">Member ID *</Label>
+              <Label htmlFor="userId">User ID *</Label>
               <Input
-                id="memberId"
-                value={formData.memberId}
+                id="userId"
+                value={formData.userId}
                 onChange={(e) =>
-                  setFormData({ ...formData, memberId: e.target.value })
+                  setFormData({ ...formData, userId: e.target.value })
                 }
-                placeholder="Enter member ID"
+                placeholder="Enter user ID"
               />
             </div>
             <div className="space-y-2">

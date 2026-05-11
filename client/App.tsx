@@ -10,7 +10,6 @@ import { Layout } from "@/components/Layout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import Members from "./pages/Members";
-import Events from "./pages/Events";
 import Attendance from "./pages/Attendance";
 import Leaderboard from "./pages/Leaderboard";
 import Reports from "./pages/Reports";
@@ -65,11 +64,6 @@ const App = () => (
           <Route path="/members" element={
             <ProtectedRoute>
               <Layout><Members /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/events" element={
-            <ProtectedRoute>
-              <Layout><Events /></Layout>
             </ProtectedRoute>
           } />
           <Route path="/attendance" element={

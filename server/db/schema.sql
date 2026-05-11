@@ -16,11 +16,14 @@ GO
 CREATE TABLE users (
     id INT IDENTITY(1,1) PRIMARY KEY,
     full_name NVARCHAR(100) NOT NULL,
-    member_id NVARCHAR(50) UNIQUE NOT NULL,
+    user_id NVARCHAR(50) UNIQUE NOT NULL,
     email NVARCHAR(100) UNIQUE NOT NULL,
     password_hash NVARCHAR(255) NOT NULL,
     role NVARCHAR(20) NOT NULL CHECK (role IN ('admin', 'preacher', 'member', 'staff')),
     phone_number NVARCHAR(20),
+    date_of_birth DATE,
+    category NVARCHAR(20) CHECK (category IN ('student', 'other')),
+    total_points INT NOT NULL DEFAULT 0,
     is_active BIT DEFAULT 1,
     email_verified BIT DEFAULT 0,
     last_login DATETIME,
@@ -30,7 +33,7 @@ CREATE TABLE users (
 
 -- Create index for faster searches
 CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_member_id ON users(member_id);
+CREATE INDEX idx_users_user_id ON users(user_id);
 CREATE INDEX idx_users_role ON users(role);
 
 -- ============================================
@@ -78,7 +81,6 @@ CREATE INDEX idx_enrollments_user ON event_enrollments(user_id);
 CREATE TABLE attendance (
     id INT IDENTITY(1,1) PRIMARY KEY,
     user_id INT NOT NULL,
-    event_id INT NOT NULL,
     attendance_date DATE NOT NULL,
     check_in_time DATETIME NOT NULL,
     check_out_time DATETIME,
@@ -91,19 +93,43 @@ CREATE TABLE attendance (
     created_at DATETIME DEFAULT GETDATE(),
     updated_at DATETIME DEFAULT GETDATE(),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
-    UNIQUE(user_id, event_id, attendance_date)
+    UNIQUE(user_id, attendance_date)
 );
 
 -- Create indexes for performance
 CREATE INDEX idx_attendance_user ON attendance(user_id);
-CREATE INDEX idx_attendance_event ON attendance(event_id);
 CREATE INDEX idx_attendance_date ON attendance(attendance_date);
 CREATE INDEX idx_attendance_status ON attendance(status);
 CREATE INDEX idx_attendance_user_date ON attendance(user_id, attendance_date);
 
 -- ============================================
--- 5. ACHIEVEMENTS TABLE
+-- 5. ATTENDANCE SUMMARY TABLE
+-- ============================================
+CREATE TABLE attendance_summary (
+    user_id INT PRIMARY KEY,
+    total_hadir INT NOT NULL DEFAULT 0,
+    total_check_in INT NOT NULL DEFAULT 0,
+    total_check_out INT NOT NULL DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ============================================
+-- 6. POINT LOGS TABLE
+-- ============================================
+CREATE TABLE point_logs (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    user_id INT NOT NULL,
+    points INT NOT NULL,
+    type NVARCHAR(20) NOT NULL CHECK (type IN ('attendance', 'quiz')),
+    created_at DATETIME DEFAULT GETDATE(),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_point_logs_user ON point_logs(user_id);
+CREATE INDEX idx_point_logs_type ON point_logs(type);
+
+-- ============================================
+-- 7. ACHIEVEMENTS TABLE
 -- ============================================
 CREATE TABLE achievements (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -117,7 +143,7 @@ CREATE TABLE achievements (
 );
 
 -- ============================================
--- 6. USER_ACHIEVEMENTS TABLE
+-- 8. USER_ACHIEVEMENTS TABLE
 -- ============================================
 CREATE TABLE user_achievements (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -130,7 +156,7 @@ CREATE TABLE user_achievements (
 );
 
 -- ============================================
--- 7. SESSIONS TABLE (for auth)
+-- 9. SESSIONS TABLE (for auth)
 -- ============================================
 CREATE TABLE sessions (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -149,7 +175,7 @@ CREATE INDEX idx_sessions_access_token ON sessions(access_token);
 CREATE INDEX idx_sessions_refresh_token ON sessions(refresh_token);
 
 -- ============================================
--- 8. ACTIVITY_LOGS TABLE
+-- 10. ACTIVITY_LOGS TABLE
 -- ============================================
 CREATE TABLE activity_logs (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -167,7 +193,7 @@ CREATE INDEX idx_activity_user ON activity_logs(user_id);
 CREATE INDEX idx_activity_created ON activity_logs(created_at);
 
 -- ============================================
--- 9. SYSTEM_SETTINGS TABLE
+-- 11. SYSTEM_SETTINGS TABLE
 -- ============================================
 CREATE TABLE system_settings (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -187,7 +213,7 @@ INSERT INTO system_settings (setting_key, setting_value, setting_type, descripti
 ('maintenance_mode', 'false', 'boolean', 'Put system in maintenance mode');
 
 -- ============================================
--- 10. PASSWORD_RESETS TABLE
+-- 12. PASSWORD_RESETS TABLE
 -- ============================================
 CREATE TABLE password_resets (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -261,7 +287,6 @@ GO
 
 -- Get leaderboard data
 CREATE PROCEDURE sp_get_leaderboard
-    @event_id INT,
     @period NVARCHAR(20) -- 'week', 'month', 'semester'
 AS
 BEGIN
@@ -277,7 +302,7 @@ BEGIN
     SELECT 
         u.id AS user_id,
         u.full_name,
-        u.member_id,
+        u.user_id,
         COUNT(CASE WHEN a.status IN ('present', 'late') THEN 1 END) AS total_present,
         COUNT(CASE WHEN a.status = 'late' THEN 1 END) AS total_late,
         CAST(ROUND(
@@ -286,10 +311,9 @@ BEGIN
         ) AS DECIMAL(5,2)) AS attendance_percentage
     FROM users u
     JOIN attendance a ON u.id = a.user_id
-    WHERE a.event_id = @event_id
-        AND a.attendance_date >= @start_date
+    WHERE a.attendance_date >= @start_date
         AND u.role = 'member'
-    GROUP BY u.id, u.full_name, u.member_id
+    GROUP BY u.id, u.full_name, u.user_id
     ORDER BY attendance_percentage DESC, total_present DESC
 END
 GO

@@ -12,24 +12,22 @@ import { attendanceApi } from "@/services/api";
 
 interface StatusDistributionChartProps {
   userId?: number;
-  eventId?: number;
 }
 
 export function StatusDistributionChart({
   userId,
-  eventId,
 }: StatusDistributionChartProps) {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchStats();
-  }, [userId, eventId]);
+  }, [userId]);
 
   const fetchStats = async () => {
     try {
       setLoading(true);
-      const response = await attendanceApi.getAll({ userId, eventId });
+      const response = await attendanceApi.getAll({ userId });
       const attendances = response.data.data;
       
       const stats = {

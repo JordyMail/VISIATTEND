@@ -33,7 +33,7 @@ export default defineConfig({
         "child_process",
         // External dependencies that should not be bundled
         "express",
-        "cors",
+        "bcrypt",
       ],
       output: {
         format: "es",
@@ -42,6 +42,9 @@ export default defineConfig({
     },
     minify: false, // Keep readable for debugging
     sourcemap: true,
+  },
+  ssr: {
+    noExternal: true,
   },
   resolve: {
     alias: {

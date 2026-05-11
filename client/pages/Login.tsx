@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, LogIn, Mail, Lock, Shield } from "lucide-react";
-import { encryptData, setSecureCookie, setSession, clearSession } from "@/lib/auth";
+import { setSession, clearSession } from "@/lib/auth";
+import { authApi } from "@/services/api";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -40,52 +41,20 @@ export default function Login() {
     } 
 
     setLoading(true);
-    
 
     try {
-      // Simulasi API call ke backend
-      // Dalam production, ini akan memanggil endpoint login yang mengembalikan tokens
-      const response = await new Promise<{ success: boolean; twoFactorRequired?: boolean; data?: any }>((resolve) => {
-        setTimeout(() => {
-          if (email === "admin@gmail.com" && password === "123") {
-            resolve({
-              success: true,
-              twoFactorRequired: false,
-              data: {
-                user: {
-                  id: 1,
-                  email: "admin@gmail.com",
-                  name: "Admin User",
-                  role: "admin"
-                },
-                tokens: {
-                  accessToken: "dummy-access-token-" + Date.now(),
-                  refreshToken: "dummy-refresh-token-" + Date.now()
-                }
-              }
-            });
-          } else {
-            resolve({ success: false });
-          }
-        }, 1000);
-      });
+      const response = await authApi.login({ email, password, rememberMe });
+      const payload = response.data?.data;
 
-      if (!response.success) {
-        setError("Email atau password salah");
-        setLoading(false);
-        return;
-      }
-
-      if (response.twoFactorRequired) {
-        setShowTwoFactor(true);
+      if (!response.data?.success || !payload?.user || !payload?.tokens) {
+        setError(response.data?.message || "Email atau password salah");
         setLoading(false);
         return;
       }
 
       // Handle Remember Me - Simpan dengan enkripsi
       if (rememberMe) {
-        const encryptedEmail = encryptData(email);
-        localStorage.setItem("rememberedEmail", encryptedEmail);
+        localStorage.setItem("rememberedEmail", email);
         localStorage.setItem("rememberMe", "true");
       } else {
         localStorage.removeItem("rememberedEmail");
@@ -93,7 +62,7 @@ export default function Login() {
       }
 
       // Set session dengan tokens
-      setSession(response.data.user, response.data.tokens);
+        setSession(payload.user, payload.tokens);
       
       // Set activity tracker
       window.addEventListener('mousemove', updateActivity);

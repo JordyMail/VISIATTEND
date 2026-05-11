@@ -7,6 +7,7 @@ export interface Session {
     refreshToken: string;
     expiresAt: Date;
     lastActivity: Date;
+    ipAddress?: string;
 }
 
 export class SessionRepository {

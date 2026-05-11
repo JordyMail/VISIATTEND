@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { clearSession, encryptData, getSession } from '@/lib/auth';
 
 const API_BASE_URL = '/api';
 
@@ -11,12 +12,9 @@ const api = axios.create({
 
 // Add token to requests
 api.interceptors.request.use((config) => {
-    const session = localStorage.getItem('session');
-    if (session) {
-        const { accessToken } = JSON.parse(session);
-        if (accessToken) {
-            config.headers.Authorization = `Bearer ${accessToken}`;
-        }
+    const session = getSession();
+    if (session?.accessToken) {
+        config.headers.Authorization = `Bearer ${session.accessToken}`;
     }
     return config;
 });
@@ -29,16 +27,23 @@ api.interceptors.response.use(
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
             try {
-                const refreshToken = JSON.parse(localStorage.getItem('session') || '{}').refreshToken;
+                const refreshToken = getSession()?.refreshToken;
+                if (!refreshToken) {
+                    clearSession();
+                    window.location.href = '/login';
+                    return Promise.reject(error);
+                }
+
                 const response = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
                 const { accessToken } = response.data;
-                const session = JSON.parse(localStorage.getItem('session') || '{}');
-                session.accessToken = accessToken;
-                localStorage.setItem('session', JSON.stringify(session));
+
+                const storedSession = JSON.parse(localStorage.getItem('session') || '{}');
+                storedSession.accessToken = encryptData(accessToken);
+                localStorage.setItem('session', JSON.stringify(storedSession));
                 originalRequest.headers.Authorization = `Bearer ${accessToken}`;
                 return api(originalRequest);
             } catch (refreshError) {
-                localStorage.removeItem('session');
+                clearSession();
                 window.location.href = '/login';
                 return Promise.reject(refreshError);
             }
@@ -52,6 +57,7 @@ export const userApi = {
     getAll: (filters?: { role?: string; isActive?: boolean }) => 
         api.get('/users', { params: filters }),
     getById: (id: number) => api.get(`/users/${id}`),
+    getDashboard: (id: number) => api.get(`/users/${id}/dashboard`),
     create: (data: any) => api.post('/users', data),
     update: (id: number, data: any) => api.put(`/users/${id}`, data),
     delete: (id: number) => api.delete(`/users/${id}`),
@@ -73,23 +79,29 @@ export const eventApi = {
 
 // Attendance API
 export const attendanceApi = {
-    getAll: (filters?: { userId?: number; eventId?: number; startDate?: string; endDate?: string; status?: string }) => 
+    getAll: (filters?: { userId?: number; startDate?: string; endDate?: string; status?: string }) => 
         api.get('/attendance', { params: filters }),
     getById: (id: number) => api.get(`/attendance/${id}`),
     create: (data: any) => api.post('/attendance', data),
     update: (id: number, data: any) => api.put(`/attendance/${id}`, data),
     delete: (id: number) => api.delete(`/attendance/${id}`),
     getTodayStats: () => api.get('/attendance/stats/today'),
-    getTrend: (days: number, eventId?: number) => 
-        api.get('/attendance/trend', { params: { days, eventId } }),
-    getLeaderboard: (eventId: number, period: string) => 
-        api.get('/attendance/leaderboard', { params: { eventId, period } }),
+    getTrend: (days: number, userId?: number) => 
+        api.get('/attendance/trend', { params: { days, userId } }),
+    getLeaderboard: (period: string) => 
+        api.get('/attendance/leaderboard', { params: { period } }),
 };
 
 // Dashboard API
 export const dashboardApi = {
     getStats: () => api.get('/dashboard/stats'),
     getRecentActivities: (limit?: number) => api.get('/dashboard/activities', { params: { limit } }),
+};
+
+export const pointApi = {
+    getLogs: (userId: number) => api.get('/points/logs', { params: { userId } }),
+    getLeaderboard: (limit?: number) => api.get('/points/leaderboard', { params: { limit } }),
+    awardQuiz: (data: { userId: number; points: number }) => api.post('/points/quiz', data),
 };
 
 // Reports API

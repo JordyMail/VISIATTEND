@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Users,
-  BookOpen,
   CheckSquare,
   Trophy,
   FileText,
@@ -24,11 +23,6 @@ const navigation = [
     name: "Members",
     href: "/members",
     icon: Users,
-  },
-  {
-    name: "Events",
-    href: "/events",
-    icon: BookOpen,
   },
   {
     name: "Attendance",

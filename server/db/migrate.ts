@@ -12,17 +12,42 @@ async function createTables() {
             CREATE TABLE users (
                 id INT IDENTITY(1,1) PRIMARY KEY,
                 full_name NVARCHAR(100) NOT NULL,
-                member_id NVARCHAR(50) UNIQUE NOT NULL,
+                user_id NVARCHAR(50) UNIQUE NOT NULL,
                 email NVARCHAR(100) UNIQUE NOT NULL,
                 password_hash NVARCHAR(255) NOT NULL,
                 role NVARCHAR(20) NOT NULL CHECK (role IN ('admin', 'preacher', 'member', 'staff')),
                 phone_number NVARCHAR(20),
+                date_of_birth DATE,
+                category NVARCHAR(20) CHECK (category IN ('student', 'other')),
+                total_points INT NOT NULL DEFAULT 0,
                 is_active BIT DEFAULT 1,
                 email_verified BIT DEFAULT 0,
                 last_login DATETIME,
                 created_at DATETIME DEFAULT GETDATE(),
                 updated_at DATETIME DEFAULT GETDATE()
             )
+        `);
+
+        await pool.request().query(`
+            IF COL_LENGTH('users', 'member_id') IS NOT NULL AND COL_LENGTH('users', 'user_id') IS NULL
+            BEGIN
+                EXEC sp_rename 'users.member_id', 'user_id', 'COLUMN';
+            END
+        `);
+
+        await pool.request().query(`
+            IF COL_LENGTH('users', 'total_points') IS NULL
+            ALTER TABLE users ADD total_points INT NOT NULL CONSTRAINT DF_users_total_points DEFAULT 0
+        `);
+
+        await pool.request().query(`
+            IF COL_LENGTH('users', 'date_of_birth') IS NULL
+            ALTER TABLE users ADD date_of_birth DATE NULL
+        `);
+
+        await pool.request().query(`
+            IF COL_LENGTH('users', 'category') IS NULL
+            ALTER TABLE users ADD category NVARCHAR(20) NULL
         `);
         
         // 2. Events table
@@ -67,7 +92,6 @@ async function createTables() {
             CREATE TABLE attendance (
                 id INT IDENTITY(1,1) PRIMARY KEY,
                 user_id INT NOT NULL,
-                event_id INT NOT NULL,
                 attendance_date DATE NOT NULL,
                 check_in_time DATETIME NOT NULL,
                 check_out_time DATETIME,
@@ -75,16 +99,53 @@ async function createTables() {
                 confidence_score DECIMAL(5,2),
                 liveness_verified BIT DEFAULT 0,
                 device_info NVARCHAR(255),
+                face_image_url NVARCHAR(500),
                 notes NVARCHAR(500),
                 created_at DATETIME DEFAULT GETDATE(),
                 updated_at DATETIME DEFAULT GETDATE(),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
-                CONSTRAINT UQ_attendance_user_event_date UNIQUE(user_id, event_id, attendance_date)
+                CONSTRAINT UQ_attendance_user_date UNIQUE(user_id, attendance_date)
+            )
+        `);
+
+        await pool.request().query(`
+            IF COL_LENGTH('attendance', 'face_image_url') IS NULL
+            ALTER TABLE attendance ADD face_image_url NVARCHAR(500)
+        `);
+
+        await pool.request().query(`
+            IF COL_LENGTH('attendance', 'event_id') IS NOT NULL
+            ALTER TABLE attendance ALTER COLUMN event_id INT NULL
+        `);
+
+        // 5. Attendance summary table
+        console.log('Creating attendance_summary table...');
+        await pool.request().query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='attendance_summary' AND xtype='U')
+            CREATE TABLE attendance_summary (
+                user_id INT PRIMARY KEY,
+                total_hadir INT NOT NULL DEFAULT 0,
+                total_check_in INT NOT NULL DEFAULT 0,
+                total_check_out INT NOT NULL DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        `);
+
+        // 6. Point logs table
+        console.log('Creating point_logs table...');
+        await pool.request().query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='point_logs' AND xtype='U')
+            CREATE TABLE point_logs (
+                id INT IDENTITY(1,1) PRIMARY KEY,
+                user_id INT NOT NULL,
+                points INT NOT NULL,
+                type NVARCHAR(20) NOT NULL CHECK (type IN ('attendance', 'quiz')),
+                created_at DATETIME DEFAULT GETDATE(),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         `);
         
-        // 5. Sessions table
+        // 7. Sessions table
         console.log('Creating sessions table...');
         await pool.request().query(`
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='sessions' AND xtype='U')
@@ -102,7 +163,7 @@ async function createTables() {
             )
         `);
         
-        // 6. Activity logs table
+        // 8. Activity logs table
         console.log('Creating activity_logs table...');
         await pool.request().query(`
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='activity_logs' AND xtype='U')
@@ -119,7 +180,7 @@ async function createTables() {
             )
         `);
         
-        // 7. System settings table
+        // 9. System settings table
         console.log('Creating system_settings table...');
         await pool.request().query(`
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='system_settings' AND xtype='U')

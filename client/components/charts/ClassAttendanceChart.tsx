@@ -10,13 +10,12 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { eventApi, attendanceApi } from "@/services/api";
+import { pointApi } from "@/services/api";
 
 interface ClassData {
   name: string;
-  present: number;
-  absent: number;
-  excused: number;
+  points: number;
+  correctAnswers: number;
 }
 
 export function ClassAttendanceChart() {
@@ -30,28 +29,16 @@ export function ClassAttendanceChart() {
   const fetchClassData = async () => {
     try {
       setLoading(true);
-      const eventsRes = await eventApi.getAll({ isActive: true });
-      const events = eventsRes.data.data;
-      
-      const classData: ClassData[] = [];
-      
-      for (const event of events) {
-        const statsRes = await attendanceApi.getAll({ eventId: event.id });
-        const attendances = statsRes.data.data;
-        
-        const present = attendances.filter((a: any) => a.status === 'present' || a.status === 'late').length;
-        const absent = attendances.filter((a: any) => a.status === 'absent').length;
-        const excused = attendances.filter((a: any) => a.status === 'excused' || a.status === 'sick').length;
-        
-        classData.push({
-          name: event.event_code,
-          present,
-          absent,
-          excused,
-        });
-      }
-      
-      setData(classData);
+      const leaderboardRes = await pointApi.getLeaderboard(6);
+      const leaderboard = leaderboardRes.data.data ?? [];
+
+      setData(
+        leaderboard.map((member: any) => ({
+          name: member.full_name,
+          points: member.total_points,
+          correctAnswers: member.total_correct_answers,
+        })),
+      );
     } catch (error) {
       console.error('Error fetching class data:', error);
     } finally {
@@ -63,7 +50,7 @@ export function ClassAttendanceChart() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Attendance by Event</CardTitle>
+          <CardTitle className="text-lg">Top Point Leaders</CardTitle>
         </CardHeader>
         <CardContent className="h-[300px] flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
@@ -75,7 +62,7 @@ export function ClassAttendanceChart() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Attendance by Event</CardTitle>
+        <CardTitle className="text-lg">Top Point Leaders</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
@@ -100,21 +87,15 @@ export function ClassAttendanceChart() {
             />
             <Legend />
             <Bar
-              dataKey="present"
-              fill="hsl(142 71% 45%)"
-              name="Present"
+              dataKey="points"
+              fill="hsl(var(--primary))"
+              name="Points"
               radius={[8, 8, 0, 0]}
             />
             <Bar
-              dataKey="absent"
-              fill="hsl(0 84% 60%)"
-              name="Absent"
-              radius={[8, 8, 0, 0]}
-            />
-            <Bar
-              dataKey="excused"
-              fill="hsl(216 98% 52%)"
-              name="Excused"
+              dataKey="correctAnswers"
+              fill="hsl(38 92% 50%)"
+              name="Correct Answers"
               radius={[8, 8, 0, 0]}
             />
           </BarChart>

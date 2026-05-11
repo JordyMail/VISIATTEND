@@ -4,11 +4,13 @@
 export interface User {
     id: number;
     fullName: string;
-    memberId: string;
+    userId: string;
     email: string;
     passwordHash?: string;
     role: 'admin' | 'preacher' | 'member' | 'staff';
     phoneNumber?: string;
+    dateOfBirth?: string;
+    category?: 'student' | 'other';
     isActive: boolean;
     emailVerified: boolean;
     lastLogin?: Date;
@@ -18,17 +20,21 @@ export interface User {
 
 export interface UserCreateInput {
     fullName: string;
-    memberId: string;
+    userId: string;
     email: string;
     password: string;
     role?: 'admin' | 'preacher' | 'member' | 'staff';
     phoneNumber?: string;
+    dateOfBirth?: string;
+    category?: 'student' | 'other';
 }
 
 export interface UserUpdateInput {
     fullName?: string;
     email?: string;
     phoneNumber?: string;
+    dateOfBirth?: string;
+    category?: 'student' | 'other';
     isActive?: boolean;
     role?: 'admin' | 'preacher' | 'member' | 'staff';
 }
@@ -74,9 +80,6 @@ export interface Attendance {
     id: number;
     userId: number;
     userName?: string;
-    eventId: number;
-    eventName?: string;
-    eventCode?: string;
     attendanceDate: string; // YYYY-MM-DD
     checkInTime: string; // ISO datetime
     checkOutTime?: string; // ISO datetime
@@ -92,7 +95,6 @@ export interface Attendance {
 
 export interface AttendanceCreateInput {
     userId: number;
-    eventId: number;
     attendanceDate: string;
     checkInTime: string;
     checkOutTime?: string;
@@ -137,12 +139,10 @@ export interface UserAchievement {
 export interface LeaderboardEntry {
     userId: number;
     fullName: string;
-    memberId: string;
-    totalPresent: number;
-    totalLate: number;
-    totalAbsent: number;
+    userIdValue: string;
+    totalPoints: number;
+    totalCorrectAnswers: number;
     attendancePercentage: number;
-    achievements: string[]; // achievement ids
 }
 
 // ============================================
@@ -199,7 +199,9 @@ export interface RegisterRequest {
     password: string;
     confirmPassword: string;
     phoneNumber: string;
-    memberId?: string;
+    userId?: string;
+    dateOfBirth?: string;
+    category?: 'student' | 'other';
 }
 
 export interface RegisterResponse {

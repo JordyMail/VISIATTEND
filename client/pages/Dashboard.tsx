@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Users, BookOpen, CalendarCheck, TrendingUp } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Users, Trophy, CalendarCheck, TrendingUp } from "lucide-react";
 import { StatCard } from "@/components/charts/StatCard";
 import { AttendanceTrendChart } from "@/components/charts/AttendanceTrendChart";
 import { StatusDistributionChart } from "@/components/charts/StatusDistributionChart";
@@ -15,26 +16,32 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { motion } from "framer-motion";
-import { dashboardApi, userApi, eventApi } from "@/services/api";
+import { motion, type Variants } from "framer-motion";
+import { dashboardApi } from "@/services/api";
 
 interface DashboardStats {
-    totalMembers: number;
-    activeEvents: number;
-    todayAttendance: {
-        checkedIn: number;
-        pending: number;
-        absent: number;
-    };
-    attendanceRate: number;
+  totalMembers: number;
+  totalPointsAwarded: number;
+  todayAttendance: {
+    checkedIn: number;
+    pending: number;
+    absent: number;
+  };
+  attendanceRate: number;
+  topScorer: {
+    full_name: string;
+    total_points: number;
+  } | null;
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({
     totalMembers: 0,
-    activeEvents: 0,
+    totalPointsAwarded: 0,
     todayAttendance: { checkedIn: 0, pending: 0, absent: 0 },
     attendanceRate: 0,
+    topScorer: null,
   });
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,21 +53,12 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
-      // Fetch all data in parallel
-      const [membersRes, eventsRes, todayStatsRes, activitiesRes] = await Promise.all([
-        userApi.getAll({ role: 'member', isActive: true }),
-        eventApi.getAll({ isActive: true }),
+      const [statsRes, activitiesRes] = await Promise.all([
         dashboardApi.getStats(),
         dashboardApi.getRecentActivities(5),
       ]);
 
-      setStats({
-        totalMembers: membersRes.data.data.length,
-        activeEvents: eventsRes.data.data.length,
-        todayAttendance: todayStatsRes.data.data,
-        attendanceRate: 85.5, // This should come from backend calculation
-      });
+      setStats(statsRes.data.data);
       
       setRecentActivities(activitiesRes.data.data);
     } catch (error) {
@@ -88,7 +86,7 @@ export default function Dashboard() {
     }
   };
 
-  const containerVariants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
@@ -99,13 +97,13 @@ export default function Dashboard() {
     },
   };
 
-  const itemVariants = {
+  const itemVariants: Variants = {
     hidden: { y: 20, opacity: 0 },
     visible: {
       y: 0,
       opacity: 1,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 100,
         damping: 12,
       },
@@ -134,8 +132,13 @@ export default function Dashboard() {
         <div>
           <h1 className="text-3xl md:text-4xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground mt-1">
-            Welcome back! Here's your church attendance overview.
+            Overview admin untuk absensi, poin, dan aktivitas user.
           </p>
+          {stats.topScorer ? (
+            <p className="text-sm text-muted-foreground mt-2">
+              Top poin saat ini: <span className="font-medium text-foreground">{stats.topScorer.full_name}</span> dengan {stats.topScorer.total_points} poin.
+            </p>
+          ) : null}
         </div>
         <motion.div 
           className="flex gap-3"
@@ -143,11 +146,11 @@ export default function Dashboard() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.3, duration: 0.5 }}
         >
-          <Button variant="outline" className="gap-2">
-            Export Report
+          <Button variant="outline" className="gap-2" onClick={() => navigate("/leaderboard")}>
+            Leaderboard Poin
           </Button>
-          <Button className="gap-2 bg-primary hover:bg-primary/90">
-            Add Event
+          <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={() => navigate("/attendance")}>
+            Start Attendance
           </Button>
         </motion.div>
       </motion.div>
@@ -168,12 +171,12 @@ export default function Dashboard() {
         </motion.div>
         <motion.div variants={itemVariants}>
           <StatCard
-            title="Active Events"
-            value={stats.activeEvents}
-            icon={BookOpen}
+            title="Total Points"
+            value={stats.totalPointsAwarded}
+            icon={Trophy}
             color="info"
-            description="Events in session"
-            trend={{ value: 5, direction: "up", label: "vs last month" }}
+            description="Akumulasi poin semua user"
+            trend={{ value: 0, direction: "up", label: "total awarded" }}
           />
         </motion.div>
         <motion.div variants={itemVariants}>
@@ -273,7 +276,7 @@ export default function Dashboard() {
                   <div className="w-full bg-secondary rounded-full h-2 mt-2">
                     <motion.div
                       initial={{ width: 0 }}
-                      animate={{ width: `${(stats.todayAttendance.checkedIn / stats.totalMembers) * 100}%` }}
+                      animate={{ width: `${stats.totalMembers ? (stats.todayAttendance.checkedIn / stats.totalMembers) * 100 : 0}%` }}
                       transition={{ delay: 0.7, duration: 0.8, ease: "easeOut" }}
                       className="bg-status-success h-2 rounded-full"
                     />
@@ -292,7 +295,7 @@ export default function Dashboard() {
                   <div className="w-full bg-secondary rounded-full h-2 mt-2">
                     <motion.div
                       initial={{ width: 0 }}
-                      animate={{ width: `${(stats.todayAttendance.pending / stats.totalMembers) * 100}%` }}
+                      animate={{ width: `${stats.totalMembers ? (stats.todayAttendance.pending / stats.totalMembers) * 100 : 0}%` }}
                       transition={{ delay: 0.9, duration: 0.8, ease: "easeOut" }}
                       className="bg-status-warning h-2 rounded-full"
                     />
@@ -311,7 +314,7 @@ export default function Dashboard() {
                   <div className="w-full bg-secondary rounded-full h-2 mt-2">
                     <motion.div
                       initial={{ width: 0 }}
-                      animate={{ width: `${(stats.todayAttendance.absent / stats.totalMembers) * 100}%` }}
+                      animate={{ width: `${stats.totalMembers ? (stats.todayAttendance.absent / stats.totalMembers) * 100 : 0}%` }}
                       transition={{ delay: 1.1, duration: 0.8, ease: "easeOut" }}
                       className="bg-status-error h-2 rounded-full"
                     />

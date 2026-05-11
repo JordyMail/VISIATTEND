@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov/
+
+# Logs
+logs/
+*.log
+
+# Storage (embeddings)
+# storage/  # Jangan exclude ini karena perlu untuk runtime
+
+# Environment
+.env.local
+.env.*.local

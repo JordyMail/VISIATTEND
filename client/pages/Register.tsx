@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, User, Mail, Lock, Phone, Shield, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
-import { encryptData } from "@/lib/auth";
+import { authApi } from "@/services/api";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -13,7 +13,7 @@ export default function Register() {
     password: "",
     confirmPassword: "",
     phoneNumber: "",
-    memberId: "",
+    userId: "",
   });
 
   const [loading, setLoading] = useState(false);
@@ -131,36 +131,22 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // Simulasi API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const response = await authApi.register({
+        fullName: formData.fullName,
+        email: formData.email,
+        password: formData.password,
+        confirmPassword: formData.confirmPassword,
+        phoneNumber: formData.phoneNumber,
+        userId: formData.userId || undefined,
+      });
 
-      // Cek apakah email sudah terdaftar (simulasi)
-      if (formData.email === "admin@gmail.com") {
-        setError("Email already registered");
+      if (!response.data?.success) {
+        setError(response.data?.message || "Registration failed");
         setLoading(false);
         return;
       }
 
-      // Enkripsi data sensitif sebelum disimpan (simulasi)
-      const encryptedData = {
-        ...formData,
-        password: encryptData(formData.password),
-        createdAt: new Date().toISOString(),
-      };
-
-      // Simpan ke localStorage (simulasi, seharusnya ke backend)
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      users.push({
-        id: users.length + 1,
-        ...encryptedData,
-        password: formData.password, // Simpan password asli untuk demo (jangan lakukan di production!)
-        role: 'member',
-        isActive: true,
-        emailVerified: false,
-      });
-      localStorage.setItem('users', JSON.stringify(users));
-
-      setSuccess("Registration successful! Please check your email to verify your account.");
+      setSuccess(response.data?.message || "Registration successful! Please login with your credentials.");
 
       // Redirect ke login setelah 3 detik
       setTimeout(() => {
@@ -285,19 +271,19 @@ export default function Register() {
                 />
               </div>
 
-              {/* Member ID (Optional) */}
+              {/* User ID (Optional) */}
               <div className="space-y-1 group">
                 <label className="text-sm font-medium text-gray-700 flex items-center gap-2 transition-colors duration-300 group-hover:text-blue-600">
                   <User className="w-4 h-4 text-gray-400 transition-colors duration-300 group-hover:text-blue-500" />
-                  Member ID (Optional)
+                  User ID (Optional)
                 </label>
                 <input
                   type="text"
-                  name="memberId"
-                  value={formData.memberId}
+                  name="userId"
+                  value={formData.userId}
                   onChange={handleChange}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-300 bg-white/50 hover:border-blue-300"
-                  placeholder="MEM001"
+                  placeholder="USR001"
                 />
               </div>
 

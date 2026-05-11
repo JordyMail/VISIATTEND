@@ -59,6 +59,8 @@ interface User {
   full_name: string;
 }
 
+type EventType = 'worship' | 'meeting' | 'study' | 'fellowship' | 'outreach';
+
 export default function Events() {
   const [events, setEvents] = useState<Event[]>([]);
   const [preachers, setPreachers] = useState<User[]>([]);
@@ -77,7 +79,7 @@ export default function Events() {
     description: "",
     preacherId: "",
     season: "2024 Season",
-    eventType: "worship" as const,
+    eventType: "worship" as EventType,
   });
 
   useEffect(() => {
@@ -567,7 +569,7 @@ export default function Events() {
                             {member.full_name}
                           </TableCell>
                           <TableCell className="text-sm">
-                            {member.member_id}
+                            {member.user_id}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {member.email}
