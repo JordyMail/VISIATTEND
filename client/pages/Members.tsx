@@ -1,3 +1,4 @@
+// client/pages/Members.tsx
 import { useState, useEffect } from "react";
 import { Plus, Search, Edit2, Trash2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";

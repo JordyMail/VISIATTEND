@@ -1,3 +1,4 @@
+// client/services/api.ts
 import axios from 'axios';
 
 const API_BASE_URL = '/api';
@@ -10,12 +11,20 @@ const api = axios.create({
 });
 
 // Add token to requests
+// client/services/api.ts
 api.interceptors.request.use((config) => {
     const session = localStorage.getItem('session');
+    console.log('Session data:', session); // Debug
+    
     if (session) {
-        const { accessToken } = JSON.parse(session);
-        if (accessToken) {
-            config.headers.Authorization = `Bearer ${accessToken}`;
+        try {
+            const { accessToken } = JSON.parse(session);
+            if (accessToken) {
+                config.headers.Authorization = `Bearer ${accessToken}`;
+                console.log('Token attached to request'); // Debug
+            }
+        } catch (e) {
+            console.error('Error parsing session:', e);
         }
     }
     return config;

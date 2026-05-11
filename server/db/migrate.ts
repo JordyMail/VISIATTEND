@@ -1,3 +1,4 @@
+// server/db/migrate.ts
 import { getConnection, sql } from './config.js';
 
 async function createTables() {

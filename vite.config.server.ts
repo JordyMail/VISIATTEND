@@ -34,6 +34,11 @@ export default defineConfig({
         // External dependencies that should not be bundled
         "express",
         "cors",
+        "bcrypt",
+        "jsonwebtoken",
+        "dotenv",
+        "mssql",
+        "tedious",
       ],
       output: {
         format: "es",
@@ -47,9 +52,11 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./client"),
       "@shared": path.resolve(__dirname, "./shared"),
+      "@server": path.resolve(__dirname, "./server"),
     },
   },
   define: {
     "process.env.NODE_ENV": '"production"',
+    "process.env.JWT_SECRET": JSON.stringify(process.env.JWT_SECRET),
   },
 });
