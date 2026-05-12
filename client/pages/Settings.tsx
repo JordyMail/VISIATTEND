@@ -1,6 +1,6 @@
 // client/pages/Settings.tsx
-import { useState } from "react";
-import { Save, Eye, EyeOff } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Save, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,13 +16,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { mockActivityLogs, getRecentActivities } from "@/data/mockData";
+import { settingsApi } from "@/services/api";
+import { toast } from "@/components/ui/use-toast";
 
 export default function Settings() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const [profileData, setProfileData] = useState({
-    fullName: "Admin User",
-    email: "admin@visiattend.com",
-    phoneNumber: "08123456789",
+    fullName: "",
+    email: "",
+    phoneNumber: "",
+    role: "",
+    memberId: "",
   });
 
   const [passwordData, setPasswordData] = useState({
@@ -38,42 +44,140 @@ export default function Settings() {
   });
 
   const [systemSettings, setSystemSettings] = useState({
-    latenessThreshold: 15, // minutes
-    enableNotifications: true,
-    enableLeaderboard: true,
-    autoBackup: false,
-    maintenanceMode: false,
+    lateness_threshold: 15,
+    enable_notifications: true,
+    enable_leaderboard: true,
+    auto_backup: false,
+    maintenance_mode: false,
   });
 
-  const recentActivities = getRecentActivities(10);
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
 
-  const handleSaveProfile = () => {
-    // Handle profile save
-    console.log("Profile saved:", profileData);
-  };
+  // ─── Load on mount ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [profileRes, systemRes, logsRes] = await Promise.all([
+          settingsApi.getProfile(),
+          settingsApi.getSystemSettings(),
+          settingsApi.getActivityLogs(20),
+        ]);
 
-  const handleSavePassword = () => {
-    if (passwordData.newPassword === passwordData.confirmPassword) {
-      // Handle password change
-      console.log("Password changed");
-      setPasswordData({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
+        const p = profileRes.data.data;
+        setProfileData({
+          fullName: p.full_name || "",
+          email: p.email || "",
+          phoneNumber: p.phone_number || "",
+          role: p.role || "",
+          memberId: p.member_id || "",
+        });
+
+        setSystemSettings((prev) => ({ ...prev, ...systemRes.data.data }));
+        setActivityLogs(logsRes.data.data);
+      } catch (err: any) {
+        toast({
+          title: "Error",
+          description: "Failed to load settings",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  // ─── Save profile ───────────────────────────────────────────────────────────
+  const handleSaveProfile = async () => {
+    if (!profileData.fullName || !profileData.email) {
+      toast({ title: "Validation", description: "Name and email are required.", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      await settingsApi.updateProfile({
+        fullName: profileData.fullName,
+        email: profileData.email,
+        phoneNumber: profileData.phoneNumber,
       });
+      toast({ title: "Success", description: "Profile updated successfully." });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.response?.data?.message || "Failed to update profile",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleSystemSettingChange = (
-    key: keyof typeof systemSettings,
-    value: number | boolean
-  ) => {
-    setSystemSettings({ ...systemSettings, [key]: value });
+  // ─── Change password ────────────────────────────────────────────────────────
+  const handleSavePassword = async () => {
+    if (!passwordData.currentPassword || !passwordData.newPassword) {
+      toast({ title: "Validation", description: "Fill all password fields.", variant: "destructive" });
+      return;
+    }
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast({ title: "Validation", description: "New passwords do not match.", variant: "destructive" });
+      return;
+    }
+    if (passwordData.newPassword.length < 8) {
+      toast({ title: "Validation", description: "Password must be at least 8 characters.", variant: "destructive" });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await settingsApi.changePassword({
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      });
+      setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      toast({ title: "Success", description: "Password changed successfully." });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.response?.data?.message || "Failed to change password",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
+
+  // ─── Save system settings ───────────────────────────────────────────────────
+  const handleSaveSystem = async () => {
+    setSaving(true);
+    try {
+      await settingsApi.updateSystemSettings(systemSettings);
+      toast({ title: "Success", description: "System settings saved." });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.response?.data?.message || "Failed to save settings",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSystemChange = (key: keyof typeof systemSettings, value: number | boolean) => {
+    setSystemSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-8 space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl md:text-4xl font-bold">Settings</h1>
         <p className="text-muted-foreground mt-1">
@@ -81,7 +185,6 @@ export default function Settings() {
         </p>
       </div>
 
-      {/* Tabs */}
       <Tabs defaultValue="profile" className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
           <TabsTrigger value="profile">Profile</TabsTrigger>
@@ -90,199 +193,108 @@ export default function Settings() {
           <TabsTrigger value="audit">Audit Log</TabsTrigger>
         </TabsList>
 
-        {/* Profile Tab */}
+        {/* ── Profile ── */}
         <TabsContent value="profile" className="space-y-4">
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-6">Profile Settings</h2>
-
             <div className="space-y-4">
               <div>
-                <Label htmlFor="fullName" className="mb-2 block">
-                  Full Name
-                </Label>
+                <Label htmlFor="fullName" className="mb-2 block">Full Name</Label>
                 <Input
                   id="fullName"
                   value={profileData.fullName}
-                  onChange={(e) =>
-                    setProfileData({ ...profileData, fullName: e.target.value })
-                  }
+                  onChange={(e) => setProfileData({ ...profileData, fullName: e.target.value })}
                 />
               </div>
-
               <div>
-                <Label htmlFor="email" className="mb-2 block">
-                  Email Address
-                </Label>
+                <Label htmlFor="email" className="mb-2 block">Email Address</Label>
                 <Input
                   id="email"
                   type="email"
                   value={profileData.email}
-                  onChange={(e) =>
-                    setProfileData({ ...profileData, email: e.target.value })
-                  }
+                  onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
                 />
               </div>
-
               <div>
-                <Label htmlFor="phone" className="mb-2 block">
-                  Phone Number
-                </Label>
+                <Label htmlFor="phone" className="mb-2 block">Phone Number</Label>
                 <Input
                   id="phone"
                   value={profileData.phoneNumber}
-                  onChange={(e) =>
-                    setProfileData({
-                      ...profileData,
-                      phoneNumber: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setProfileData({ ...profileData, phoneNumber: e.target.value })}
                 />
               </div>
-
+              <div>
+                <Label className="mb-2 block">Member ID</Label>
+                <Input disabled value={profileData.memberId} className="bg-muted" />
+              </div>
               <div>
                 <Label className="mb-2 block">Role</Label>
-                <Input
-                  disabled
-                  value="Administrator"
-                  className="bg-muted"
-                />
+                <Input disabled value={profileData.role} className="bg-muted capitalize" />
               </div>
-
               <Button
                 className="gap-2 bg-primary hover:bg-primary/90"
                 onClick={handleSaveProfile}
+                disabled={saving}
               >
-                <Save className="w-4 h-4" />
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save Changes
               </Button>
             </div>
           </Card>
         </TabsContent>
 
-        {/* Password Tab */}
+        {/* ── Password ── */}
         <TabsContent value="password" className="space-y-4">
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-6">Change Password</h2>
-
             <div className="space-y-4">
-              <div>
-                <Label htmlFor="currentPassword" className="mb-2 block">
-                  Current Password
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="currentPassword"
-                    type={showPasswords.current ? "text" : "password"}
-                    value={passwordData.currentPassword}
-                    onChange={(e) =>
-                      setPasswordData({
-                        ...passwordData,
-                        currentPassword: e.target.value,
-                      })
-                    }
-                  />
-                  <button
-                    className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
-                    onClick={() =>
-                      setShowPasswords({
-                        ...showPasswords,
-                        current: !showPasswords.current,
-                      })
-                    }
-                  >
-                    {showPasswords.current ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
+              {(
+                [
+                  { id: "currentPassword", label: "Current Password", key: "current" as const, field: "currentPassword" as const },
+                  { id: "newPassword", label: "New Password", key: "new" as const, field: "newPassword" as const },
+                  { id: "confirmPassword", label: "Confirm New Password", key: "confirm" as const, field: "confirmPassword" as const },
+                ] as const
+              ).map(({ id, label, key, field }) => (
+                <div key={id}>
+                  <Label htmlFor={id} className="mb-2 block">{label}</Label>
+                  <div className="relative">
+                    <Input
+                      id={id}
+                      type={showPasswords[key] ? "text" : "password"}
+                      value={passwordData[field]}
+                      onChange={(e) =>
+                        setPasswordData({ ...passwordData, [field]: e.target.value })
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                      onClick={() =>
+                        setShowPasswords({ ...showPasswords, [key]: !showPasswords[key] })
+                      }
+                    >
+                      {showPasswords[key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              <div>
-                <Label htmlFor="newPassword" className="mb-2 block">
-                  New Password
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="newPassword"
-                    type={showPasswords.new ? "text" : "password"}
-                    value={passwordData.newPassword}
-                    onChange={(e) =>
-                      setPasswordData({
-                        ...passwordData,
-                        newPassword: e.target.value,
-                      })
-                    }
-                  />
-                  <button
-                    className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
-                    onClick={() =>
-                      setShowPasswords({
-                        ...showPasswords,
-                        new: !showPasswords.new,
-                      })
-                    }
-                  >
-                    {showPasswords.new ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="confirmPassword" className="mb-2 block">
-                  Confirm New Password
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="confirmPassword"
-                    type={showPasswords.confirm ? "text" : "password"}
-                    value={passwordData.confirmPassword}
-                    onChange={(e) =>
-                      setPasswordData({
-                        ...passwordData,
-                        confirmPassword: e.target.value,
-                      })
-                    }
-                  />
-                  <button
-                    className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
-                    onClick={() =>
-                      setShowPasswords({
-                        ...showPasswords,
-                        confirm: !showPasswords.confirm,
-                      })
-                    }
-                  >
-                    {showPasswords.confirm ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
+              ))}
 
               <Button
                 className="gap-2 bg-primary hover:bg-primary/90"
                 onClick={handleSavePassword}
+                disabled={saving}
               >
-                <Save className="w-4 h-4" />
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Update Password
               </Button>
             </div>
           </Card>
         </TabsContent>
 
-        {/* System Tab */}
+        {/* ── System ── */}
         <TabsContent value="system" className="space-y-4">
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-6">System Settings</h2>
-
             <div className="space-y-6">
               <div>
                 <Label htmlFor="lateness" className="mb-2 block">
@@ -291,111 +303,65 @@ export default function Settings() {
                 <Input
                   id="lateness"
                   type="number"
-                  value={systemSettings.latenessThreshold}
+                  value={systemSettings.lateness_threshold}
                   onChange={(e) =>
-                    handleSystemSettingChange(
-                      "latenessThreshold",
-                      parseInt(e.target.value)
-                    )
+                    handleSystemChange("lateness_threshold", parseInt(e.target.value) || 0)
                   }
                   min="1"
                   max="60"
                 />
                 <p className="text-xs text-muted-foreground mt-2">
-                  Students arriving after this many minutes will be marked as
-                  late
+                  Members arriving after this many minutes will be marked as late
                 </p>
               </div>
-
               <hr />
-
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Enable Notifications</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Send email notifications for attendance events
-                    </p>
+                {(
+                  [
+                    { key: "enable_notifications", label: "Enable Notifications", desc: "Send email notifications for attendance events" },
+                    { key: "enable_leaderboard", label: "Enable Leaderboard", desc: "Display attendance leaderboard to members" },
+                    { key: "auto_backup", label: "Auto Backup", desc: "Automatically backup attendance data daily" },
+                    { key: "maintenance_mode", label: "Maintenance Mode", desc: "Restrict system access for maintenance" },
+                  ] as const
+                ).map(({ key, label, desc }) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <div>
+                      <Label>{label}</Label>
+                      <p className="text-sm text-muted-foreground">{desc}</p>
+                    </div>
+                    <Switch
+                      checked={!!systemSettings[key]}
+                      onCheckedChange={(v) => handleSystemChange(key, v)}
+                    />
                   </div>
-                  <Switch
-                    checked={systemSettings.enableNotifications}
-                    onCheckedChange={(checked) =>
-                      handleSystemSettingChange("enableNotifications", checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Enable Leaderboard</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Display attendance leaderboard to students
-                    </p>
-                  </div>
-                  <Switch
-                    checked={systemSettings.enableLeaderboard}
-                    onCheckedChange={(checked) =>
-                      handleSystemSettingChange("enableLeaderboard", checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Auto Backup</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically backup attendance data daily
-                    </p>
-                  </div>
-                  <Switch
-                    checked={systemSettings.autoBackup}
-                    onCheckedChange={(checked) =>
-                      handleSystemSettingChange("autoBackup", checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Maintenance Mode</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Restrict system access for maintenance
-                    </p>
-                  </div>
-                  <Switch
-                    checked={systemSettings.maintenanceMode}
-                    onCheckedChange={(checked) =>
-                      handleSystemSettingChange("maintenanceMode", checked)
-                    }
-                  />
-                </div>
+                ))}
               </div>
-
               <Button
                 className="gap-2 bg-primary hover:bg-primary/90"
-                onClick={() => console.log("System settings saved")}
+                onClick={handleSaveSystem}
+                disabled={saving}
               >
-                <Save className="w-4 h-4" />
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save Settings
               </Button>
             </div>
           </Card>
         </TabsContent>
 
-        {/* Audit Log Tab */}
+        {/* ── Audit Log ── */}
         <TabsContent value="audit" className="space-y-4">
           <Card className="overflow-hidden">
             <div className="p-6 border-b border-border">
               <h2 className="text-lg font-semibold">Activity Log</h2>
               <p className="text-sm text-muted-foreground">
-                View recent system activities and user actions
+                Recent system activities and user actions
               </p>
             </div>
-
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>User</TableHead>
                     <TableHead>Action</TableHead>
                     <TableHead>Entity</TableHead>
                     <TableHead>Description</TableHead>
@@ -403,22 +369,31 @@ export default function Settings() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recentActivities.map((activity) => (
-                    <TableRow key={activity.id}>
-                      <TableCell>
-                        <Badge variant="outline">{activity.action}</Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {activity.entityType}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {activity.description}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {new Date(activity.createdAt).toLocaleString("id-ID")}
+                  {activityLogs.length > 0 ? (
+                    activityLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="font-medium text-sm">
+                          {log.user_name || "System"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{log.action}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">{log.entity_type || "-"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
+                          {log.description || "-"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {new Date(log.created_at).toLocaleString("id-ID")}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No activity logs found
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </div>

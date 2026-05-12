@@ -1,1354 +1,1260 @@
-// server/index.ts
+// server/index.ts  —  VISIATTEND v2
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { getConnection, sql } from "./db/config.js";
+import {
+  authenticateToken,
+  requireRole,
+  requireAdmin,
+  requireSuperAdmin,
+  requireAnyRole,
+  requireSelfOrAdmin,
+} from "./middleware/rbac.js";
 import { handleDemo } from "./routes/demo.js";
+
+// ─── Helper: log activity ─────────────────────────────────────────────────────
+async function logActivity(
+  pool: any,
+  userId: number | null,
+  action: string,
+  entityType: string,
+  entityId: number | null,
+  description: string,
+  ip?: string
+) {
+  try {
+    await pool.request()
+      .input("u",   sql.Int,      userId)
+      .input("a",   sql.NVarChar, action)
+      .input("et",  sql.NVarChar, entityType)
+      .input("ei",  sql.Int,      entityId)
+      .input("d",   sql.NVarChar, description.slice(0, 500))
+      .input("ip",  sql.NVarChar, ip || null)
+      .query(`
+        INSERT INTO activity_logs (user_id,action,entity_type,entity_id,description,ip_address,created_at)
+        VALUES (@u,@a,@et,@ei,@d,@ip,GETDATE())
+      `);
+  } catch { /* non-fatal */ }
+}
 
 export function createServer() {
   const app = express();
-
-  // Middleware
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
 
-  // ============ HELPER FUNCTIONS ============
-  const authenticateToken = (req: any, res: any, next: any) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ success: false, message: 'Access token required' });
-    }
-    
-    jwt.verify(token, process.env.JWT_SECRET || 'secret_key', (err: any, user: any) => {
-      if (err) return res.status(403).json({ success: false, message: 'Invalid or expired token' });
-      req.user = user;
-      next();
-    });
-  };
-
-  // ============ USER ROUTES ============
-  // DEVELOPMENT ONLY - Auto login
-app.get("/api/dev/auto-login", async (req, res) => {
+  // ══════════════════════════════════════════════════════════════════════════════
+  // DEV auto-login
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.get("/api/dev/auto-login", async (req, res) => {
     try {
-        const pool = await getConnection();
-        const result = await pool.request()
-            .query("SELECT TOP 1 * FROM users WHERE role = 'admin'");
-        
-        if (result.recordset.length === 0) {
-            return res.status(404).json({ error: "No admin user found" });
-        }
-        
-        const user = result.recordset[0];
-        const token = jwt.sign(
-            { id: user.id, email: user.email, role: user.role },
-            process.env.JWT_SECRET || 'secret_key',
-            { expiresIn: '24h' }
-        );
-        
-        res.json({
-            accessToken: token,
-            refreshToken: token,
-            user: {
-                id: user.id,
-                full_name: user.full_name,
-                email: user.email,
-                role: user.role
-            }
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-
-  // GET /api/users - Get all users
-  app.get("/api/users", async (req, res) => {
-  
-    try {
-      const pool = await getConnection();
-      const result = await pool.request().query(`
-        SELECT id, full_name, member_id, email, role, phone_number, is_active, created_at
-        FROM users
-        ORDER BY created_at DESC
-      `);
-      res.json({ success: true, data: result.recordset });
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // GET /api/users/:id - Get user by ID
-  app.get("/api/users/:id",async (req, res) => {
-    try {
+      const { role = "super_admin" } = req.query;
       const pool = await getConnection();
       const result = await pool.request()
-        .input("id", sql.Int, req.params.id)
-        .query(`
-          SELECT id, full_name, member_id, email, role, phone_number, is_active, created_at
-          FROM users
-          WHERE id = @id
-        `);
-      
-      if (result.recordset.length === 0) {
-        return res.status(404).json({ success: false, message: "User not found" });
-      }
-      
-      res.json({ success: true, data: result.recordset[0] });
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+        .input("role", sql.NVarChar, role as string)
+        .query("SELECT TOP 1 * FROM users WHERE role = @role AND is_active = 1");
+      if (!result.recordset.length)
+        return res.status(404).json({ error: "No user found for role: " + role });
+      const user = result.recordset[0];
+      const token = jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        process.env.JWT_SECRET || "secret_key",
+        { expiresIn: "24h" }
+      );
+      res.json({ accessToken: token, refreshToken: token, user });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
-  // POST /api/users - Create new user
-  app.post("/api/users", async (req, res) => {
-    try {
-      const { fullName, memberId, email, password, role, phoneNumber } = req.body;
-      
-      // Validasi input
-      if (!fullName || !memberId || !email || !password) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Full name, member ID, email, and password are required" 
-        });
-      }
-      
-      const pool = await getConnection();
-      
-      // Cek apakah email sudah terdaftar
-      const checkEmail = await pool.request()
-        .input("email", sql.NVarChar, email)
-        .query("SELECT id FROM users WHERE email = @email");
-      
-      if (checkEmail.recordset.length > 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Email already registered" 
-        });
-      }
-      
-      // Cek apakah member ID sudah terdaftar
-      const checkMemberId = await pool.request()
-        .input("memberId", sql.NVarChar, memberId)
-        .query("SELECT id FROM users WHERE member_id = @memberId");
-      
-      if (checkMemberId.recordset.length > 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Member ID already exists" 
-        });
-      }
-      
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
-      // Insert user
-      const result = await pool.request()
-        .input("fullName", sql.NVarChar, fullName)
-        .input("memberId", sql.NVarChar, memberId)
-        .input("email", sql.NVarChar, email)
-        .input("password", sql.NVarChar, hashedPassword)
-        .input("role", sql.NVarChar, role || "member")
-        .input("phoneNumber", sql.NVarChar, phoneNumber || null)
-        .query(`
-          INSERT INTO users (full_name, member_id, email, password_hash, role, phone_number, is_active, created_at)
-          OUTPUT INSERTED.id, INSERTED.full_name, INSERTED.member_id, INSERTED.email, INSERTED.role, INSERTED.phone_number, INSERTED.is_active, INSERTED.created_at
-          VALUES (@fullName, @memberId, @email, @password, @role, @phoneNumber, 1, GETDATE())
-        `);
-      
-      res.status(201).json({ 
-        success: true, 
-        message: "User created successfully",
-        data: result.recordset[0]
-      });
-    } catch (error) {
-      console.error("Error creating user:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // PUT /api/users/:id - Update user
-  app.put("/api/users/:id", async (req, res) => {
-    try {
-      const { fullName, email, phoneNumber, role } = req.body;
-      const userId = req.params.id;
-      
-      const pool = await getConnection();
-      
-      // Cek apakah user exists
-      const checkUser = await pool.request()
-        .input("id", sql.Int, userId)
-        .query("SELECT id FROM users WHERE id = @id");
-      
-      if (checkUser.recordset.length === 0) {
-        return res.status(404).json({ success: false, message: "User not found" });
-      }
-      
-
-      // Update user
-      await pool.request()
-        .input("id", sql.Int, userId)
-        .input("fullName", sql.NVarChar, fullName)
-        .input("email", sql.NVarChar, email)
-        .input("phoneNumber", sql.NVarChar, phoneNumber || null)
-        .input("role", sql.NVarChar, role)
-        .query(`
-          UPDATE users 
-          SET full_name = @fullName, 
-              email = @email, 
-              phone_number = @phoneNumber, 
-              role = @role
-          WHERE id = @id
-        `);
-      
-      res.json({ success: true, message: "User updated successfully" });
-    } catch (error) {
-      console.error("Error updating user:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // DELETE /api/users/:id - Delete user
-  app.delete("/api/users/:id", async (req, res) => {
-    try {
-      const pool = await getConnection();
-      
-      const result = await pool.request()
-        .input("id", sql.Int, req.params.id)
-        .query("DELETE FROM users WHERE id = @id");
-      
-      if (result.rowsAffected[0] === 0) {
-        return res.status(404).json({ success: false, message: "User not found" });
-      }
-      
-      res.json({ success: true, message: "User deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting user:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // PATCH /api/users/:id/toggle-status - Toggle user status
-  app.patch("/api/users/:id/toggle-status", async (req, res) => {
-    try {
-      const pool = await getConnection();
-      
-      // Get current status
-      const user = await pool.request()
-        .input("id", sql.Int, req.params.id)
-        .query("SELECT is_active FROM users WHERE id = @id");
-      
-      if (user.recordset.length === 0) {
-        return res.status(404).json({ success: false, message: "User not found" });
-      }
-      
-      const newStatus = user.recordset[0].is_active ? 0 : 1;
-      
-      await pool.request()
-        .input("id", sql.Int, req.params.id)
-        .input("isActive", sql.Bit, newStatus)
-        .query("UPDATE users SET is_active = @isActive WHERE id = @id");
-      
-      res.json({ success: true, message: `User ${newStatus ? "activated" : "deactivated"} successfully` });
-    } catch (error) {
-      console.error("Error toggling user status:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // ============ EVENT ROUTES ============
-  
-  // GET /api/events - Get all events
-  app.get("/api/events", async (req, res) => {
-    try {
-      const { isActive } = req.query;
-      const pool = await getConnection();
-      
-      let query = `
-        SELECT e.*, u.full_name as preacher_name
-        FROM events e
-        LEFT JOIN users u ON e.preacher_id = u.id
-      `;
-      
-      if (isActive !== undefined) {
-        query += ` WHERE e.is_active = ${isActive === 'true' ? 1 : 0}`;
-      }
-      
-      query += ` ORDER BY e.created_at DESC`;
-      
-      const result = await pool.request().query(query);
-      res.json({ success: true, data: result.recordset });
-    } catch (error) {
-      console.error("Error fetching events:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // GET /api/events/:id - Get event by ID
-  app.get("/api/events/:id", async (req, res) => {
-    try {
-      const pool = await getConnection();
-      const result = await pool.request()
-        .input("id", sql.Int, req.params.id)
-        .query(`
-          SELECT e.*, u.full_name as preacher_name
-          FROM events e
-          LEFT JOIN users u ON e.preacher_id = u.id
-          WHERE e.id = @id
-        `);
-      
-      if (result.recordset.length === 0) {
-        return res.status(404).json({ success: false, message: "Event not found" });
-      }
-      
-      res.json({ success: true, data: result.recordset[0] });
-    } catch (error) {
-      console.error("Error fetching event:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // POST /api/events - Create new event
-  app.post("/api/events", async (req, res) => {
-    try {
-      const { eventCode, eventName, description, preacherId, season, eventType } = req.body;
-      
-      if (!eventCode || !eventName || !eventType) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Event code, name, and type are required" 
-        });
-      }
-      
-      const pool = await getConnection();
-      
-      // Cek apakah event code sudah ada
-      const checkCode = await pool.request()
-        .input("eventCode", sql.NVarChar, eventCode)
-        .query("SELECT id FROM events WHERE event_code = @eventCode");
-      
-      if (checkCode.recordset.length > 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Event code already exists" 
-        });
-      }
-      
-      const result = await pool.request()
-        .input("eventCode", sql.NVarChar, eventCode)
-        .input("eventName", sql.NVarChar, eventName)
-        .input("description", sql.NVarChar, description || null)
-        .input("preacherId", sql.Int, preacherId || null)
-        .input("season", sql.NVarChar, season || null)
-        .input("eventType", sql.NVarChar, eventType)
-        .query(`
-          INSERT INTO events (event_code, event_name, description, preacher_id, season, event_type, is_active, created_at)
-          OUTPUT INSERTED.*
-          VALUES (@eventCode, @eventName, @description, @preacherId, @season, @eventType, 1, GETDATE())
-        `);
-      
-      res.status(201).json({ 
-        success: true, 
-        message: "Event created successfully",
-        data: result.recordset[0]
-      });
-    } catch (error) {
-      console.error("Error creating event:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // PUT /api/events/:id - Update event
-  app.put("/api/events/:id",  async (req, res) => {
-    try {
-      const { eventName, description, preacherId, eventType } = req.body;
-      const eventId = req.params.id;
-      
-      const pool = await getConnection();
-      
-      const checkEvent = await pool.request()
-        .input("id", sql.Int, eventId)
-        .query("SELECT id FROM events WHERE id = @id");
-      
-      if (checkEvent.recordset.length === 0) {
-        return res.status(404).json({ success: false, message: "Event not found" });
-      }
-      
-      await pool.request()
-        .input("id", sql.Int, eventId)
-        .input("eventName", sql.NVarChar, eventName)
-        .input("description", sql.NVarChar, description || null)
-        .input("preacherId", sql.Int, preacherId || null)
-        .input("eventType", sql.NVarChar, eventType)
-        .query(`
-          UPDATE events 
-          SET event_name = @eventName, 
-              description = @description, 
-              preacher_id = @preacherId, 
-              event_type = @eventType
-          WHERE id = @id
-        `);
-      
-      res.json({ success: true, message: "Event updated successfully" });
-    } catch (error) {
-      console.error("Error updating event:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // DELETE /api/events/:id - Delete event
-  app.delete("/api/events/:id",async (req, res) => {
-    try {
-      const pool = await getConnection();
-      
-      const result = await pool.request()
-        .input("id", sql.Int, req.params.id)
-        .query("DELETE FROM events WHERE id = @id");
-      
-      if (result.rowsAffected[0] === 0) {
-        return res.status(404).json({ success: false, message: "Event not found" });
-      }
-      
-      res.json({ success: true, message: "Event deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting event:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // GET /api/events/:id/members - Get enrolled members
-  app.get("/api/events/:id/members", async (req, res) => {
-    try {
-      const pool = await getConnection();
-      const result = await pool.request()
-        .input("eventId", sql.Int, req.params.id)
-        .query(`
-          SELECT u.id, u.full_name, u.member_id, u.email, u.phone_number
-          FROM users u
-          JOIN event_enrollments ee ON u.id = ee.user_id
-          WHERE ee.event_id = @eventId AND ee.is_active = 1
-          ORDER BY u.full_name
-        `);
-      
-      res.json({ success: true, data: result.recordset });
-    } catch (error) {
-      console.error("Error fetching event members:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // POST /api/events/:id/enroll - Enroll member to event
-  app.post("/api/events/:id/enroll", async (req, res) => {
-    try {
-      const { userId } = req.body;
-      const eventId = req.params.id;
-      
-      if (!userId) {
-        return res.status(400).json({ success: false, message: "User ID is required" });
-      }
-      
-      const pool = await getConnection();
-      
-      // Cek apakah sudah terdaftar
-      const checkEnrollment = await pool.request()
-        .input("eventId", sql.Int, eventId)
-        .input("userId", sql.Int, userId)
-        .query("SELECT id FROM event_enrollments WHERE event_id = @eventId AND user_id = @userId");
-      
-      if (checkEnrollment.recordset.length > 0) {
-        return res.status(400).json({ success: false, message: "User already enrolled in this event" });
-      }
-      
-      await pool.request()
-        .input("eventId", sql.Int, eventId)
-        .input("userId", sql.Int, userId)
-        .query(`
-          INSERT INTO event_enrollments (event_id, user_id, enrolled_at, is_active)
-          VALUES (@eventId, @userId, GETDATE(), 1)
-        `);
-      
-      res.json({ success: true, message: "Member enrolled successfully" });
-    } catch (error) {
-      console.error("Error enrolling member:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // ============ ATTENDANCE ROUTES ============
-  
-  // GET /api/attendance - Get all attendance records
-  app.get("/api/attendance", async (req, res) => {
-    try {
-      const { eventId, startDate, endDate } = req.query;
-      const pool = await getConnection();
-      
-      let query = `
-        SELECT a.*, u.full_name as user_name, e.event_name, e.event_code
-        FROM attendance a
-        JOIN users u ON a.user_id = u.id
-        JOIN events e ON a.event_id = e.id
-        WHERE 1=1
-      `;
-      
-      if (eventId) {
-        query += ` AND a.event_id = ${eventId}`;
-      }
-      
-      if (startDate) {
-        query += ` AND a.attendance_date >= '${startDate}'`;
-      }
-      
-      if (endDate) {
-        query += ` AND a.attendance_date <= '${endDate}'`;
-      }
-      
-      query += ` ORDER BY a.attendance_date DESC, a.check_in_time DESC`;
-      
-      const result = await pool.request().query(query);
-      res.json({ success: true, data: result.recordset });
-    } catch (error) {
-      console.error("Error fetching attendance:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // GET /api/attendance/:id - Get attendance by ID
-  app.get("/api/attendance/:id", async (req, res) => {
-    try {
-      const pool = await getConnection();
-      const result = await pool.request()
-        .input("id", sql.Int, req.params.id)
-        .query(`
-          SELECT a.*, u.full_name as user_name, e.event_name, e.event_code
-          FROM attendance a
-          JOIN users u ON a.user_id = u.id
-          JOIN events e ON a.event_id = e.id
-          WHERE a.id = @id
-        `);
-      
-      if (result.recordset.length === 0) {
-        return res.status(404).json({ success: false, message: "Attendance record not found" });
-      }
-      
-      res.json({ success: true, data: result.recordset[0] });
-    } catch (error) {
-      console.error("Error fetching attendance:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // POST /api/attendance - Create attendance record
-  app.post("/api/attendance", async (req, res) => {
-    try {
-      const { userId, eventId, attendanceDate, checkInTime, checkOutTime, status, deviceInfo } = req.body;
-      
-      if (!userId || !eventId || !attendanceDate || !checkInTime || !status) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "User ID, event ID, date, check-in time, and status are required" 
-        });
-      }
-      
-      const pool = await getConnection();
-      
-      // Cek duplikasi
-      const checkDuplicate = await pool.request()
-        .input("userId", sql.Int, userId)
-        .input("eventId", sql.Int, eventId)
-        .input("attendanceDate", sql.Date, attendanceDate)
-        .query("SELECT id FROM attendance WHERE user_id = @userId AND event_id = @eventId AND attendance_date = @attendanceDate");
-      
-      if (checkDuplicate.recordset.length > 0) {
-        return res.status(400).json({ success: false, message: "Attendance already recorded for this user, event, and date" });
-      }
-      
-      const result = await pool.request()
-        .input("userId", sql.Int, userId)
-        .input("eventId", sql.Int, eventId)
-        .input("attendanceDate", sql.Date, attendanceDate)
-        .input("checkInTime", sql.DateTime, checkInTime)
-        .input("checkOutTime", sql.DateTime, checkOutTime || null)
-        .input("status", sql.NVarChar, status)
-        .input("deviceInfo", sql.NVarChar, deviceInfo || null)
-        .query(`
-          INSERT INTO attendance (user_id, event_id, attendance_date, check_in_time, check_out_time, status, device_info, created_at)
-          OUTPUT INSERTED.*
-          VALUES (@userId, @eventId, @attendanceDate, @checkInTime, @checkOutTime, @status, @deviceInfo, GETDATE())
-        `);
-      
-      res.status(201).json({ 
-        success: true, 
-        message: "Attendance recorded successfully",
-        data: result.recordset[0]
-      });
-    } catch (error) {
-      console.error("Error creating attendance:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // PUT /api/attendance/:id - Update attendance
-  app.put("/api/attendance/:id", async (req, res) => {
-    try {
-      const { checkOutTime, status } = req.body;
-      const attendanceId = req.params.id;
-      
-      const pool = await getConnection();
-      
-      const checkAttendance = await pool.request()
-        .input("id", sql.Int, attendanceId)
-        .query("SELECT id FROM attendance WHERE id = @id");
-      
-      if (checkAttendance.recordset.length === 0) {
-        return res.status(404).json({ success: false, message: "Attendance record not found" });
-      }
-      
-      await pool.request()
-        .input("id", sql.Int, attendanceId)
-        .input("checkOutTime", sql.DateTime, checkOutTime || null)
-        .input("status", sql.NVarChar, status)
-        .query(`
-          UPDATE attendance 
-          SET check_out_time = @checkOutTime, 
-              status = @status
-          WHERE id = @id
-        `);
-      
-      res.json({ success: true, message: "Attendance updated successfully" });
-    } catch (error) {
-      console.error("Error updating attendance:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // DELETE /api/attendance/:id - Delete attendance
-  app.delete("/api/attendance/:id", async (req, res) => {
-    try {
-      const pool = await getConnection();
-      
-      const result = await pool.request()
-        .input("id", sql.Int, req.params.id)
-        .query("DELETE FROM attendance WHERE id = @id");
-      
-      if (result.rowsAffected[0] === 0) {
-        return res.status(404).json({ success: false, message: "Attendance record not found" });
-      }
-      
-      res.json({ success: true, message: "Attendance deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting attendance:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // GET /api/attendance/stats/today - Today's attendance stats
-  app.get("/api/attendance/stats/today", async (req, res) => {
-    try {
-      const pool = await getConnection();
-      const today = new Date().toISOString().split('T')[0];
-      
-      const result = await pool.request()
-        .input("today", sql.Date, today)
-        .query(`
-          SELECT 
-            COUNT(CASE WHEN status IN ('present', 'late') THEN 1 END) as checkedIn,
-            COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
-            COUNT(CASE WHEN status = 'absent' THEN 1 END) as absent
-          FROM attendance
-          WHERE attendance_date = @today
-        `);
-      
-      res.json({ success: true, data: result.recordset[0] });
-    } catch (error) {
-      console.error("Error fetching today's stats:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // GET /api/attendance/trend - Attendance trend
-  app.get("/api/attendance/trend", async (req, res) => {
-    try {
-      const { days = 7 } = req.query;
-      const pool = await getConnection();
-      
-      const result = await pool.request()
-        .input("days", sql.Int, days)
-        .query(`
-          SELECT 
-            attendance_date,
-            COUNT(*) as total,
-            SUM(CASE WHEN status IN ('present', 'late') THEN 1 ELSE 0 END) as present
-          FROM attendance
-          WHERE attendance_date >= DATEADD(DAY, -@days, GETDATE())
-          GROUP BY attendance_date
-          ORDER BY attendance_date
-        `);
-      
-      res.json({ success: true, data: result.recordset });
-    } catch (error) {
-      console.error("Error fetching attendance trend:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // GET /api/attendance/leaderboard - Get leaderboard
-  app.get("/api/attendance/leaderboard", async (req, res) => {
-    try {
-      const { eventId, period = "month" } = req.query;
-      const pool = await getConnection();
-      
-      const result = await pool.request()
-        .input("eventId", sql.Int, eventId)
-        .execute('sp_get_leaderboard', { period: sql.NVarChar(20), value: period });
-      
-      res.json({ success: true, data: result.recordset });
-    } catch (error) {
-      console.error("Error fetching leaderboard:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // ============ AUTH ROUTES ============
-  
-  // POST /api/auth/login - Login user
+  // ══════════════════════════════════════════════════════════════════════════════
+  // AUTH ROUTES  (public)
+  // ══════════════════════════════════════════════════════════════════════════════
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { email, password } = req.body;
-      
-      if (!email || !password) {
-        return res.status(400).json({ success: false, message: "Email and password are required" });
-      }
-      
+      if (!email || !password)
+        return res.status(400).json({ success: false, message: "Email and password required" });
+
       const pool = await getConnection();
       const result = await pool.request()
         .input("email", sql.NVarChar, email)
         .query("SELECT * FROM users WHERE email = @email");
-      
-      if (result.recordset.length === 0) {
+
+      if (!result.recordset.length)
         return res.status(401).json({ success: false, message: "Invalid email or password" });
-      }
-      
+
       const user = result.recordset[0];
-      const validPassword = await bcrypt.compare(password, user.password_hash);
-      
-      if (!validPassword) {
+      if (!await bcrypt.compare(password, user.password_hash))
         return res.status(401).json({ success: false, message: "Invalid email or password" });
-      }
-      
-      if (!user.is_active) {
+      if (!user.is_active)
         return res.status(401).json({ success: false, message: "Account is deactivated" });
-      }
-      
-      // Update last login
-      await pool.request()
-        .input("id", sql.Int, user.id)
-        .query("UPDATE users SET last_login = GETDATE() WHERE id = @id");
-      
-      // Generate JWT token
+
+      await pool.request().input("id", sql.Int, user.id)
+        .query("UPDATE users SET last_login=GETDATE() WHERE id=@id");
+
       const token = jwt.sign(
         { id: user.id, email: user.email, role: user.role },
-        process.env.JWT_SECRET || 'secret_key',
-        { expiresIn: '24h' }
+        process.env.JWT_SECRET || "secret_key",
+        { expiresIn: "24h" }
       );
-      
-      // Store session
+
       await pool.request()
-        .input("userId", sql.Int, user.id)
-        .input("accessToken", sql.NVarChar, token)
-        .input("refreshToken", sql.NVarChar, token)
-        .input("expiresAt", sql.DateTime, new Date(Date.now() + 24 * 60 * 60 * 1000))
-        .input("ipAddress", sql.NVarChar, req.ip || null)
-        .input("userAgent", sql.NVarChar, req.headers['user-agent'] || null)
+        .input("uid", sql.Int,      user.id)
+        .input("at",  sql.NVarChar, token)
+        .input("rt",  sql.NVarChar, token)
+        .input("exp", sql.DateTime, new Date(Date.now() + 86400000))
+        .input("ip",  sql.NVarChar, req.ip || null)
+        .input("ua",  sql.NVarChar, req.headers["user-agent"] || null)
         .query(`
-          INSERT INTO sessions (user_id, access_token, refresh_token, expires_at, ip_address, user_agent, created_at, last_activity)
-          VALUES (@userId, @accessToken, @refreshToken, @expiresAt, @ipAddress, @userAgent, GETDATE(), GETDATE())
+          INSERT INTO sessions (user_id,access_token,refresh_token,expires_at,ip_address,user_agent,created_at,last_activity)
+          VALUES (@uid,@at,@rt,@exp,@ip,@ua,GETDATE(),GETDATE())
         `);
-      
+
+      await logActivity(pool, user.id, "LOGIN", "user", user.id,
+        `${user.full_name} logged in as ${user.role}`, req.ip);
+
       res.json({
         success: true,
         data: {
           accessToken: token,
           refreshToken: token,
-          user: {
-            id: user.id,
-            full_name: user.full_name,
-            email: user.email,
-            role: user.role
-          }
-        }
+          user: { id: user.id, full_name: user.full_name, email: user.email, role: user.role, division: user.division },
+        },
       });
-    } catch (error) {
-      console.error("Error logging in:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+    } catch (e: any) { console.error(e); res.status(500).json({ success: false, message: "Server error" }); }
   });
 
-  // POST /api/auth/register - Register new user
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { fullName, memberId, email, password, phoneNumber } = req.body;
-      
-      if (!fullName || !memberId || !email || !password) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Full name, member ID, email, and password are required" 
-        });
-      }
-      
+      const { fullName, memberId, email, password, phoneNumber, division } = req.body;
+      if (!fullName || !email || !password)
+        return res.status(400).json({ success: false, message: "Name, email, password required" });
+
       const pool = await getConnection();
-      
-      // Cek email duplikat
-      const checkEmail = await pool.request()
-        .input("email", sql.NVarChar, email)
-        .query("SELECT id FROM users WHERE email = @email");
-      
-      if (checkEmail.recordset.length > 0) {
+      const emailCheck = await pool.request().input("e", sql.NVarChar, email)
+        .query("SELECT id FROM users WHERE email=@e");
+      if (emailCheck.recordset.length)
         return res.status(400).json({ success: false, message: "Email already registered" });
-      }
-      
-      // Cek member ID duplikat
-      const checkMemberId = await pool.request()
-        .input("memberId", sql.NVarChar, memberId)
-        .query("SELECT id FROM users WHERE member_id = @memberId");
-      
-      if (checkMemberId.recordset.length > 0) {
-        return res.status(400).json({ success: false, message: "Member ID already exists" });
-      }
-      
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
+
+      const finalId = memberId || `USR${Date.now().toString().slice(-6)}`;
+      const idCheck = await pool.request().input("m", sql.NVarChar, finalId)
+        .query("SELECT id FROM users WHERE member_id=@m");
+      if (idCheck.recordset.length)
+        return res.status(400).json({ success: false, message: "Member ID taken" });
+
+      const hash = await bcrypt.hash(password, 10);
       await pool.request()
-        .input("fullName", sql.NVarChar, fullName)
-        .input("memberId", sql.NVarChar, memberId)
-        .input("email", sql.NVarChar, email)
-        .input("password", sql.NVarChar, hashedPassword)
-        .input("phoneNumber", sql.NVarChar, phoneNumber || null)
+        .input("fn", sql.NVarChar, fullName)
+        .input("mi", sql.NVarChar, finalId)
+        .input("em", sql.NVarChar, email)
+        .input("pw", sql.NVarChar, hash)
+        .input("ph", sql.NVarChar, phoneNumber || null)
+        .input("dv", sql.NVarChar, division || null)
         .query(`
-          INSERT INTO users (full_name, member_id, email, password_hash, role, phone_number, is_active, email_verified, created_at)
-          VALUES (@fullName, @memberId, @email, @password, 'member', @phoneNumber, 1, 0, GETDATE())
+          INSERT INTO users (full_name,member_id,email,password_hash,role,phone_number,division,is_active,email_verified,created_at)
+          VALUES (@fn,@mi,@em,@pw,'user',@ph,@dv,1,0,GETDATE())
         `);
-      
+
       res.status(201).json({ success: true, message: "Registration successful. Please login." });
-    } catch (error) {
-      console.error("Error registering user:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+    } catch (e: any) { console.error(e); res.status(500).json({ success: false, message: "Server error" }); }
   });
 
-  // POST /api/auth/logout - Logout user
-  app.post("/api/auth/logout",async (req, res) => {
+  app.post("/api/auth/logout", async (req, res) => {
     try {
-      const authHeader = req.headers['authorization'];
-      const token = authHeader && authHeader.split(' ')[1];
-      
+      const token = req.headers["authorization"]?.split(" ")[1];
       const pool = await getConnection();
-      await pool.request()
-        .input("accessToken", sql.NVarChar, token)
-        .query("DELETE FROM sessions WHERE access_token = @accessToken");
-      
-      res.json({ success: true, message: "Logged out successfully" });
-    } catch (error) {
-      console.error("Error logging out:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+      if (token) await pool.request().input("t", sql.NVarChar, token)
+        .query("DELETE FROM sessions WHERE access_token=@t");
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ success: false, message: "Server error" }); }
   });
 
-  // POST /api/auth/forgot-password - Request password reset
-  app.post("/api/auth/forgot-password", async (req, res) => {
-    try {
-      const { email } = req.body;
-      
-      if (!email) {
-        return res.status(400).json({ success: false, message: "Email is required" });
-      }
-      
-      const pool = await getConnection();
-      const user = await pool.request()
-        .input("email", sql.NVarChar, email)
-        .query("SELECT id FROM users WHERE email = @email");
-      
-      if (user.recordset.length === 0) {
-        // For security, don't reveal if email exists
-        return res.json({ success: true, message: "If email exists, reset code has been sent" });
-      }
-      
-      // Generate 6-digit reset code
-      const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-      
-      // Delete old reset codes
-      await pool.request()
-        .input("userId", sql.Int, user.recordset[0].id)
-        .query("DELETE FROM password_resets WHERE user_id = @userId");
-      
-      // Save new reset code
-      await pool.request()
-        .input("userId", sql.Int, user.recordset[0].id)
-        .input("resetCode", sql.NVarChar, resetCode)
-        .input("expiresAt", sql.DateTime, expiresAt)
-        .query(`
-          INSERT INTO password_resets (user_id, reset_code, expires_at, created_at)
-          VALUES (@userId, @resetCode, @expiresAt, GETDATE())
-        `);
-      
-      // In production, send email here
-      console.log(`Reset code for ${email}: ${resetCode}`);
-      
-      res.json({ success: true, message: "Reset code sent to your email" });
-    } catch (error) {
-      console.error("Error sending reset code:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // POST /api/auth/verify-reset-code - Verify reset code
-  app.post("/api/auth/verify-reset-code", async (req, res) => {
-    try {
-      const { email, code } = req.body;
-      
-      if (!email || !code) {
-        return res.status(400).json({ success: false, message: "Email and code are required" });
-      }
-      
-      const pool = await getConnection();
-      const result = await pool.request()
-        .input("email", sql.NVarChar, email)
-        .input("code", sql.NVarChar, code)
-        .query(`
-          SELECT pr.* FROM password_resets pr
-          JOIN users u ON pr.user_id = u.id
-          WHERE u.email = @email 
-            AND pr.reset_code = @code 
-            AND pr.is_used = 0 
-            AND pr.expires_at > GETDATE()
-        `);
-      
-      if (result.recordset.length === 0) {
-        return res.status(400).json({ success: false, message: "Invalid or expired reset code" });
-      }
-      
-      res.json({ success: true, message: "Code verified successfully" });
-    } catch (error) {
-      console.error("Error verifying code:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // POST /api/auth/reset-password - Reset password
-  app.post("/api/auth/reset-password", async (req, res) => {
-    try {
-      const { email, code, newPassword } = req.body;
-      
-      if (!email || !code || !newPassword) {
-        return res.status(400).json({ success: false, message: "Email, code, and new password are required" });
-      }
-      
-      if (newPassword.length < 8) {
-        return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
-      }
-      
-      const pool = await getConnection();
-      
-      // Verify reset code
-      const resetRecord = await pool.request()
-        .input("email", sql.NVarChar, email)
-        .input("code", sql.NVarChar, code)
-        .query(`
-          SELECT pr.id, pr.user_id FROM password_resets pr
-          JOIN users u ON pr.user_id = u.id
-          WHERE u.email = @email 
-            AND pr.reset_code = @code 
-            AND pr.is_used = 0 
-            AND pr.expires_at > GETDATE()
-        `);
-      
-      if (resetRecord.recordset.length === 0) {
-        return res.status(400).json({ success: false, message: "Invalid or expired reset code" });
-      }
-      
-      // Hash new password
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      
-      // Update password
-      await pool.request()
-        .input("userId", sql.Int, resetRecord.recordset[0].user_id)
-        .input("password", sql.NVarChar, hashedPassword)
-        .query("UPDATE users SET password_hash = @password WHERE id = @userId");
-      
-      // Mark reset code as used
-      await pool.request()
-        .input("resetId", sql.Int, resetRecord.recordset[0].id)
-        .query("UPDATE password_resets SET is_used = 1 WHERE id = @resetId");
-      
-      // Delete all sessions for this user
-      await pool.request()
-        .input("userId", sql.Int, resetRecord.recordset[0].user_id)
-        .query("DELETE FROM sessions WHERE user_id = @userId");
-      
-      res.json({ success: true, message: "Password reset successfully" });
-    } catch (error) {
-      console.error("Error resetting password:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // POST /api/auth/refresh - Refresh token
   app.post("/api/auth/refresh", async (req, res) => {
     try {
       const { refreshToken } = req.body;
-      
-      if (!refreshToken) {
-        return res.status(400).json({ success: false, message: "Refresh token is required" });
-      }
-      
+      if (!refreshToken) return res.status(400).json({ success: false, message: "Refresh token required" });
       const pool = await getConnection();
-      const session = await pool.request()
-        .input("refreshToken", sql.NVarChar, refreshToken)
+      const sess = await pool.request().input("rt", sql.NVarChar, refreshToken)
         .query(`
-          SELECT s.*, u.id as user_id, u.email, u.role
-          FROM sessions s
-          JOIN users u ON s.user_id = u.id
-          WHERE s.refresh_token = @refreshToken AND s.expires_at > GETDATE()
+          SELECT s.*,u.id as uid,u.email,u.role FROM sessions s
+          JOIN users u ON s.user_id=u.id
+          WHERE s.refresh_token=@rt AND s.expires_at>GETDATE()
         `);
-      
-      if (session.recordset.length === 0) {
+      if (!sess.recordset.length)
         return res.status(401).json({ success: false, message: "Invalid or expired refresh token" });
-      }
-      
-      // Generate new access token
-      const newAccessToken = jwt.sign(
-        { id: session.recordset[0].user_id, email: session.recordset[0].email, role: session.recordset[0].role },
-        process.env.JWT_SECRET || 'secret_key',
-        { expiresIn: '24h' }
+
+      const r = sess.recordset[0];
+      const newToken = jwt.sign(
+        { id: r.uid, email: r.email, role: r.role },
+        process.env.JWT_SECRET || "secret_key",
+        { expiresIn: "24h" }
       );
-      
-      // Update session
       await pool.request()
-        .input("sessionId", sql.Int, session.recordset[0].id)
-        .input("newAccessToken", sql.NVarChar, newAccessToken)
-        .input("newExpiresAt", sql.DateTime, new Date(Date.now() + 24 * 60 * 60 * 1000))
-        .query(`
-          UPDATE sessions 
-          SET access_token = @newAccessToken, 
-              expires_at = @newExpiresAt, 
-              last_activity = GETDATE()
-          WHERE id = @sessionId
-        `);
-      
-      res.json({ accessToken: newAccessToken });
-    } catch (error) {
-      console.error("Error refreshing token:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+        .input("sid", sql.Int,      r.id)
+        .input("at",  sql.NVarChar, newToken)
+        .input("exp", sql.DateTime, new Date(Date.now() + 86400000))
+        .query("UPDATE sessions SET access_token=@at,expires_at=@exp,last_activity=GETDATE() WHERE id=@sid");
+
+      res.json({ accessToken: newToken });
+    } catch (e: any) { res.status(500).json({ success: false, message: "Server error" }); }
   });
 
-  // ============ DASHBOARD ROUTES ============
-  
-  // GET /api/dashboard/stats - Get dashboard statistics
-  app.get("/api/dashboard/stats", async (req, res) => {
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ success: false, message: "Email required" });
+      const pool = await getConnection();
+      const u = await pool.request().input("e", sql.NVarChar, email)
+        .query("SELECT id FROM users WHERE email=@e");
+      if (!u.recordset.length)
+        return res.json({ success: true, message: "If email exists, reset code has been sent" });
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      await pool.request().input("uid", sql.Int, u.recordset[0].id)
+        .query("DELETE FROM password_resets WHERE user_id=@uid");
+      await pool.request()
+        .input("uid", sql.Int,      u.recordset[0].id)
+        .input("code",sql.NVarChar, code)
+        .input("exp", sql.DateTime, new Date(Date.now() + 3600000))
+        .query("INSERT INTO password_resets (user_id,reset_code,expires_at,created_at) VALUES (@uid,@code,@exp,GETDATE())");
+
+      console.log(`[RESET] ${email} → ${code}`);
+      res.json({ success: true, message: "Reset code sent" });
+    } catch (e: any) { res.status(500).json({ success: false, message: "Server error" }); }
+  });
+
+  app.post("/api/auth/verify-reset-code", async (req, res) => {
+    try {
+      const { email, code } = req.body;
+      const pool = await getConnection();
+      const r = await pool.request()
+        .input("e", sql.NVarChar, email).input("c", sql.NVarChar, code)
+        .query(`
+          SELECT pr.* FROM password_resets pr JOIN users u ON pr.user_id=u.id
+          WHERE u.email=@e AND pr.reset_code=@c AND pr.is_used=0 AND pr.expires_at>GETDATE()
+        `);
+      if (!r.recordset.length)
+        return res.status(400).json({ success: false, message: "Invalid or expired code" });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ success: false, message: "Server error" }); }
+  });
+
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { email, code, newPassword } = req.body;
+      if (!email || !code || !newPassword)
+        return res.status(400).json({ success: false, message: "All fields required" });
+      if (newPassword.length < 8)
+        return res.status(400).json({ success: false, message: "Password min 8 chars" });
+
+      const pool = await getConnection();
+      const r = await pool.request()
+        .input("e", sql.NVarChar, email).input("c", sql.NVarChar, code)
+        .query(`
+          SELECT pr.id,pr.user_id FROM password_resets pr JOIN users u ON pr.user_id=u.id
+          WHERE u.email=@e AND pr.reset_code=@c AND pr.is_used=0 AND pr.expires_at>GETDATE()
+        `);
+      if (!r.recordset.length)
+        return res.status(400).json({ success: false, message: "Invalid or expired code" });
+
+      const hash = await bcrypt.hash(newPassword, 10);
+      await pool.request().input("uid", sql.Int, r.recordset[0].user_id).input("pw", sql.NVarChar, hash)
+        .query("UPDATE users SET password_hash=@pw WHERE id=@uid");
+      await pool.request().input("rid", sql.Int, r.recordset[0].id)
+        .query("UPDATE password_resets SET is_used=1 WHERE id=@rid");
+      await pool.request().input("uid", sql.Int, r.recordset[0].user_id)
+        .query("DELETE FROM sessions WHERE user_id=@uid");
+
+      res.json({ success: true, message: "Password reset successfully" });
+    } catch (e: any) { res.status(500).json({ success: false, message: "Server error" }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // USERS  (admin+)
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.get("/api/users", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { role, isActive, division, search } = req.query;
+      const pool = await getConnection();
+      const rq = pool.request();
+      let where = "WHERE 1=1";
+
+      // Non-super_admin cannot see super_admin accounts
+      if (req.user.role !== "super_admin") {
+        where += " AND u.role != 'super_admin'";
+      }
+      if (role && role !== "all") { rq.input("role", sql.NVarChar, role); where += " AND u.role=@role"; }
+      if (isActive !== undefined) { rq.input("ia", sql.Bit, isActive === "true" ? 1 : 0); where += " AND u.is_active=@ia"; }
+      if (division) { rq.input("div", sql.NVarChar, division); where += " AND u.division=@div"; }
+      if (search) {
+        rq.input("s", sql.NVarChar, `%${search}%`);
+        where += " AND (u.full_name LIKE @s OR u.email LIKE @s OR u.member_id LIKE @s)";
+      }
+
+      const result = await rq.query(`
+        SELECT u.id,u.full_name,u.member_id,u.email,u.role,u.phone_number,u.division,
+               u.is_active,u.created_at,u.last_login,u.avatar_url
+        FROM users u ${where}
+        ORDER BY u.created_at DESC
+      `);
+      res.json({ success: true, data: result.recordset });
+    } catch (e: any) { console.error(e); res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.get("/api/users/:id", authenticateToken, requireSelfOrAdmin("id"), async (req: any, res) => {
     try {
       const pool = await getConnection();
-      
-      const totalMembers = await pool.request()
-        .query("SELECT COUNT(*) as count FROM users WHERE role = 'member' AND is_active = 1");
-      
-      const activeEvents = await pool.request()
-        .query("SELECT COUNT(*) as count FROM events WHERE is_active = 1");
-      
-      const today = new Date().toISOString().split('T')[0];
-      const todayAttendance = await pool.request()
-        .input("today", sql.Date, today)
+      const result = await pool.request().input("id", sql.Int, req.params.id)
         .query(`
-          SELECT 
-            COUNT(CASE WHEN status IN ('present', 'late') THEN 1 END) as checkedIn,
-            COUNT(CASE WHEN status = 'absent' THEN 1 END) as absent
-          FROM attendance
-          WHERE attendance_date = @today
+          SELECT id,full_name,member_id,email,role,phone_number,division,is_active,
+                 created_at,last_login,avatar_url
+          FROM users WHERE id=@id
         `);
-      
-      res.json({ 
-        success: true, 
-        data: {
-          totalMembers: totalMembers.recordset[0].count,
-          activeEvents: activeEvents.recordset[0].count,
-          todayAttendance: {
-            checkedIn: todayAttendance.recordset[0].checkedIn || 0,
-            pending: 0,
-            absent: todayAttendance.recordset[0].absent || 0
-          },
-          attendanceRate: 85.5 // Can be calculated from historical data
-        }
-      });
-    } catch (error) {
-      console.error("Error fetching dashboard stats:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+      if (!result.recordset.length) return res.status(404).json({ success: false, message: "Not found" });
+      res.json({ success: true, data: result.recordset[0] });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
   });
 
-  // GET /api/dashboard/activities - Get recent activities
-  app.get("/api/dashboard/activities", async (req, res) => {
+  app.post("/api/users", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { fullName, memberId, email, password, role, phoneNumber, division } = req.body;
+      if (!fullName || !memberId || !email || !password)
+        return res.status(400).json({ success: false, message: "Required fields missing" });
+
+      // Only super_admin can create admin/super_admin
+      if (["admin","super_admin"].includes(role) && req.user.role !== "super_admin")
+        return res.status(403).json({ success: false, message: "Only super admin can create admin accounts" });
+
+      const pool = await getConnection();
+      const emailCheck = await pool.request().input("e", sql.NVarChar, email)
+        .query("SELECT id FROM users WHERE email=@e");
+      if (emailCheck.recordset.length)
+        return res.status(400).json({ success: false, message: "Email already registered" });
+
+      const idCheck = await pool.request().input("m", sql.NVarChar, memberId)
+        .query("SELECT id FROM users WHERE member_id=@m");
+      if (idCheck.recordset.length)
+        return res.status(400).json({ success: false, message: "Member ID taken" });
+
+      const hash = await bcrypt.hash(password, 10);
+      const result = await pool.request()
+        .input("fn", sql.NVarChar, fullName)
+        .input("mi", sql.NVarChar, memberId)
+        .input("em", sql.NVarChar, email)
+        .input("pw", sql.NVarChar, hash)
+        .input("r",  sql.NVarChar, role || "user")
+        .input("ph", sql.NVarChar, phoneNumber || null)
+        .input("dv", sql.NVarChar, division || null)
+        .query(`
+          INSERT INTO users (full_name,member_id,email,password_hash,role,phone_number,division,is_active,created_at)
+          OUTPUT INSERTED.id,INSERTED.full_name,INSERTED.member_id,INSERTED.email,INSERTED.role
+          VALUES (@fn,@mi,@em,@pw,@r,@ph,@dv,1,GETDATE())
+        `);
+
+      await logActivity(pool, req.user.id, "CREATE_USER", "user", result.recordset[0].id,
+        `Created user: ${fullName} (${role})`, req.ip);
+
+      res.status(201).json({ success: true, data: result.recordset[0] });
+    } catch (e: any) { console.error(e); res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.put("/api/users/:id", authenticateToken, requireSelfOrAdmin("id"), async (req: any, res) => {
+    try {
+      const { fullName, email, phoneNumber, division, role, avatarUrl } = req.body;
+      const targetId = parseInt(req.params.id);
+      const pool = await getConnection();
+
+      // Only super_admin can change roles
+      if (role !== undefined && req.user.role !== "super_admin")
+        return res.status(403).json({ success: false, message: "Only super admin can change roles" });
+
+      // Users can only edit limited fields on their own profile
+      const isSelf = req.user.id === targetId;
+      const isAdmin = ["super_admin", "admin"].includes(req.user.role);
+
+      const setFields: string[] = [];
+      const rq = pool.request().input("id", sql.Int, targetId);
+
+      if (fullName && (isAdmin || isSelf)) { rq.input("fn", sql.NVarChar, fullName); setFields.push("full_name=@fn"); }
+      if (email && isAdmin) { rq.input("em", sql.NVarChar, email); setFields.push("email=@em"); }
+      if (phoneNumber !== undefined && (isAdmin || isSelf)) { rq.input("ph", sql.NVarChar, phoneNumber || null); setFields.push("phone_number=@ph"); }
+      if (division !== undefined && isAdmin) { rq.input("dv", sql.NVarChar, division || null); setFields.push("division=@dv"); }
+      if (role !== undefined && req.user.role === "super_admin") { rq.input("r", sql.NVarChar, role); setFields.push("role=@r"); }
+      if (avatarUrl !== undefined && (isAdmin || isSelf)) { rq.input("av", sql.NVarChar, avatarUrl || null); setFields.push("avatar_url=@av"); }
+
+      if (!setFields.length)
+        return res.status(400).json({ success: false, message: "No fields to update" });
+
+      setFields.push("updated_at=GETDATE()");
+      await rq.query(`UPDATE users SET ${setFields.join(",")} WHERE id=@id`);
+
+      await logActivity(pool, req.user.id, "UPDATE_USER", "user", targetId, `Updated user id:${targetId}`, req.ip);
+      res.json({ success: true, message: "User updated" });
+    } catch (e: any) { console.error(e); res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.delete("/api/users/:id", authenticateToken, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      if (String(req.user.id) === req.params.id)
+        return res.status(400).json({ success: false, message: "Cannot delete your own account" });
+      const r = await pool.request().input("id", sql.Int, req.params.id)
+        .query("DELETE FROM users WHERE id=@id");
+      if (!r.rowsAffected[0]) return res.status(404).json({ success: false, message: "Not found" });
+      await logActivity(pool, req.user.id, "DELETE_USER", "user", parseInt(req.params.id), `Deleted user id:${req.params.id}`, req.ip);
+      res.json({ success: true, message: "User deleted" });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.patch("/api/users/:id/toggle-status", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      const u = await pool.request().input("id", sql.Int, req.params.id)
+        .query("SELECT is_active,role FROM users WHERE id=@id");
+      if (!u.recordset.length) return res.status(404).json({ success: false, message: "Not found" });
+      // Admin cannot deactivate super_admin
+      if (u.recordset[0].role === "super_admin" && req.user.role !== "super_admin")
+        return res.status(403).json({ success: false, message: "Cannot modify super admin" });
+
+      const newStatus = u.recordset[0].is_active ? 0 : 1;
+      await pool.request().input("id", sql.Int, req.params.id).input("s", sql.Bit, newStatus)
+        .query("UPDATE users SET is_active=@s WHERE id=@id");
+      await logActivity(pool, req.user.id, "TOGGLE_STATUS", "user", parseInt(req.params.id),
+        `User id:${req.params.id} ${newStatus ? "activated" : "deactivated"}`, req.ip);
+      res.json({ success: true, message: `User ${newStatus ? "activated" : "deactivated"}` });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  // Admin reset another user's password
+  app.post("/api/users/:id/reset-password", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { newPassword } = req.body;
+      if (!newPassword || newPassword.length < 8)
+        return res.status(400).json({ success: false, message: "Password min 8 chars" });
+      const pool = await getConnection();
+      const hash = await bcrypt.hash(newPassword, 10);
+      await pool.request().input("id", sql.Int, req.params.id).input("pw", sql.NVarChar, hash)
+        .query("UPDATE users SET password_hash=@pw WHERE id=@id");
+      await pool.request().input("uid", sql.Int, parseInt(req.params.id))
+        .query("DELETE FROM sessions WHERE user_id=@uid");
+      await logActivity(pool, req.user.id, "RESET_PASSWORD", "user", parseInt(req.params.id),
+        `Admin reset password for user id:${req.params.id}`, req.ip);
+      res.json({ success: true, message: "Password reset successfully" });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // EVENTS  (read: all auth; write: admin+)
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.get("/api/events", authenticateToken, requireAnyRole, async (req, res) => {
+    try {
+      const { isActive, eventType } = req.query;
+      const pool = await getConnection();
+      const rq = pool.request();
+      let where = "WHERE 1=1";
+      if (isActive !== undefined) { rq.input("ia", sql.Bit, isActive === "true" ? 1 : 0); where += " AND e.is_active=@ia"; }
+      if (eventType && eventType !== "all") { rq.input("et", sql.NVarChar, eventType); where += " AND e.event_type=@et"; }
+      const r = await rq.query(`
+        SELECT e.*,u.full_name as preacher_name FROM events e
+        LEFT JOIN users u ON e.preacher_id=u.id
+        ${where} ORDER BY e.created_at DESC
+      `);
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.get("/api/events/:id", authenticateToken, requireAnyRole, async (req, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().input("id", sql.Int, req.params.id)
+        .query("SELECT e.*,u.full_name as preacher_name FROM events e LEFT JOIN users u ON e.preacher_id=u.id WHERE e.id=@id");
+      if (!r.recordset.length) return res.status(404).json({ success: false, message: "Not found" });
+      res.json({ success: true, data: r.recordset[0] });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.post("/api/events", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { eventCode, eventName, description, preacherId, season, eventType } = req.body;
+      if (!eventCode || !eventName || !eventType)
+        return res.status(400).json({ success: false, message: "eventCode, eventName, eventType required" });
+      const pool = await getConnection();
+      const dup = await pool.request().input("ec", sql.NVarChar, eventCode)
+        .query("SELECT id FROM events WHERE event_code=@ec");
+      if (dup.recordset.length)
+        return res.status(400).json({ success: false, message: "Event code taken" });
+      const r = await pool.request()
+        .input("ec", sql.NVarChar, eventCode).input("en", sql.NVarChar, eventName)
+        .input("d",  sql.NVarChar, description || null)
+        .input("pi", sql.Int,      preacherId || null)
+        .input("s",  sql.NVarChar, season || null)
+        .input("et", sql.NVarChar, eventType)
+        .query(`
+          INSERT INTO events (event_code,event_name,description,preacher_id,season,event_type,is_active,created_at)
+          OUTPUT INSERTED.*
+          VALUES (@ec,@en,@d,@pi,@s,@et,1,GETDATE())
+        `);
+      await logActivity(pool, req.user.id, "CREATE_EVENT", "event", r.recordset[0].id,
+        `Created event: ${eventName}`, req.ip);
+      res.status(201).json({ success: true, data: r.recordset[0] });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.put("/api/events/:id", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { eventName, description, preacherId, eventType, isActive } = req.body;
+      const pool = await getConnection();
+      const exists = await pool.request().input("id", sql.Int, req.params.id)
+        .query("SELECT id FROM events WHERE id=@id");
+      if (!exists.recordset.length) return res.status(404).json({ success: false, message: "Not found" });
+
+      const rq = pool.request().input("id", sql.Int, req.params.id);
+      const sets: string[] = ["updated_at=GETDATE()"];
+      if (eventName)             { rq.input("en",sql.NVarChar,eventName);        sets.push("event_name=@en"); }
+      if (description!==undefined){ rq.input("d",sql.NVarChar,description||null); sets.push("description=@d"); }
+      if (preacherId!==undefined) { rq.input("pi",sql.Int,preacherId||null);      sets.push("preacher_id=@pi"); }
+      if (eventType)             { rq.input("et",sql.NVarChar,eventType);         sets.push("event_type=@et"); }
+      if (isActive!==undefined)  { rq.input("ia",sql.Bit,isActive?1:0);           sets.push("is_active=@ia"); }
+
+      await rq.query(`UPDATE events SET ${sets.join(",")} WHERE id=@id`);
+      await logActivity(pool, req.user.id, "UPDATE_EVENT", "event", parseInt(req.params.id), `Updated event id:${req.params.id}`, req.ip);
+      res.json({ success: true, message: "Event updated" });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.delete("/api/events/:id", authenticateToken, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().input("id", sql.Int, req.params.id)
+        .query("DELETE FROM events WHERE id=@id");
+      if (!r.rowsAffected[0]) return res.status(404).json({ success: false, message: "Not found" });
+      await logActivity(pool, req.user.id, "DELETE_EVENT", "event", parseInt(req.params.id), `Deleted event id:${req.params.id}`, req.ip);
+      res.json({ success: true, message: "Event deleted" });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.get("/api/events/:id/members", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().input("eid", sql.Int, req.params.id)
+        .query(`
+          SELECT u.id,u.full_name,u.member_id,u.email,u.phone_number,u.division
+          FROM users u JOIN event_enrollments ee ON u.id=ee.user_id
+          WHERE ee.event_id=@eid AND ee.is_active=1
+          ORDER BY u.full_name
+        `);
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.post("/api/events/:id/enroll", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId) return res.status(400).json({ success: false, message: "userId required" });
+      const pool = await getConnection();
+      const dup = await pool.request()
+        .input("eid",sql.Int,req.params.id).input("uid",sql.Int,userId)
+        .query("SELECT id FROM event_enrollments WHERE event_id=@eid AND user_id=@uid");
+      if (dup.recordset.length)
+        return res.status(400).json({ success: false, message: "Already enrolled" });
+      await pool.request().input("eid",sql.Int,req.params.id).input("uid",sql.Int,userId)
+        .query("INSERT INTO event_enrollments (event_id,user_id,enrolled_at,is_active) VALUES (@eid,@uid,GETDATE(),1)");
+      res.json({ success: true, message: "Enrolled" });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // ATTENDANCE  (specific routes FIRST, then /:id)
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.get("/api/attendance/stats/today", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      const pool = await getConnection();
+      const today = new Date().toISOString().split("T")[0];
+      const [statsR, membersR] = await Promise.all([
+        pool.request().input("d", sql.Date, today).query(`
+          SELECT
+            ISNULL(COUNT(CASE WHEN status IN ('present','late') THEN 1 END),0) as checkedIn,
+            ISNULL(COUNT(CASE WHEN status='absent' THEN 1 END),0) as absent
+          FROM attendance WHERE attendance_date=@d
+        `),
+        pool.request().query("SELECT COUNT(*) as c FROM users WHERE role='user' AND is_active=1"),
+      ]);
+      const ci = statsR.recordset[0].checkedIn;
+      const tot = membersR.recordset[0].c;
+      res.json({ success: true, data: { checkedIn: ci, pending: Math.max(0, tot - ci), absent: statsR.recordset[0].absent } });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.get("/api/attendance/trend", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      const { days = 7, eventId } = req.query;
+      const pool = await getConnection();
+      const rq = pool.request().input("days", sql.Int, Number(days));
+      let ef = "";
+      if (eventId) { rq.input("eid", sql.Int, Number(eventId)); ef = " AND event_id=@eid"; }
+      const r = await rq.query(`
+        SELECT CONVERT(NVARCHAR(10),attendance_date,23) as attendance_date,
+               COUNT(*) as total,
+               SUM(CASE WHEN status IN ('present','late') THEN 1 ELSE 0 END) as present
+        FROM attendance
+        WHERE attendance_date>=DATEADD(DAY,-@days,GETDATE()) ${ef}
+        GROUP BY attendance_date ORDER BY attendance_date
+      `);
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.get("/api/attendance/leaderboard", authenticateToken, requireAnyRole, async (req: any, res) => {
+    try {
+      const { eventId, period = "month" } = req.query;
+      const days = ({ week:7, month:30, semester:180 } as any)[period as string] || 30;
+      const pool = await getConnection();
+      const rq = pool.request().input("days", sql.Int, days);
+      let ef = "";
+      if (eventId) { rq.input("eid", sql.Int, Number(eventId)); ef = " AND a.event_id=@eid"; }
+      const r = await rq.query(`
+        SELECT u.id as user_id,u.full_name,u.member_id,u.division,
+          COUNT(CASE WHEN a.status IN ('present','late') THEN 1 END) as total_present,
+          COUNT(CASE WHEN a.status='late' THEN 1 END) as total_late,
+          COUNT(*) as total_records,
+          CAST(ROUND(
+            CAST(COUNT(CASE WHEN a.status IN ('present','late') THEN 1 END) AS FLOAT)/
+            NULLIF(COUNT(*),0)*100,2) AS DECIMAL(5,2)) as attendance_percentage
+        FROM users u JOIN attendance a ON u.id=a.user_id
+        WHERE a.attendance_date>=DATEADD(DAY,-@days,GETDATE())
+          AND u.role='user' AND u.is_active=1 ${ef}
+        GROUP BY u.id,u.full_name,u.member_id,u.division
+        ORDER BY attendance_percentage DESC,total_present DESC
+      `);
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  // User: view own attendance history
+  app.get("/api/attendance/my", authenticateToken, requireAnyRole, async (req: any, res) => {
+    try {
+      const { eventId, startDate, endDate, status } = req.query;
+      const pool = await getConnection();
+      const rq = pool.request().input("uid", sql.Int, req.user.id);
+      let where = "WHERE a.user_id=@uid";
+      if (eventId) { rq.input("eid",sql.Int,Number(eventId)); where+=" AND a.event_id=@eid"; }
+      if (startDate) { rq.input("sd",sql.Date,startDate); where+=" AND a.attendance_date>=@sd"; }
+      if (endDate) { rq.input("ed",sql.Date,endDate); where+=" AND a.attendance_date<=@ed"; }
+      if (status && status!=="all") { rq.input("s",sql.NVarChar,status); where+=" AND a.status=@s"; }
+      const r = await rq.query(`
+        SELECT a.*,e.event_name,e.event_code
+        FROM attendance a JOIN events e ON a.event_id=e.id
+        ${where} ORDER BY a.attendance_date DESC
+      `);
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  // User: personal stats
+  app.get("/api/attendance/my/stats", authenticateToken, requireAnyRole, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().input("uid", sql.Int, req.user.id).query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(CASE WHEN status='present' THEN 1 END) as present,
+          COUNT(CASE WHEN status='late' THEN 1 END) as late,
+          COUNT(CASE WHEN status='absent' THEN 1 END) as absent,
+          COUNT(CASE WHEN status='excused' THEN 1 END) as excused,
+          COUNT(CASE WHEN status='sick' THEN 1 END) as sick,
+          CAST(ROUND(
+            CAST(COUNT(CASE WHEN status IN ('present','late') THEN 1 END) AS FLOAT)/
+            NULLIF(COUNT(*),0)*100,2) AS DECIMAL(5,2)) as attendance_percentage
+        FROM attendance WHERE user_id=@uid
+      `);
+      // Streak calculation
+      const streakR = await pool.request().input("uid", sql.Int, req.user.id).query(`
+        SELECT TOP 60 attendance_date,status
+        FROM attendance WHERE user_id=@uid
+        ORDER BY attendance_date DESC
+      `);
+      let streak = 0;
+      for (const row of streakR.recordset) {
+        if (["present","late"].includes(row.status)) streak++;
+        else break;
+      }
+      res.json({ success: true, data: { ...r.recordset[0], streak } });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.get("/api/attendance", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      const { eventId, startDate, endDate, status, userId, division } = req.query;
+      const pool = await getConnection();
+      const rq = pool.request();
+      let where = "WHERE 1=1";
+      if (userId) { rq.input("uid",sql.Int,Number(userId)); where+=" AND a.user_id=@uid"; }
+      if (eventId) { rq.input("eid",sql.Int,Number(eventId)); where+=" AND a.event_id=@eid"; }
+      if (startDate) { rq.input("sd",sql.Date,startDate); where+=" AND a.attendance_date>=@sd"; }
+      if (endDate) { rq.input("ed",sql.Date,endDate); where+=" AND a.attendance_date<=@ed"; }
+      if (status && status!=="all") { rq.input("s",sql.NVarChar,status); where+=" AND a.status=@s"; }
+      if (division) { rq.input("div",sql.NVarChar,division); where+=" AND u.division=@div"; }
+      const r = await rq.query(`
+        SELECT a.*,u.full_name as user_name,u.member_id,u.division,e.event_name,e.event_code
+        FROM attendance a
+        JOIN users u ON a.user_id=u.id
+        JOIN events e ON a.event_id=e.id
+        ${where}
+        ORDER BY a.attendance_date DESC,a.check_in_time DESC
+      `);
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.get("/api/attendance/:id", authenticateToken, requireAnyRole, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().input("id", sql.Int, req.params.id).query(`
+        SELECT a.*,u.full_name as user_name,e.event_name,e.event_code
+        FROM attendance a JOIN users u ON a.user_id=u.id JOIN events e ON a.event_id=e.id
+        WHERE a.id=@id
+      `);
+      if (!r.recordset.length) return res.status(404).json({ success: false, message: "Not found" });
+      const rec = r.recordset[0];
+      // User can only see own records
+      if (req.user.role === "user" && rec.user_id !== req.user.id)
+        return res.status(403).json({ success: false, message: "Access denied" });
+      res.json({ success: true, data: rec });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.post("/api/attendance", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { userId, eventId, attendanceDate, checkInTime, checkOutTime, status, deviceInfo } = req.body;
+      if (!userId || !eventId || !attendanceDate || !checkInTime || !status)
+        return res.status(400).json({ success: false, message: "Required fields missing" });
+      const pool = await getConnection();
+      const dup = await pool.request()
+        .input("uid",sql.Int,userId).input("eid",sql.Int,eventId).input("d",sql.Date,attendanceDate)
+        .query("SELECT id FROM attendance WHERE user_id=@uid AND event_id=@eid AND attendance_date=@d");
+      if (dup.recordset.length)
+        return res.status(400).json({ success: false, message: "Attendance already recorded" });
+      const r = await pool.request()
+        .input("uid",sql.Int,userId).input("eid",sql.Int,eventId)
+        .input("d",sql.Date,attendanceDate).input("ci",sql.DateTime,checkInTime)
+        .input("co",sql.DateTime,checkOutTime||null).input("s",sql.NVarChar,status)
+        .input("di",sql.NVarChar,deviceInfo||"Manual Entry - Admin Web")
+        .query(`
+          INSERT INTO attendance (user_id,event_id,attendance_date,check_in_time,check_out_time,status,device_info,created_at)
+          OUTPUT INSERTED.*
+          VALUES (@uid,@eid,@d,@ci,@co,@s,@di,GETDATE())
+        `);
+      await logActivity(pool,req.user.id,"MANUAL_ATTENDANCE","attendance",r.recordset[0].id,
+        `Manual attendance: user ${userId}, event ${eventId}, ${status}`,req.ip);
+      res.status(201).json({ success: true, data: r.recordset[0] });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  // User self check-in via QR token
+  app.post("/api/attendance/checkin", authenticateToken, requireAnyRole, async (req: any, res) => {
+    try {
+      const { qrToken, eventId, deviceInfo } = req.body;
+      const pool = await getConnection();
+      const today = new Date().toISOString().split("T")[0];
+
+      let resolvedEventId = eventId;
+
+      if (qrToken) {
+        const tokenR = await pool.request().input("t", sql.NVarChar, qrToken)
+          .query("SELECT * FROM qr_tokens WHERE token=@t AND expires_at>GETDATE()");
+        if (!tokenR.recordset.length)
+          return res.status(400).json({ success: false, message: "QR code expired or invalid" });
+        resolvedEventId = tokenR.recordset[0].event_id;
+      }
+
+      if (!resolvedEventId)
+        return res.status(400).json({ success: false, message: "Event ID or QR token required" });
+
+      // Duplicate check
+      const dup = await pool.request()
+        .input("uid",sql.Int,req.user.id).input("eid",sql.Int,resolvedEventId).input("d",sql.Date,today)
+        .query("SELECT id FROM attendance WHERE user_id=@uid AND event_id=@eid AND attendance_date=@d");
+      if (dup.recordset.length)
+        return res.status(400).json({ success: false, message: "Already checked in today" });
+
+      // Get lateness threshold
+      const settR = await pool.request().query(
+        "SELECT setting_value FROM system_settings WHERE setting_key='late_threshold'"
+      );
+      const lateMin = parseInt(settR.recordset[0]?.setting_value || "15");
+
+      // Determine status: for now, mark present (admin can adjust)
+      const now = new Date();
+      const status = "present"; // Could compare against event schedule start time + lateMin
+
+      const r = await pool.request()
+        .input("uid",sql.Int,req.user.id).input("eid",sql.Int,resolvedEventId)
+        .input("d",sql.Date,today).input("ci",sql.DateTime,now)
+        .input("s",sql.NVarChar,status)
+        .input("di",sql.NVarChar,deviceInfo||"User Self Check-in")
+        .query(`
+          INSERT INTO attendance (user_id,event_id,attendance_date,check_in_time,status,device_info,created_at)
+          OUTPUT INSERTED.*
+          VALUES (@uid,@eid,@d,@ci,@s,@di,GETDATE())
+        `);
+      res.status(201).json({ success: true, data: r.recordset[0], message: "Check-in successful" });
+    } catch (e: any) { console.error(e); res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.put("/api/attendance/:id", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { checkOutTime, status, notes } = req.body;
+      const pool = await getConnection();
+      const exists = await pool.request().input("id",sql.Int,req.params.id)
+        .query("SELECT id FROM attendance WHERE id=@id");
+      if (!exists.recordset.length) return res.status(404).json({ success: false, message: "Not found" });
+      await pool.request()
+        .input("id",sql.Int,req.params.id)
+        .input("co",sql.DateTime,checkOutTime||null)
+        .input("s",sql.NVarChar,status)
+        .input("n",sql.NVarChar,notes||null)
+        .query("UPDATE attendance SET check_out_time=@co,status=@s,notes=@n,updated_at=GETDATE() WHERE id=@id");
+      await logActivity(pool,req.user.id,"UPDATE_ATTENDANCE","attendance",parseInt(req.params.id),
+        `Updated attendance id:${req.params.id} → ${status}`,req.ip);
+      res.json({ success: true, message: "Attendance updated" });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.delete("/api/attendance/:id", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().input("id",sql.Int,req.params.id)
+        .query("DELETE FROM attendance WHERE id=@id");
+      if (!r.rowsAffected[0]) return res.status(404).json({ success: false, message: "Not found" });
+      await logActivity(pool,req.user.id,"DELETE_ATTENDANCE","attendance",parseInt(req.params.id),
+        `Deleted attendance id:${req.params.id}`,req.ip);
+      res.json({ success: true, message: "Deleted" });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // QR TOKENS  (admin+)
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.post("/api/qr/generate", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { eventId, validDate, expiryMinutes = 60 } = req.body;
+      if (!eventId) return res.status(400).json({ success: false, message: "eventId required" });
+      const pool = await getConnection();
+      const token = crypto.randomBytes(32).toString("hex");
+      const vDate = validDate || new Date().toISOString().split("T")[0];
+      const expires = new Date(Date.now() + Number(expiryMinutes) * 60000);
+      await pool.request()
+        .input("eid",sql.Int,eventId).input("tok",sql.NVarChar,token)
+        .input("vd",sql.Date,vDate).input("exp",sql.DateTime,expires)
+        .input("cb",sql.Int,req.user.id)
+        .query(`
+          INSERT INTO qr_tokens (event_id,token,valid_date,expires_at,created_by,created_at)
+          VALUES (@eid,@tok,@vd,@exp,@cb,GETDATE())
+        `);
+      res.json({ success: true, data: { token, validDate: vDate, expiresAt: expires } });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.get("/api/qr/:eventId", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().input("eid",sql.Int,req.params.eventId)
+        .query("SELECT * FROM qr_tokens WHERE event_id=@eid AND expires_at>GETDATE() ORDER BY created_at DESC");
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // SCHEDULES  (read: all auth; write: admin+)
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.get("/api/schedules", authenticateToken, requireAnyRole, async (req, res) => {
+    try {
+      const { eventId, upcoming } = req.query;
+      const pool = await getConnection();
+      const rq = pool.request();
+      let where = "WHERE 1=1";
+      if (eventId) { rq.input("eid",sql.Int,Number(eventId)); where+=" AND s.event_id=@eid"; }
+      if (upcoming === "true") { where+=" AND s.scheduled_date>=CAST(GETDATE() AS DATE)"; }
+      const r = await rq.query(`
+        SELECT s.*,e.event_name,e.event_code,e.event_type
+        FROM schedules s JOIN events e ON s.event_id=e.id
+        ${where} ORDER BY s.scheduled_date ASC
+      `);
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.post("/api/schedules", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { eventId, scheduledDate, startTime, endTime, location, notes } = req.body;
+      if (!eventId || !scheduledDate || !startTime)
+        return res.status(400).json({ success: false, message: "eventId, scheduledDate, startTime required" });
+      const pool = await getConnection();
+      const r = await pool.request()
+        .input("eid",sql.Int,eventId).input("d",sql.Date,scheduledDate)
+        .input("st",sql.NVarChar,startTime).input("et",sql.NVarChar,endTime||null)
+        .input("loc",sql.NVarChar,location||null).input("n",sql.NVarChar,notes||null)
+        .input("cb",sql.Int,req.user.id)
+        .query(`
+          INSERT INTO schedules (event_id,scheduled_date,start_time,end_time,location,notes,created_by,created_at)
+          OUTPUT INSERTED.*
+          VALUES (@eid,@d,@st,@et,@loc,@n,@cb,GETDATE())
+        `);
+      res.status(201).json({ success: true, data: r.recordset[0] });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.delete("/api/schedules/:id", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      await pool.request().input("id",sql.Int,req.params.id)
+        .query("DELETE FROM schedules WHERE id=@id");
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // ANNOUNCEMENTS  (read: all auth; write: admin+)
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.get("/api/announcements", authenticateToken, requireAnyRole, async (req, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().query(`
+        SELECT a.*,u.full_name as author_name
+        FROM announcements a LEFT JOIN users u ON a.author_id=u.id
+        WHERE a.is_active=1
+        ORDER BY a.pinned DESC,a.created_at DESC
+      `);
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.post("/api/announcements", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { title, body, pinned = false } = req.body;
+      if (!title || !body) return res.status(400).json({ success: false, message: "title and body required" });
+      const pool = await getConnection();
+      const r = await pool.request()
+        .input("t",sql.NVarChar,title).input("b",sql.NVarChar,body)
+        .input("p",sql.Bit,pinned?1:0).input("aid",sql.Int,req.user.id)
+        .query(`
+          INSERT INTO announcements (title,body,author_id,is_active,pinned,created_at,updated_at)
+          OUTPUT INSERTED.*
+          VALUES (@t,@b,@aid,1,@p,GETDATE(),GETDATE())
+        `);
+      res.status(201).json({ success: true, data: r.recordset[0] });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.put("/api/announcements/:id", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { title, body, pinned, isActive } = req.body;
+      const pool = await getConnection();
+      const sets: string[] = ["updated_at=GETDATE()"];
+      const rq = pool.request().input("id",sql.Int,req.params.id);
+      if (title!==undefined) { rq.input("t",sql.NVarChar,title); sets.push("title=@t"); }
+      if (body!==undefined) { rq.input("b",sql.NVarChar,body); sets.push("body=@b"); }
+      if (pinned!==undefined) { rq.input("p",sql.Bit,pinned?1:0); sets.push("pinned=@p"); }
+      if (isActive!==undefined) { rq.input("ia",sql.Bit,isActive?1:0); sets.push("is_active=@ia"); }
+      await rq.query(`UPDATE announcements SET ${sets.join(",")} WHERE id=@id`);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.delete("/api/announcements/:id", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      await pool.request().input("id",sql.Int,req.params.id)
+        .query("DELETE FROM announcements WHERE id=@id");
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // DIVISIONS  (read: all auth; write: super_admin)
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.get("/api/divisions", authenticateToken, requireAnyRole, async (_req, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().query("SELECT * FROM divisions WHERE is_active=1 ORDER BY name");
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.post("/api/divisions", authenticateToken, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const { name, description, leaderId } = req.body;
+      if (!name) return res.status(400).json({ success: false, message: "name required" });
+      const pool = await getConnection();
+      const r = await pool.request()
+        .input("n",sql.NVarChar,name).input("d",sql.NVarChar,description||null)
+        .input("l",sql.Int,leaderId||null)
+        .query(`
+          INSERT INTO divisions (name,description,leader_id,is_active,created_at)
+          OUTPUT INSERTED.*
+          VALUES (@n,@d,@l,1,GETDATE())
+        `);
+      res.status(201).json({ success: true, data: r.recordset[0] });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.put("/api/divisions/:id", authenticateToken, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const { name, description, leaderId, isActive } = req.body;
+      const pool = await getConnection();
+      const sets: string[] = [];
+      const rq = pool.request().input("id",sql.Int,req.params.id);
+      if (name)             { rq.input("n",sql.NVarChar,name);         sets.push("name=@n"); }
+      if (description!==undefined) { rq.input("d",sql.NVarChar,description||null); sets.push("description=@d"); }
+      if (leaderId!==undefined)    { rq.input("l",sql.Int,leaderId||null);          sets.push("leader_id=@l"); }
+      if (isActive!==undefined)    { rq.input("ia",sql.Bit,isActive?1:0);           sets.push("is_active=@ia"); }
+      if (!sets.length) return res.status(400).json({ success: false, message: "Nothing to update" });
+      await rq.query(`UPDATE divisions SET ${sets.join(",")} WHERE id=@id`);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.delete("/api/divisions/:id", authenticateToken, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      await pool.request().input("id",sql.Int,req.params.id)
+        .query("UPDATE divisions SET is_active=0 WHERE id=@id");
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // DASHBOARD
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.get("/api/dashboard/stats", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      const pool = await getConnection();
+      const today = new Date().toISOString().split("T")[0];
+      const [mR, eR, tR, rR] = await Promise.all([
+        pool.request().query("SELECT COUNT(*) as c FROM users WHERE role='user' AND is_active=1"),
+        pool.request().query("SELECT COUNT(*) as c FROM events WHERE is_active=1"),
+        pool.request().input("d",sql.Date,today).query(`
+          SELECT ISNULL(COUNT(CASE WHEN status IN ('present','late') THEN 1 END),0) as ci,
+                 ISNULL(COUNT(CASE WHEN status='absent' THEN 1 END),0) as ab
+          FROM attendance WHERE attendance_date=@d
+        `),
+        pool.request().query(`
+          SELECT CAST(ROUND(
+            CAST(COUNT(CASE WHEN status IN ('present','late') THEN 1 END) AS FLOAT)/
+            NULLIF(COUNT(*),0)*100,1) AS DECIMAL(5,1)) as rate
+          FROM attendance WHERE attendance_date>=DATEADD(MONTH,-1,GETDATE())
+        `),
+      ]);
+      const total = mR.recordset[0].c;
+      const ci = tR.recordset[0].ci;
+      res.json({ success: true, data: {
+        totalMembers: total, activeEvents: eR.recordset[0].c,
+        todayAttendance: { checkedIn: ci, pending: Math.max(0,total-ci), absent: tR.recordset[0].ab },
+        attendanceRate: rR.recordset[0].rate || 0,
+      }});
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.get("/api/dashboard/activities", authenticateToken, requireAdmin, async (req, res) => {
     try {
       const { limit = 10 } = req.query;
       const pool = await getConnection();
-      
-      const result = await pool.request()
-        .input("limit", sql.Int, limit)
-        .query(`
-          SELECT TOP (@limit) 
-            al.*, 
-            u.full_name as user_name
-          FROM activity_logs al
-          LEFT JOIN users u ON al.user_id = u.id
-          ORDER BY al.created_at DESC
-        `);
-      
-      res.json({ success: true, data: result.recordset });
-    } catch (error) {
-      console.error("Error fetching activities:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+      const r = await pool.request().input("lim",sql.Int,Number(limit)).query(`
+        SELECT TOP (@lim) al.*,u.full_name as user_name
+        FROM activity_logs al LEFT JOIN users u ON al.user_id=u.id
+        ORDER BY al.created_at DESC
+      `);
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
   });
 
-  // ============ REPORTS ROUTES ============
-  
-  // POST /api/reports/generate - Generate report
-  app.post("/api/reports/generate", async (req, res) => {
+  // ══════════════════════════════════════════════════════════════════════════════
+  // REPORTS  (admin+)
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.post("/api/reports/generate", authenticateToken, requireAdmin, async (req: any, res) => {
     try {
       const { reportType, eventId, period, format } = req.body;
-      
-      // Log report generation
+      const pool = await getConnection();
+      const days = ({ week:7, month:30, semester:180, year:365 } as any)[period] || 30;
+      const rq = pool.request().input("days",sql.Int,days);
+      let ef = "";
+      if (eventId && eventId !== "all") { rq.input("eid",sql.Int,Number(eventId)); ef=" AND a.event_id=@eid"; }
+
+      const queries: Record<string,string> = {
+        "lateness-report": `
+          SELECT u.full_name,u.member_id,u.division,e.event_code,e.event_name,
+            CONVERT(NVARCHAR(10),a.attendance_date,23) as attendance_date,
+            CONVERT(NVARCHAR(5),a.check_in_time,108) as check_in_time, a.status
+          FROM attendance a JOIN users u ON a.user_id=u.id JOIN events e ON a.event_id=e.id
+          WHERE a.status='late' AND a.attendance_date>=DATEADD(DAY,-@days,GETDATE()) ${ef}
+          ORDER BY a.attendance_date DESC
+        `,
+        "student-performance": `
+          SELECT u.full_name,u.member_id,u.division,
+            COUNT(*) as total_sessions,
+            COUNT(CASE WHEN a.status IN('present','late') THEN 1 END) as attended,
+            COUNT(CASE WHEN a.status='absent' THEN 1 END) as absent,
+            CAST(ROUND(CAST(COUNT(CASE WHEN a.status IN('present','late') THEN 1 END) AS FLOAT)/
+              NULLIF(COUNT(*),0)*100,1) AS DECIMAL(5,1)) as attendance_pct
+          FROM attendance a JOIN users u ON a.user_id=u.id
+          WHERE a.attendance_date>=DATEADD(DAY,-@days,GETDATE()) ${ef}
+          GROUP BY u.id,u.full_name,u.member_id,u.division
+          ORDER BY attendance_pct DESC
+        `,
+        "absence-analysis": `
+          SELECT u.full_name,u.member_id,u.division,e.event_code,
+            COUNT(CASE WHEN a.status='absent' THEN 1 END) as total_absent,
+            COUNT(CASE WHEN a.status='excused' THEN 1 END) as total_excused,
+            COUNT(CASE WHEN a.status='sick' THEN 1 END) as total_sick,
+            COUNT(*) as total_sessions
+          FROM attendance a JOIN users u ON a.user_id=u.id JOIN events e ON a.event_id=e.id
+          WHERE a.attendance_date>=DATEADD(DAY,-@days,GETDATE()) ${ef}
+          GROUP BY u.id,u.full_name,u.member_id,u.division,e.event_code
+          ORDER BY total_absent DESC
+        `,
+      };
+      const defaultQ = `
+        SELECT u.full_name,u.member_id,u.division,e.event_code,e.event_name,
+          CONVERT(NVARCHAR(10),a.attendance_date,23) as attendance_date,
+          CONVERT(NVARCHAR(5),a.check_in_time,108) as check_in_time,
+          CONVERT(NVARCHAR(5),a.check_out_time,108) as check_out_time,
+          a.status, a.device_info, a.notes
+        FROM attendance a JOIN users u ON a.user_id=u.id JOIN events e ON a.event_id=e.id
+        WHERE a.attendance_date>=DATEADD(DAY,-@days,GETDATE()) ${ef}
+        ORDER BY a.attendance_date DESC,u.full_name
+      `;
+      const result = await rq.query(queries[reportType] || defaultQ);
+      await logActivity(pool,req.user.id,"GENERATE_REPORT","report",null,
+        `Generated ${reportType} (${period}, ${format})`,req.ip);
+      res.json({ success: true, data: {
+        id: `RPT_${Date.now()}`, reportType, period, format,
+        rows: result.recordset, generatedAt: new Date().toISOString(), count: result.recordset.length,
+      }});
+    } catch (e: any) { console.error(e); res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.get("/api/reports", authenticateToken, requireAdmin, (_req, res) => {
+    res.json({ success: true, data: [] });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // SETTINGS
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.get("/api/settings/profile", authenticateToken, requireAnyRole, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().input("uid",sql.Int,req.user.id)
+        .query("SELECT id,full_name,email,phone_number,role,member_id,division,avatar_url,created_at FROM users WHERE id=@uid");
+      if (!r.recordset.length) return res.status(404).json({ success: false, message: "Not found" });
+      res.json({ success: true, data: r.recordset[0] });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
+  });
+
+  app.put("/api/settings/profile", authenticateToken, requireAnyRole, async (req: any, res) => {
+    try {
+      const { fullName, phoneNumber, avatarUrl } = req.body;
       const pool = await getConnection();
       await pool.request()
-        .input("userId", sql.Int, req.user.id)
-        .input("action", sql.NVarChar, "GENERATE_REPORT")
-        .input("entityType", sql.NVarChar, "report")
-        .input("description", sql.NVarChar, `Generated ${reportType} report`)
-        .query(`
-          INSERT INTO activity_logs (user_id, action, entity_type, description, created_at)
-          VALUES (@userId, @action, @entityType, @description, GETDATE())
-        `);
-      
-      res.json({ 
-        success: true, 
-        data: { 
-          id: `report_${Date.now()}`,
-          message: "Report generation started",
-          downloadUrl: `/api/reports/${Date.now()}/download`
-        }
-      });
-    } catch (error) {
-      console.error("Error generating report:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+        .input("uid",sql.Int,req.user.id).input("fn",sql.NVarChar,fullName)
+        .input("ph",sql.NVarChar,phoneNumber||null).input("av",sql.NVarChar,avatarUrl||null)
+        .query("UPDATE users SET full_name=@fn,phone_number=@ph,avatar_url=@av,updated_at=GETDATE() WHERE id=@uid");
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
   });
 
-  // GET /api/reports - Get all reports
-  app.get("/api/reports", async (req, res) => {
-    try {
-      // For now, return empty array since reports are generated asynchronously
-      res.json({ success: true, data: [] });
-    } catch (error) {
-      console.error("Error fetching reports:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // GET /api/reports/:id/download - Download report
-  app.get("/api/reports/:id/download", async (req, res) => {
-    try {
-      // In production, generate and stream the file
-      res.json({ success: true, message: "Download ready" });
-    } catch (error) {
-      console.error("Error downloading report:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // DELETE /api/reports/:id - Delete report
-  app.delete("/api/reports/:id", async (req, res) => {
-    try {
-      res.json({ success: true, message: "Report deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting report:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // ============ SETTINGS ROUTES ============
-  
-  // GET /api/settings/profile - Get user profile
-  app.get("/api/settings/profile", async (req, res) => {
-    try {
-      const pool = await getConnection();
-      const result = await pool.request()
-        .input("userId", sql.Int, req.user.id)
-        .query(`
-          SELECT id, full_name, email, phone_number, role, member_id, created_at
-          FROM users
-          WHERE id = @userId
-        `);
-      
-      res.json({ success: true, data: result.recordset[0] });
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // PUT /api/settings/profile - Update user profile
-  app.put("/api/settings/profile", async (req, res) => {
-    try {
-      const { fullName, email, phoneNumber } = req.body;
-      const pool = await getConnection();
-      
-      await pool.request()
-        .input("userId", sql.Int, req.user.id)
-        .input("fullName", sql.NVarChar, fullName)
-        .input("email", sql.NVarChar, email)
-        .input("phoneNumber", sql.NVarChar, phoneNumber || null)
-        .query(`
-          UPDATE users 
-          SET full_name = @fullName, 
-              email = @email, 
-              phone_number = @phoneNumber
-          WHERE id = @userId
-        `);
-      
-      res.json({ success: true, message: "Profile updated successfully" });
-    } catch (error) {
-      console.error("Error updating profile:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
-  });
-
-  // POST /api/settings/change-password - Change password
-  app.post("/api/settings/change-password", async (req, res) => {
+  app.post("/api/settings/change-password", authenticateToken, requireAnyRole, async (req: any, res) => {
     try {
       const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword || newPassword.length < 8)
+        return res.status(400).json({ success: false, message: "Invalid password data" });
       const pool = await getConnection();
-      
-      // Get current password hash
-      const user = await pool.request()
-        .input("userId", sql.Int, req.user.id)
-        .query("SELECT password_hash FROM users WHERE id = @userId");
-      
-      const validPassword = await bcrypt.compare(currentPassword, user.recordset[0].password_hash);
-      
-      if (!validPassword) {
-        return res.status(400).json({ success: false, message: "Current password is incorrect" });
-      }
-      
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      
-      await pool.request()
-        .input("userId", sql.Int, req.user.id)
-        .input("password", sql.NVarChar, hashedPassword)
-        .query("UPDATE users SET password_hash = @password WHERE id = @userId");
-      
-      res.json({ success: true, message: "Password changed successfully" });
-    } catch (error) {
-      console.error("Error changing password:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+      const u = await pool.request().input("uid",sql.Int,req.user.id)
+        .query("SELECT password_hash FROM users WHERE id=@uid");
+      if (!await bcrypt.compare(currentPassword, u.recordset[0].password_hash))
+        return res.status(400).json({ success: false, message: "Current password incorrect" });
+      const hash = await bcrypt.hash(newPassword, 10);
+      await pool.request().input("uid",sql.Int,req.user.id).input("pw",sql.NVarChar,hash)
+        .query("UPDATE users SET password_hash=@pw WHERE id=@uid");
+      res.json({ success: true, message: "Password changed" });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
   });
 
-  // GET /api/settings/system - Get system settings
-  app.get("/api/settings/system", async (req, res) => {
+  app.get("/api/settings/system", authenticateToken, requireSuperAdmin, async (_req, res) => {
     try {
       const pool = await getConnection();
-      const result = await pool.request()
-        .query("SELECT setting_key, setting_value, setting_type FROM system_settings");
-      
-      const settings: Record<string, any> = {};
-      result.recordset.forEach((row: any) => {
-        let value: any = row.setting_value;
-        if (row.setting_type === 'boolean') {
-          value = value === 'true';
-        } else if (row.setting_type === 'integer') {
-          value = parseInt(value);
-        }
-        settings[row.setting_key] = value;
+      const r = await pool.request().query("SELECT setting_key,setting_value,setting_type,description FROM system_settings");
+      const settings: Record<string,any> = {};
+      r.recordset.forEach((row: any) => {
+        let v: any = row.setting_value;
+        if (row.setting_type === "boolean") v = v === "true";
+        else if (row.setting_type === "integer") v = parseInt(v);
+        settings[row.setting_key] = v;
       });
-      
       res.json({ success: true, data: settings });
-    } catch (error) {
-      console.error("Error fetching system settings:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
   });
 
-  // PUT /api/settings/system - Update system settings
-  app.put("/api/settings/system", async (req, res) => {
+  app.put("/api/settings/system", authenticateToken, requireSuperAdmin, async (req: any, res) => {
     try {
-      const settings = req.body;
       const pool = await getConnection();
-      
-      for (const [key, value] of Object.entries(settings)) {
-        await pool.request()
-          .input("key", sql.NVarChar, key)
-          .input("value", sql.NVarChar, String(value))
-          .query(`
-            UPDATE system_settings 
-            SET setting_value = @value, updated_at = GETDATE()
-            WHERE setting_key = @key
-          `);
+      for (const [key, val] of Object.entries(req.body)) {
+        await pool.request().input("k",sql.NVarChar,key).input("v",sql.NVarChar,String(val))
+          .query("UPDATE system_settings SET setting_value=@v,updated_at=GETDATE() WHERE setting_key=@k");
       }
-      
-      res.json({ success: true, message: "System settings updated successfully" });
-    } catch (error) {
-      console.error("Error updating system settings:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+      await logActivity(pool,req.user.id,"UPDATE_SETTINGS","system",null,"System settings updated",req.ip);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
   });
 
-  // GET /api/settings/activity-logs - Get activity logs
-  app.get("/api/settings/activity-logs", async (req, res) => {
+  app.get("/api/settings/activity-logs", authenticateToken, requireSuperAdmin, async (req, res) => {
     try {
       const { limit = 50, offset = 0 } = req.query;
       const pool = await getConnection();
-      
-      const result = await pool.request()
-        .input("limit", sql.Int, limit)
-        .input("offset", sql.Int, offset)
+      const r = await pool.request().input("lim",sql.Int,Number(limit)).input("off",sql.Int,Number(offset))
         .query(`
-          SELECT 
-            al.*, 
-            u.full_name as user_name
-          FROM activity_logs al
-          LEFT JOIN users u ON al.user_id = u.id
+          SELECT al.*,u.full_name as user_name
+          FROM activity_logs al LEFT JOIN users u ON al.user_id=u.id
           ORDER BY al.created_at DESC
-          OFFSET @offset ROWS
-          FETCH NEXT @limit ROWS ONLY
+          OFFSET @off ROWS FETCH NEXT @lim ROWS ONLY
         `);
-      
-      res.json({ success: true, data: result.recordset });
-    } catch (error) {
-      console.error("Error fetching activity logs:", error);
-      res.status(500).json({ success: false, message: "Database error" });
-    }
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
   });
 
-  // ============ EXISTING ROUTES ============
-  app.get("/api/ping", (_req, res) => {
-    const ping = process.env.PING_MESSAGE ?? "ping";
-    res.json({ message: ping });
+  // Admin can read settings (read-only)
+  app.get("/api/settings/system/public", authenticateToken, requireAdmin, async (_req, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().query(`
+        SELECT setting_key,setting_value,setting_type
+        FROM system_settings
+        WHERE setting_key IN ('org_name','org_logo_url','ranking_enabled','ranking_period',
+                              'allow_self_checkin','late_threshold','attendance_window')
+      `);
+      const s: Record<string,any> = {};
+      r.recordset.forEach((row: any) => {
+        let v: any = row.setting_value;
+        if (row.setting_type==="boolean") v = v==="true";
+        else if (row.setting_type==="integer") v = parseInt(v);
+        s[row.setting_key] = v;
+      });
+      res.json({ success: true, data: s });
+    } catch (e: any) { res.status(500).json({ success: false, message: "DB error" }); }
   });
 
+  // ══════════════════════════════════════════════════════════════════════════════
+  // MISC
+  // ══════════════════════════════════════════════════════════════════════════════
+  app.get("/api/ping", (_req, res) => res.json({ message: process.env.PING_MESSAGE ?? "ping" }));
   app.get("/api/demo", handleDemo);
 
-  // ============ 404 HANDLER (for API) ============
   app.use((req, res, next) => {
-    if (req.path.startsWith("/api/")) {
-      res.status(404).json({ error: `API endpoint ${req.method} ${req.path} not found` });
-    } else {
-      next();
-    }
+    if (req.path.startsWith("/api/"))
+      return res.status(404).json({ error: `${req.method} ${req.path} not found` });
+    next();
   });
 
   return app;

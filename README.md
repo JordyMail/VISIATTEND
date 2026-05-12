@@ -47,9 +47,29 @@ pnpm run build
 # Jalankan server
 pnpm run start
 
-
-
 pnpm add -D ts-node
 
 
+## How to run
+
+```bash
+# 1. Setup DB (run once)
+pnpm db:migrate
+pnpm db:seed
+
+# 2. Start dev server
+pnpm dev
+```
+
+Default admin credentials (from seed):
+- Email: `admin@gmail.com`
+- Password: `123`
+
+---
+
+## PDF export note
+PDF export uses the browser's native **print dialog** (window.open + print()).
+This works in all browsers without installing extra packages.
+If you want server-side PDF generation later, install `pdfkit` or `puppeteer`
+and add a `/api/reports/:id/download` endpoint that streams a PDF buffer.
 
