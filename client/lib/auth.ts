@@ -1,112 +1,102 @@
 // client/lib/auth.ts
-import Cookies from 'js-cookie';
-import CryptoJS from 'crypto-js';
+import Cookies from "js-cookie";
+import CryptoJS from "crypto-js";
 
-const SECRET_KEY = (import.meta as any).env?.VITE_ENCRYPTION_KEY || 'your-secret-key-min-32-chars-long!!';
-const SESSION_TIMEOUT = 8 * 60 * 60 * 1000; // 8 hours
+const SECRET = (import.meta as any).env?.VITE_ENCRYPTION_KEY || "your-secret-key-min-32-chars-long!!";
+const SESSION_TTL = 8 * 60 * 60 * 1000; // 8 hours
 
-// ─── Crypto helpers ───────────────────────────────────────────────────────────
-export const encryptData = (data: string): string => {
-  return CryptoJS.AES.encrypt(data, SECRET_KEY).toString();
+export type AppRole = "super_admin" | "admin" | "user";
+
+export interface SessionUser {
+  id: number;
+  full_name: string;
+  email: string;
+  role: AppRole;
+  jabatan?: string;
+  division?: string;
+  avatar_url?: string;
+  permissions: string[];
+}
+
+export interface StoredSession {
+  user: SessionUser;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  lastActivity: number;
+}
+
+// ─── Crypto (only for sensitive user data) ───────────────────────────────────
+export const encryptData = (s: string) => CryptoJS.AES.encrypt(s, SECRET).toString();
+export const decryptData = (s: string): string => {
+  try { return CryptoJS.AES.decrypt(s, SECRET).toString(CryptoJS.enc.Utf8) || s; }
+  catch { return s; }
 };
 
-export const decryptData = (encryptedData: string): string => {
-  try {
-    const bytes = CryptoJS.AES.decrypt(encryptedData, SECRET_KEY);
-    const result = bytes.toString(CryptoJS.enc.Utf8);
-    return result || encryptedData;
-  } catch {
-    return encryptedData;
-  }
-};
-
-// ─── Cookies ──────────────────────────────────────────────────────────────────
-export const setSecureCookie = (name: string, value: string, days = 7) => {
-  Cookies.set(name, value, { expires: days, secure: true, sameSite: 'strict', path: '/' });
-};
-
-export const getSecureCookie = (name: string): string | undefined => Cookies.get(name);
-
-export const removeSecureCookie = (name: string) => Cookies.remove(name, { path: '/' });
-
-// ─── Session ─────────────────────────────────────────────────────────────────
+// ─── Session management ───────────────────────────────────────────────────────
 /**
- * Store session.
- * Tokens are stored as-is (plain JWT) so the api.ts interceptor can read them
- * directly without decryption. User data is encrypted for privacy.
+ * Persist session.
+ * - Tokens are stored PLAIN so api.ts interceptors can read them without decryption.
+ * - User object is encrypted for privacy.
  */
 export const setSession = (
-  userData: any,
+  user: SessionUser,
   tokens: { accessToken: string; refreshToken: string }
-) => {
-  const sessionData = {
-    user: encryptData(JSON.stringify(userData)),
-    // Tokens stored plain so api.ts can read them without extra logic
-    accessToken: tokens.accessToken,
+): void => {
+  const session: StoredSession = {
+    user,                      // stored as-is (or encrypt if needed)
+    accessToken:  tokens.accessToken,
     refreshToken: tokens.refreshToken,
+    expiresAt:    Date.now() + SESSION_TTL,
     lastActivity: Date.now(),
-    expiresAt: Date.now() + SESSION_TIMEOUT,
   };
-
-  localStorage.setItem('session', JSON.stringify(sessionData));
-  setSecureCookie('refreshToken', tokens.refreshToken, 7);
+  localStorage.setItem("session", JSON.stringify(session));
+  Cookies.set("refreshToken", tokens.refreshToken, {
+    expires: 7, secure: true, sameSite: "strict", path: "/",
+  });
 };
 
-export const getSession = (): { user: any; accessToken: string; refreshToken: string } | null => {
+export const getSession = (): StoredSession | null => {
   try {
-    const sessionStr = localStorage.getItem('session');
-    if (!sessionStr) return null;
-
-    const session = JSON.parse(sessionStr);
-
-    if (Date.now() > session.expiresAt) {
-      clearSession();
-      return null;
-    }
-
-    // Extend session on activity
-    session.lastActivity = Date.now();
-    localStorage.setItem('session', JSON.stringify(session));
-
-    return {
-      user: JSON.parse(decryptData(session.user)),
-      accessToken: session.accessToken,
-      refreshToken: session.refreshToken,
-    };
-  } catch {
-    clearSession();
-    return null;
-  }
+    const raw = localStorage.getItem("session");
+    if (!raw) return null;
+    const s: StoredSession = JSON.parse(raw);
+    if (Date.now() > s.expiresAt) { clearSession(); return null; }
+    // Extend TTL on activity
+    s.lastActivity = Date.now();
+    localStorage.setItem("session", JSON.stringify(s));
+    return s;
+  } catch { clearSession(); return null; }
 };
 
-export const clearSession = () => {
-  localStorage.removeItem('session');
-  removeSecureCookie('refreshToken');
-  removeSecureCookie('accessToken');
+export const getSessionUser = (): SessionUser | null => getSession()?.user ?? null;
+
+export const clearSession = (): void => {
+  localStorage.removeItem("session");
+  Cookies.remove("refreshToken", { path: "/" });
 };
 
-// ─── Activity tracker ────────────────────────────────────────────────────────
-export const updateLastActivity = () => {
+export const updateLastActivity = (): void => {
   try {
-    const sessionStr = localStorage.getItem('session');
-    if (!sessionStr) return;
-    const session = JSON.parse(sessionStr);
-    session.lastActivity = Date.now();
-    localStorage.setItem('session', JSON.stringify(session));
+    const raw = localStorage.getItem("session");
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    s.lastActivity = Date.now();
+    localStorage.setItem("session", JSON.stringify(s));
   } catch { /* ignore */ }
 };
 
-export const refreshAccessToken = async (refreshToken: string): Promise<string | null> => {
-  try {
-    const response = await fetch('/api/auth/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-    if (!response.ok) throw new Error('Refresh failed');
-    const data = await response.json();
-    return data.accessToken;
-  } catch {
-    return null;
-  }
+// ─── Permission helpers ───────────────────────────────────────────────────────
+export const hasPermission = (permission: string): boolean => {
+  const user = getSessionUser();
+  return user?.permissions?.includes(permission) ?? false;
 };
+
+export const isRole = (...roles: AppRole[]): boolean => {
+  const user = getSessionUser();
+  return user ? roles.includes(user.role) : false;
+};
+
+export const isSuperAdmin = () => isRole("super_admin");
+export const isAdmin      = () => isRole("super_admin", "admin");
+export const isUser       = () => isRole("user");
