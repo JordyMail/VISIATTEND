@@ -28,3 +28,16 @@ dist-ssr
 .env".env" 
 .env.*
 .env
+
+# Python environments and caches
+venv/
+.venv/
+face-ai/venv/
+face-service/venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Runtime artifacts
+face-ai/output/
+storage/face-registration-drafts/

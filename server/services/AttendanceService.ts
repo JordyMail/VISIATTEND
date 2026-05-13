@@ -109,6 +109,119 @@ export class AttendanceService {
         return { deleted: true, summary };
     }
 
+    async registerMember(input: {
+        fullName: string;
+        email: string;
+        phoneNumber?: string;
+        userId?: string;
+        dateOfBirth?: string;
+        category?: 'student' | 'other';
+    }) {
+        const preparedRegistration = await this.prepareMemberRegistration(input);
+
+        const randomPassword = randomBytes(8).toString('hex');
+        const passwordHash = await bcrypt.hash(randomPassword, 10);
+        const user = await this.userRepository.create({
+            fullName: preparedRegistration.fullName,
+            userId: preparedRegistration.userId,
+            email: preparedRegistration.email,
+            passwordHash,
+            role: 'member',
+            phoneNumber: preparedRegistration.phoneNumber,
+            dateOfBirth: preparedRegistration.dateOfBirth,
+            category: preparedRegistration.category,
+        });
+
+        await this.activityLogRepository.log({
+            userId: user.id,
+            action: 'USER_CREATED',
+            entityType: 'users',
+            entityId: user.id,
+            description: `New member ${user.full_name} registered from Flutter attendance flow`,
+        });
+
+        return {
+            nextStep: 'check-in',
+            user,
+        };
+    }
+
+    async prepareMemberRegistration(input: {
+        fullName: string;
+        email: string;
+        phoneNumber?: string;
+        userId?: string;
+        dateOfBirth?: string;
+        category?: 'student' | 'other';
+    }) {
+        const existingByEmail = await this.userRepository.findByEmail(input.email);
+        if (existingByEmail) {
+            throw new Error('Email already registered');
+        }
+
+        const resolvedUserId = input.userId || generateMemberId();
+        const existingByUserId = await this.userRepository.findByUserId(resolvedUserId);
+        if (existingByUserId) {
+            throw new Error('User ID already registered');
+        }
+
+        return {
+            fullName: input.fullName,
+            email: input.email,
+            phoneNumber: input.phoneNumber,
+            userId: resolvedUserId,
+            dateOfBirth: input.dateOfBirth,
+            category: input.category,
+        };
+    }
+
+    async processFlutterAttendance(input: {
+        attendanceDate: string;
+        checkInTime: string;
+        userId?: string;
+        memberId?: string;
+        email?: string;
+        deviceInfo?: string;
+        confidenceScore?: number;
+        notes?: string;
+    }) {
+        const resolvedUser = await this.findUserForFlutterAttendance(input);
+        if (!resolvedUser) {
+            return {
+                requiresRegistration: true,
+                nextStep: 'registration',
+                message: 'User not found. Registration is required before attendance can be recorded.',
+            };
+        }
+
+        const attendanceResult = await this.createAttendance({
+            userId: resolvedUser.id,
+            attendanceDate: input.attendanceDate,
+            checkInTime: input.checkInTime,
+            status: 'present',
+            deviceInfo: input.deviceInfo,
+            confidenceScore: input.confidenceScore,
+            notes: input.notes,
+        }, {
+            actorUserId: resolvedUser.id,
+        });
+
+        const dashboard = await this.getUserDashboard(resolvedUser.id);
+
+        return {
+            requiresRegistration: false,
+            registered: false,
+            nextStep: 'user-dashboard',
+            dashboard,
+            user: resolvedUser,
+            ...attendanceResult,
+        };
+    }
+
+    async rollbackMemberRegistration(userId: number) {
+        return this.userRepository.delete(userId);
+    }
+
     async registerAndAttend(input: {
         fullName: string;
         email: string;
@@ -121,129 +234,32 @@ export class AttendanceService {
         deviceInfo?: string;
         notes?: string;
     }) {
-        const existingByEmail = await this.userRepository.findByEmail(input.email);
-        if (existingByEmail) {
-            throw new Error('Email already registered');
-        }
-
-        const randomPassword = randomBytes(8).toString('hex');
-        const passwordHash = await bcrypt.hash(randomPassword, 10);
-        const user = await this.userRepository.create({
-            fullName: input.fullName,
-            userId: input.userId || generateMemberId(),
-            email: input.email,
-            passwordHash,
-            role: 'member',
-            phoneNumber: input.phoneNumber,
-            dateOfBirth: input.dateOfBirth,
-            category: input.category,
-        });
-
+        const registration = await this.registerMember(input);
         const attendanceResult = await this.createAttendance({
-            userId: user.id,
+            userId: registration.user.id,
             attendanceDate: input.attendanceDate,
             checkInTime: input.checkInTime,
             status: 'present',
             deviceInfo: input.deviceInfo,
             notes: input.notes,
         }, {
-            actorUserId: user.id,
+            actorUserId: registration.user.id,
         });
 
         await this.activityLogRepository.log({
-            userId: user.id,
+            userId: registration.user.id,
             action: 'USER_REGISTERED_FROM_ATTENDANCE',
             entityType: 'users',
-            entityId: user.id,
-            description: `New member ${user.full_name} registered during attendance flow`,
+            entityId: registration.user.id,
+            description: `New member ${registration.user.full_name} registered during attendance flow`,
         });
 
-        return {
-            user,
-            ...attendanceResult,
-        };
-    }
-
-    async processFaceAttendance(input: {
-        attendanceDate: string;
-        checkInTime: string;
-        userId?: string;
-        memberId?: string;
-        email?: string;
-        fullName?: string;
-        phoneNumber?: string;
-        dateOfBirth?: string;
-        category?: 'student' | 'other';
-        deviceInfo?: string;
-        notes?: string;
-    }) {
-        let user = null;
-
-        const resolvedUserId = input.userId || input.memberId;
-        if (resolvedUserId) {
-            user = await this.userRepository.findByUserId(resolvedUserId);
-        }
-
-        if (!user && input.email) {
-            const rawUser = await this.userRepository.findByEmail(input.email);
-            if (rawUser) {
-                const { password_hash, ...safeUser } = rawUser;
-                user = safeUser;
-            }
-        }
-
-        if (!user) {
-            if (!input.fullName || !input.email) {
-                return {
-                    requiresRegistration: true,
-                    nextStep: 'registration',
-                    message: 'User not detected. Registration is required before attendance can be recorded.',
-                };
-            }
-
-            const result = await this.registerAndAttend({
-                fullName: input.fullName,
-                email: input.email,
-                phoneNumber: input.phoneNumber,
-                userId: resolvedUserId,
-                dateOfBirth: input.dateOfBirth,
-                category: input.category,
-                attendanceDate: input.attendanceDate,
-                checkInTime: input.checkInTime,
-                deviceInfo: input.deviceInfo,
-                notes: input.notes,
-            });
-
-            const dashboard = await this.getUserDashboard(result.user.id);
-
-            return {
-                requiresRegistration: false,
-                registered: true,
-                nextStep: 'user-dashboard',
-                dashboard,
-                ...result,
-            };
-        }
-
-        const attendanceResult = await this.createAttendance({
-            userId: user.id,
-            attendanceDate: input.attendanceDate,
-            checkInTime: input.checkInTime,
-            status: 'present',
-            deviceInfo: input.deviceInfo,
-            notes: input.notes,
-        }, {
-            actorUserId: user.id,
-        });
-
-        const dashboard = await this.getUserDashboard(user.id);
+        const dashboard = await this.getUserDashboard(registration.user.id);
 
         return {
-            requiresRegistration: false,
-            registered: false,
             nextStep: 'user-dashboard',
+            user: registration.user,
             dashboard,
-            user,
             ...attendanceResult,
         };
     }
@@ -294,5 +310,22 @@ export class AttendanceService {
             recentAttendance,
             pointLogs,
         };
+    }
+
+    private async findUserForFlutterAttendance(input: {
+        userId?: string;
+        memberId?: string;
+        email?: string;
+    }) {
+        const resolvedUserId = input.userId || input.memberId;
+        if (resolvedUserId) {
+            return this.userRepository.findByUserId(resolvedUserId);
+        }
+
+        if (input.email) {
+            return this.userRepository.findByEmail(input.email);
+        }
+
+        throw new Error('userId, memberId, or email is required');
     }
 }

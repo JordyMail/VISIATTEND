@@ -1,5 +1,9 @@
 # VISIATTEND
 
+## Dokumentasi Tambahan
+
+- [Panduan Face Attendance Untuk Pemula](docs/FACE_ATTENDANCE_BEGINNER_GUIDE.md)
+
 Instalation:
 npm install
 npx shadcn-ui@latest add command checkbox

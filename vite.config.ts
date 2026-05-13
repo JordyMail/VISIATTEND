@@ -12,12 +12,7 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     allowedHosts: true,
     watch: {
-      ignored: [
-        "**/.venv/**",
-        "**/venv/**",
-        "**/face-service/venv/**",
-        "**/__pycache__/**",
-      ],
+      ignored: [],
     },
     fs: {
       allow: ["./", "./client", "./shared"],

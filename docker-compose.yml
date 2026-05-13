@@ -1,9 +1,6 @@
 version: '3.9'
 
 services:
-  # ========================================
-  # Node.js Backend API
-  # ========================================
   api:
     build:
       context: .
@@ -22,11 +19,8 @@ services:
       JWT_SECRET: super-secret-jwt-key-change-this-in-production
       JWT_ACCESS_EXPIRY: 12h
       JWT_REFRESH_EXPIRY: 7d
-      FACE_SERVICE_URL: http://face-service:8000
     depends_on:
       sqlserver:
-        condition: service_healthy
-      face-service:
         condition: service_healthy
     networks:
       - visiattend-network
@@ -41,42 +35,6 @@ services:
       - node_modules:/app/node_modules
     restart: unless-stopped
 
-  # ========================================
-  # Python Face Recognition Service
-  # ========================================
-  face-service:
-    build:
-      context: ./face-service
-      dockerfile: Dockerfile
-    container_name: visiattend-face-service
-    ports:
-      - "8000:8000"
-    environment:
-      ENVIRONMENT: development
-      DEBUG: "false"
-      HOST: 0.0.0.0
-      PORT: 8000
-      CONFIDENCE_THRESHOLD: "0.55"
-      MODEL_NAME: ArcFace
-      FACE_DETECTION_BACKEND: retinaface
-      ENFORCE_DETECTION: "true"
-      LOG_LEVEL: INFO
-    volumes:
-      - ./face-service/storage:/app/storage
-      - ./face-service/logs:/app/logs
-    networks:
-      - visiattend-network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    restart: unless-stopped
-
-  # ========================================
-  # Microsoft SQL Server Database
-  # ========================================
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: visiattend-sqlserver
@@ -92,19 +50,20 @@ services:
     networks:
       - visiattend-network
     healthcheck:
-      test: [
-        "CMD",
-        "/opt/mssql-tools18/bin/sqlcmd",
-        "-S",
-        "localhost",
-        "-U",
-        "sa",
-        "-P",
-        "TempPass!2026",
-        "-C",
-        "-Q",
-        "SELECT 1"
-      ]
+      test:
+        [
+          "CMD",
+          "/opt/mssql-tools18/bin/sqlcmd",
+          "-S",
+          "localhost",
+          "-U",
+          "sa",
+          "-P",
+          "TempPass!2026",
+          "-C",
+          "-Q",
+          "SELECT 1"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
