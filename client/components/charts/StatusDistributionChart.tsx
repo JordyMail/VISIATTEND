@@ -1,3 +1,4 @@
+// client/components/charts/StatusDistributionChart.tsx
 import { useState, useEffect } from "react";
 import {
   PieChart,

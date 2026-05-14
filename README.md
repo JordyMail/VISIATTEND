@@ -57,6 +57,9 @@ pnpm add -D ts-node
 pnpm db:migrate
 pnpm db:seed
 
+npm run db:migrate:v2
+npm run db:seed:v2
+
 # 2. Start dev server
 pnpm dev
 ```
@@ -73,3 +76,10 @@ This works in all browsers without installing extra packages.
 If you want server-side PDF generation later, install `pdfkit` or `puppeteer`
 and add a `/api/reports/:id/download` endpoint that streams a PDF buffer.
 
+# Di terminal client folder
+cd C:\Users\JORDY\OneDrive\Documents\GitHub\VISIATTEND\client
+npm run dev:frontend
+
+# backend
+cd C:\Users\JORDY\OneDrive\Documents\GitHub\VISIATTEND\server
+npm run dev:api

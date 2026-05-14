@@ -1,3 +1,4 @@
+// client/components/charts/AttendanceTrendChart.tsx
 import { useState, useEffect } from "react";
 import {
   LineChart,

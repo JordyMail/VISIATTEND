@@ -1,3 +1,4 @@
+// server/db/repositories/UserRepository.ts
 import { getConnection, sql } from '../config';
 import { Event } from '../../../shared/types.ts';
 

@@ -1,3 +1,4 @@
+// server/db/repositories/SessionRepository.ts
 import { getConnection, sql } from '../config';
 
 export interface Session {
@@ -10,6 +11,7 @@ export interface Session {
 }
 
 export class SessionRepository {
+
     async create(session: Partial<Session>): Promise<Session> {
         const pool = await getConnection();
         const result = await pool
@@ -18,7 +20,7 @@ export class SessionRepository {
             .input('access_token', sql.NVarChar, session.accessToken)
             .input('refresh_token', sql.NVarChar, session.refreshToken)
             .input('expires_at', sql.DateTime, session.expiresAt)
-            .input('ip_address', sql.NVarChar, session.ipAddress)
+            .input('last_activity', sql.DateTime, session.lastActivity)
             .query(`
                 INSERT INTO sessions (user_id, access_token, refresh_token, expires_at, ip_address)
                 OUTPUT INSERTED.*

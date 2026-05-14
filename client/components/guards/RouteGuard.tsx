@@ -8,10 +8,6 @@ interface Props {
   requiredRoles?: AppRole[];
 }
 
-/**
- * Wraps a route: redirects to /login if not authenticated,
- * redirects to /unauthorized if role doesn't match.
- */
 export function RouteGuard({ children, requiredRoles }: Props) {
   const location = useLocation();
   const session = getSession();

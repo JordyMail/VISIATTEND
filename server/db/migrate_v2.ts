@@ -2,6 +2,7 @@
 // Run: npx tsx server/db/migrate_v2.ts
 import { getConnection, sql } from "./config.js";
 
+
 async function migrateV2() {
   console.log("🔄  VISIATTEND V2 Migration starting...");
   const pool = await getConnection();

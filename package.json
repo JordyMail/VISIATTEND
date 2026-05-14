@@ -18,12 +18,15 @@
     "start": "node dist/server/node-build.mjs",
     "db:migrate": "tsx server/db/migrate.ts",
     "db:seed": "tsx server/db/seed.ts",
+    "db:migrate:v2": "tsx server/db/migrate_v2.ts",
+    "db:seed:v2": "tsx server/db/seed_v2.ts",
     "db:setup": "npm run db:migrate && npm run db:seed",
     "test": "vitest --run",
     "format.fix": "prettier --write .",
     "typecheck": "tsc",
     "dev:server": "tsx server/node-build.ts",
-    "dev:api": "tsx server/index.ts",
+    "dev:api": "tsx server/server.ts",
+    "dev:server": "tsx server/server.ts",
     "dev:frontend": "vite"
   },
   "dependencies": {
