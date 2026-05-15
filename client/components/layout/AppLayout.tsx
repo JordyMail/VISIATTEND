@@ -8,7 +8,7 @@ import {
   UserCircle, CheckSquare, BookOpen, Bell, Menu, X,
 } from "lucide-react";
 import { getSession, clearSession } from "@/lib/auth";
-import { authApi } from "@/services/api";
+import { authApi } from "@/services/api"; 
 import type { AppRole } from "@/lib/auth";
 
 type NavItem = {
