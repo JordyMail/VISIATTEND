@@ -21,13 +21,13 @@
     "db:migrate:v2": "tsx server/db/migrate_v2.ts",
     "db:seed:v2": "tsx server/db/seed_v2.ts",
     "db:setup": "npm run db:migrate && npm run db:seed",
+    "db:test": "tsx server/db/test.ts",
     "test": "vitest --run",
     "format.fix": "prettier --write .",
     "typecheck": "tsc",
-    "dev:server": "tsx server/node-build.ts",
-    "dev:api": "tsx server/server.ts",
     "dev:server": "tsx server/server.ts",
-    "dev:frontend": "vite"
+    "dev:api": "tsx server/server.ts",
+    "dev:frontend": "vite --port 5173"
   },
   "dependencies": {
     "@types/crypto-js": "^4.2.2",
@@ -89,7 +89,9 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "concurrently": "^9.2.1",
     "cors": "^2.8.5",
+    "cross-env": "^10.1.0",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.38.0",

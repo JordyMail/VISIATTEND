@@ -83,3 +83,6 @@ npm run dev:frontend
 # backend
 cd C:\Users\JORDY\OneDrive\Documents\GitHub\VISIATTEND\server
 npm run dev:api
+
+
+

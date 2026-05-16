@@ -2506,13 +2506,16 @@ export function createServer() {
   app.get("/api/demo", handleDemo);
 
   // 404 for unknown API routes
-  app.use((req, res, next) => {
-    if (req.path.startsWith("/api/"))
-      return res
-        .status(404)
-        .json({ error: `${req.method} ${req.path} not found` });
-    next();
-  });
+app.use((req: any, res: any, next: any) => {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ 
+      error: `${req.method} ${req.path} not found` 
+    });
+  }
+  // Non-API routes di development: biarkan lewat
+  // (Vite dev server yang handle, bukan Express)
+  next();
+});
 
   return app;
 }
