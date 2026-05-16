@@ -355,7 +355,7 @@ export default function Members() {
                 <Select value={form.division} onValueChange={(v) => setForm({ ...form, division: v })}>
                   <SelectTrigger><SelectValue placeholder="Pilih divisi" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Tidak ada divisi</SelectItem>
+                    <SelectItem value="unassigned">Tidak ada divisi</SelectItem>
                     {divisions.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
                   </SelectContent>
                 </Select>

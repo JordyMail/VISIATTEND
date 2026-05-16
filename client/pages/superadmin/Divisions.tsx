@@ -164,7 +164,7 @@ export default function SuperAdminDivisions() {
               <Select value={form.leaderId} onValueChange={(v) => setForm({ ...form, leaderId: v })}>
                 <SelectTrigger><SelectValue placeholder="Pilih kepala divisi (opsional)" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Belum ditentukan</SelectItem>
+                  <SelectItem value="unassigned">Belum ditentukan</SelectItem>
                   {users.map((u) => (
                     <SelectItem key={u.id} value={u.id.toString()}>
                       {u.full_name}{u.jabatan ? ` (${u.jabatan.replace(/_/g," ")})` : ""}
