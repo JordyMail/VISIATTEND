@@ -367,6 +367,30 @@ export default function Attendance() {
         </div>
       </div>
 
+            {/* Summary Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground mb-1">Total Records</p>
+          <p className="text-2xl font-bold">{totalRecords}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground mb-1">Present</p>
+          <p className="text-2xl font-bold text-status-success">{presentCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground mb-1">Late</p>
+          <p className="text-2xl font-bold text-status-warning">{lateCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground mb-1">Excused/Sick</p>
+          <p className="text-2xl font-bold text-accent">{excusedSickCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground mb-1">Absent</p>
+          <p className="text-2xl font-bold text-status-error">{absentCount}</p>
+        </Card>
+      </div>
+
       {/* Filters */}
       <Card className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -492,29 +516,7 @@ export default function Attendance() {
         </div>
       </Card>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground mb-1">Total Records</p>
-          <p className="text-2xl font-bold">{totalRecords}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground mb-1">Present</p>
-          <p className="text-2xl font-bold text-status-success">{presentCount}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground mb-1">Late</p>
-          <p className="text-2xl font-bold text-status-warning">{lateCount}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground mb-1">Excused/Sick</p>
-          <p className="text-2xl font-bold text-accent">{excusedSickCount}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground mb-1">Absent</p>
-          <p className="text-2xl font-bold text-status-error">{absentCount}</p>
-        </Card>
-      </div>
+
 
       {/* Form Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
