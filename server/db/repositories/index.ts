@@ -1,3 +1,4 @@
+// server/db/repositories/ActivityLogRepository.ts
 import { getConnection, sql } from '../config';
 
 export interface ActivityLog {

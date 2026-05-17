@@ -1,3 +1,4 @@
+// server/db/test.ts
 // test koneksi database
 // jalankan test dengan perintah pnpm run db:test
 import { getConnection } from './config.js';

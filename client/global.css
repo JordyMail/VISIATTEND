@@ -1,7 +1,6 @@
 /* client/Global Styles */
 
-/** @import must precede all other statements */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap");
+/** No external font imports needed - using system fonts */
 
 @tailwind base;
 @tailwind components;
@@ -115,6 +114,8 @@
 
   body {
     @apply bg-background text-foreground;
+    /* System font stack terbaik - modern, bersih, dan cepat */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
   }
 
   :where(p, span, li, h1, h2, h3, h4, h5, h6, a, button, label, td, th) {
@@ -126,5 +127,6 @@
   code {
     overflow-x: auto;
     white-space: pre;
+    font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
   }
 }

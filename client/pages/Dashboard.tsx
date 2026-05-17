@@ -1,3 +1,4 @@
+// client/pages/Dashboard.tsx
 import { useState, useEffect } from "react";
 import { Users, BookOpen, CalendarCheck, TrendingUp } from "lucide-react";
 import { StatCard } from "@/components/charts/StatCard";

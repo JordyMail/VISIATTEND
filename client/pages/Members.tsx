@@ -1,540 +1,435 @@
+// client/pages/Members.tsx
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit2, Trash2, Eye } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, Eye, EyeOff, RotateCcw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { userApi } from "@/services/api";
+import { userApi, divisionApi } from "@/services/api";
+import { getSessionUser, isRole } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
 
 interface User {
-  id: number;
-  full_name: string;
-  member_id: string;
-  email: string;
-  role: 'admin' | 'preacher' | 'member' | 'staff';
-  phone_number?: string;
-  is_active: boolean;
-  created_at: string;
+  id: number; full_name: string; member_id: string; email: string;
+  role: "super_admin" | "admin" | "user"; jabatan?: string; division?: string;
+  phone_number?: string; is_active: boolean; created_at: string; last_login?: string;
 }
+interface Division { id: number; name: string; }
+
+const JABATAN_OPTIONS = [
+  { value: "preacher",      label: "Preacher / Pembina" },
+  { value: "ketua",         label: "Ketua" },
+  { value: "wakil_ketua",   label: "Wakil Ketua" },
+  { value: "kepala_divisi", label: "Kepala Divisi" },
+  { value: "member_divisi", label: "Member Divisi" },
+  { value: "peserta",       label: "Peserta" },
+];
+
+const ROLE_COLOR: Record<string, string> = {
+  super_admin: "bg-purple-100 text-purple-700 border-purple-200",
+  admin:       "bg-blue-100 text-blue-700 border-blue-200",
+  user:        "bg-green-100 text-green-700 border-green-200",
+};
+
+const STATUS_COLOR = {
+  active:   "bg-green-100 text-green-700 border-green-200",
+  inactive: "bg-red-100 text-red-700 border-red-200",
+};
+
+const defaultForm = {
+  fullName: "", memberId: "", email: "", password: "",
+  role: "user" as "super_admin" | "admin" | "user",
+  jabatan: "peserta", division: "", phoneNumber: "",
+};
 
 export default function Members() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterRole, setFilterRole] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const me       = getSessionUser();
+  const isSA     = isRole("super_admin");
+  const [users, setUsers]       = useState<User[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [search, setSearch]     = useState("");
+  const [filterRole, setFilterRole]       = useState("all");
+  const [filterJabatan, setFilterJabatan] = useState("all");
+  const [filterDivision, setFilterDivision] = useState("all");
+  const [filterStatus, setFilterStatus]   = useState("all");
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editing, setEditing]       = useState<User | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [formData, setFormData] = useState({
-    fullName: "",
-    memberId: "",
-    email: "",
-    password: "",
-    role: "member" as User["role"],
-    phoneNumber: "",
-  });
+  const [form, setForm]             = useState(defaultForm);
+  const [newPassword, setNewPassword] = useState("");
+  const [showPw, setShowPw]         = useState(false);
 
   useEffect(() => {
-    fetchUsers();
+    divisionApi.getAll().then((r) => setDivisions(r.data.data)).catch(() => {});
+    load();
   }, []);
 
-  const fetchUsers = async () => {
+  const load = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await userApi.getAll();
-      setUsers(response.data.data);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load members",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+      const r = await userApi.getAll();
+      setUsers(r.data.data);
+    } catch { toast({ title: "Error", description: "Gagal memuat anggota", variant: "destructive" }); }
+    finally { setLoading(false); }
   };
 
-  const filteredUsers = users.filter((user) => {
-    const matchSearch =
-      user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.member_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchRole = filterRole === "all" || user.role === filterRole;
-    const matchStatus =
-      filterStatus === "all" ||
-      (filterStatus === "active" && user.is_active) ||
-      (filterStatus === "inactive" && !user.is_active);
-
-    return matchSearch && matchRole && matchStatus;
+  const filtered = users.filter((u) => {
+    const matchSearch   = !search || [u.full_name, u.member_id, u.email, u.division].some((f) => f?.toLowerCase().includes(search.toLowerCase()));
+    const matchRole     = filterRole     === "all" || u.role     === filterRole;
+    const matchJabatan  = filterJabatan  === "all" || u.jabatan  === filterJabatan;
+    const matchDivision = filterDivision === "all" || u.division === filterDivision;
+    const matchStatus   = filterStatus   === "all" || (filterStatus === "active" ? u.is_active : !u.is_active);
+    return matchSearch && matchRole && matchJabatan && matchDivision && matchStatus;
   });
 
-  const handleAddUser = async () => {
-    if (!formData.fullName || !formData.memberId || !formData.email || !formData.password) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill all required fields",
-        variant: "destructive",
-      });
-      return;
-    }
+  const openCreate = () => { setEditing(null); setForm(defaultForm); setShowPw(false); setDialogOpen(true); };
+  const openEdit   = (u: User) => {
+    setEditing(u);
+    setForm({ fullName: u.full_name, memberId: u.member_id, email: u.email, password: "",
+      role: u.role, jabatan: u.jabatan || "peserta", division: u.division || "", phoneNumber: u.phone_number || "" });
+    setDialogOpen(true);
+  };
 
+  const handleSave = async () => {
+    if (!form.fullName.trim() || !form.email.trim())
+      return toast({ title: "Validasi", description: "Nama dan email wajib diisi", variant: "destructive" });
+    if (!editing && (!form.password || form.password.length < 8))
+      return toast({ title: "Validasi", description: "Password baru minimal 8 karakter", variant: "destructive" });
+
+    setSaving(true);
     try {
-      await userApi.create({
-        fullName: formData.fullName,
-        memberId: formData.memberId,
-        email: formData.email,
-        password: formData.password,
-        role: formData.role,
-        phoneNumber: formData.phoneNumber,
-      });
-      
-      toast({
-        title: "Success",
-        description: "Member added successfully",
-      });
-      
-      setIsAddDialogOpen(false);
-      setFormData({
-        fullName: "",
-        memberId: "",
-        email: "",
-        password: "",
-        role: "member",
-        phoneNumber: "",
-      });
-      fetchUsers();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to add member",
-        variant: "destructive",
-      });
+      const payload = {
+        fullName: form.fullName, email: form.email, jabatan: form.jabatan,
+        division: form.division || undefined, phoneNumber: form.phoneNumber || undefined,
+        ...(isSA ? { role: form.role } : {}),
+        ...(!editing ? { memberId: form.memberId || undefined, password: form.password } : {}),
+      };
+      if (editing) await userApi.update(editing.id, payload);
+      else         await userApi.create(payload);
+      toast({ title: "Berhasil", description: editing ? "Anggota diperbarui" : "Anggota ditambahkan" });
+      setDialogOpen(false);
+      load();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.response?.data?.message || "Gagal menyimpan", variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
+  const handleToggle = async (u: User) => {
+    try {
+      await userApi.toggleStatus(u.id);
+      toast({ title: "Berhasil", description: `${u.full_name} ${u.is_active ? "dinonaktifkan" : "diaktifkan"}` });
+      load();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.response?.data?.message || "Gagal mengubah status", variant: "destructive" });
     }
   };
 
-  const handleEditUser = async () => {
+  const handleDelete = async () => {
     if (!selectedUser) return;
-
-    try {
-      await userApi.update(selectedUser.id, {
-        fullName: formData.fullName,
-        email: formData.email,
-        phoneNumber: formData.phoneNumber,
-        role: formData.role,
-      });
-      
-      toast({
-        title: "Success",
-        description: "Member updated successfully",
-      });
-      
-      setIsEditDialogOpen(false);
-      setSelectedUser(null);
-      fetchUsers();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update member",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleDeleteUser = async () => {
-    if (!selectedUser) return;
-
     try {
       await userApi.delete(selectedUser.id);
-      
-      toast({
-        title: "Success",
-        description: "Member deleted successfully",
-      });
-      
-      setIsDeleteDialogOpen(false);
-      setSelectedUser(null);
-      fetchUsers();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete member",
-        variant: "destructive",
-      });
+      toast({ title: "Berhasil", description: `${selectedUser.full_name} dihapus` });
+      setDeleteDialogOpen(false); setSelectedUser(null); load();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.response?.data?.message || "Gagal menghapus", variant: "destructive" });
     }
   };
 
-  const handleToggleStatus = async (user: User) => {
+  const handleResetPassword = async () => {
+    if (!selectedUser || !newPassword) return;
+    if (newPassword.length < 8)
+      return toast({ title: "Validasi", description: "Password minimal 8 karakter", variant: "destructive" });
+    setSaving(true);
     try {
-      await userApi.toggleStatus(user.id);
-      fetchUsers();
-      toast({
-        title: "Success",
-        description: `Member ${user.is_active ? 'deactivated' : 'activated'} successfully`,
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to toggle member status",
-        variant: "destructive",
-      });
-    }
+      await userApi.resetPassword(selectedUser.id, newPassword);
+      toast({ title: "Berhasil", description: `Password ${selectedUser.full_name} berhasil direset` });
+      setResetDialogOpen(false); setSelectedUser(null); setNewPassword("");
+    } catch (e: any) {
+      toast({ title: "Error", description: e.response?.data?.message || "Gagal reset password", variant: "destructive" });
+    } finally { setSaving(false); }
   };
 
-  const handleOpenEdit = (user: User) => {
-    setSelectedUser(user);
-    setFormData({
-      fullName: user.full_name,
-      memberId: user.member_id,
-      email: user.email,
-      password: "",
-      role: user.role,
-      phoneNumber: user.phone_number || "",
-    });
-    setIsEditDialogOpen(true);
-  };
-
-  const getRoleBadge = (role: User["role"]) => {
-    const variants: Record<User["role"], "default" | "secondary" | "outline"> = {
-      admin: "default",
-      preacher: "secondary",
-      member: "outline",
-      staff: "outline",
-    };
-    return <Badge variant={variants[role]}>{role}</Badge>;
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
-    );
-  }
+  const uniqueDivisions = Array.from(new Set(users.map((u) => u.division).filter(Boolean)));
 
   return (
-    <div className="p-6 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold">Members Management</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage church members, preachers, and staff accounts
-          </p>
+          <h1 className="text-2xl font-bold">Manajemen Anggota</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">Kelola akun anggota, admin, dan hak akses</p>
         </div>
-        <Button
-          className="gap-2 bg-primary hover:bg-primary/90 w-full md:w-auto"
-          onClick={() => {
-            setFormData({
-              fullName: "",
-              memberId: "",
-              email: "",
-              password: "",
-              role: "member",
-              phoneNumber: "",
-            });
-            setIsAddDialogOpen(true);
-          }}
-        >
-          <Plus className="w-4 h-4" />
-          Add New Member
-        </Button>
+        <Button onClick={openCreate} className="gap-2"><Plus className="w-4 h-4" /> Tambah Anggota</Button>
       </div>
 
       {/* Filters */}
       <Card className="p-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name, ID, or email..."
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="relative sm:col-span-2 lg:col-span-1">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
+            <Input className="pl-9" placeholder="Cari nama, ID, email..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <div className="flex gap-2 flex-col md:flex-row">
-            <Select value={filterRole} onValueChange={setFilterRole}>
-              <SelectTrigger className="w-full md:w-40">
-                <SelectValue placeholder="Filter by role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="preacher">Preacher</SelectItem>
-                <SelectItem value="member">Member</SelectItem>
-                <SelectItem value="staff">Staff</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-full md:w-40">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={filterRole} onValueChange={setFilterRole}>
+            <SelectTrigger><SelectValue placeholder="Semua role" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Role</SelectItem>
+              {isSA && <SelectItem value="admin">Admin</SelectItem>}
+              <SelectItem value="user">User</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterJabatan} onValueChange={setFilterJabatan}>
+            <SelectTrigger><SelectValue placeholder="Semua jabatan" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Jabatan</SelectItem>
+              {JABATAN_OPTIONS.map((j) => <SelectItem key={j.value} value={j.value}>{j.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterDivision} onValueChange={setFilterDivision}>
+            <SelectTrigger><SelectValue placeholder="Semua divisi" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Divisi</SelectItem>
+              {uniqueDivisions.map((d) => <SelectItem key={d} value={d!}>{d}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger><SelectValue placeholder="Semua status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Status</SelectItem>
+              <SelectItem value="active">Aktif</SelectItem>
+              <SelectItem value="inactive">Nonaktif</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
+        <p className="text-xs text-muted-foreground mt-2">{filtered.length} anggota ditemukan</p>
       </Card>
 
-      {/* Members Table */}
+      {/* Table */}
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Member ID</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.length > 0 ? (
-                filteredUsers.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.full_name}</TableCell>
-                    <TableCell className="text-sm">{user.member_id}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {user.email}
+        {loading ? (
+          <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nama</TableHead>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Jabatan</TableHead>
+                  <TableHead>Divisi</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length ? filtered.map((u) => (
+                  <TableRow key={u.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs font-bold text-primary">{u.full_name.charAt(0).toUpperCase()}</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{u.full_name}</p>
+                          <p className="text-xs text-muted-foreground">{u.email}</p>
+                        </div>
+                      </div>
                     </TableCell>
-                    <TableCell>{getRoleBadge(user.role)}</TableCell>
+                    <TableCell className="text-sm font-mono">{u.member_id}</TableCell>
                     <TableCell className="text-sm">
-                      {user.phone_number || "-"}
+                      {JABATAN_OPTIONS.find((j) => j.value === u.jabatan)?.label || u.jabatan || "-"}
+                    </TableCell>
+                    <TableCell className="text-sm">{u.division || "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={ROLE_COLOR[u.role]}>
+                        {u.role === "super_admin" ? "Super Admin" : u.role === "admin" ? "Admin" : "User"}
+                      </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={user.is_active ? "outline" : "secondary"}
-                        className={
-                          user.is_active
-                            ? "bg-status-success/20 text-status-success border-status-success/20"
-                            : "bg-status-error/20 text-status-error border-status-error/20"
-                        }
-                      >
-                        {user.is_active ? "Active" : "Inactive"}
+                      <Badge variant="outline" className={u.is_active ? STATUS_COLOR.active : STATUS_COLOR.inactive}>
+                        {u.is_active ? "Aktif" : "Nonaktif"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenEdit(user)}
-                        >
-                          <Edit2 className="w-4 h-4" />
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => openEdit(u)}>
+                          <Edit2 className="w-3.5 h-3.5" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleToggleStatus(user)}
-                        >
-                          <Eye className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title={u.is_active ? "Nonaktifkan" : "Aktifkan"}
+                          onClick={() => handleToggle(u)} disabled={u.id === me?.id}>
+                          {u.is_active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => {
-                            setSelectedUser(user);
-                            setIsDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Reset Password"
+                          onClick={() => { setSelectedUser(u); setNewPassword(""); setResetDialogOpen(true); }}>
+                          <RotateCcw className="w-3.5 h-3.5" />
                         </Button>
+                        {isSA && u.id !== me?.id && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Hapus"
+                            onClick={() => { setSelectedUser(u); setDeleteDialogOpen(true); }}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No members found matching your filters
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                )) : (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
+                      Tidak ada anggota ditemukan
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </Card>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={isAddDialogOpen || isEditDialogOpen} onOpenChange={(open) => {
-        if (!open) {
-          setIsAddDialogOpen(false);
-          setIsEditDialogOpen(false);
-          setSelectedUser(null);
-        }
-      }}>
-        <DialogContent>
+      {/* Create/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {isEditDialogOpen ? "Edit Member" : "Add New Member"}
-            </DialogTitle>
+            <DialogTitle>{editing ? "Edit Anggota" : "Tambah Anggota Baru"}</DialogTitle>
             <DialogDescription>
-              {isEditDialogOpen
-                ? "Update the member information below"
-                : "Fill in the details to create a new member"}
+              {editing ? "Perbarui informasi anggota" : "Isi detail untuk membuat akun baru"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="fullName">Full Name *</Label>
-              <Input
-                id="fullName"
-                value={formData.fullName}
-                onChange={(e) =>
-                  setFormData({ ...formData, fullName: e.target.value })
-                }
-                placeholder="Enter full name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="memberId">Member ID *</Label>
-              <Input
-                id="memberId"
-                value={formData.memberId}
-                onChange={(e) =>
-                  setFormData({ ...formData, memberId: e.target.value })
-                }
-                placeholder="Enter member ID"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
-                }
-                placeholder="Enter email address"
-              />
-            </div>
-            {!isEditDialogOpen && (
-              <div className="space-y-2">
-                <Label htmlFor="password">Password *</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
-                  placeholder="Enter password"
-                />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Label className="mb-1.5 block">Nama Lengkap *</Label>
+                <Input placeholder="Nama lengkap..." value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
               </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <Select value={formData.role} onValueChange={(value) =>
-                setFormData({ ...formData, role: value as User["role"] })
-              }>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="preacher">Preacher</SelectItem>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="staff">Staff</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
-              <Input
-                id="phoneNumber"
-                value={formData.phoneNumber}
-                onChange={(e) =>
-                  setFormData({ ...formData, phoneNumber: e.target.value })
-                }
-                placeholder="Enter phone number"
-              />
+              <div>
+                <Label className="mb-1.5 block">Member ID</Label>
+                <Input placeholder="Auto-generate jika kosong" value={form.memberId}
+                  onChange={(e) => setForm({ ...form, memberId: e.target.value })} disabled={!!editing} />
+              </div>
+              <div>
+                <Label className="mb-1.5 block">No. HP</Label>
+                <Input placeholder="08xxxxxxxxxx" value={form.phoneNumber} onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })} />
+              </div>
+              <div className="col-span-2">
+                <Label className="mb-1.5 block">Email *</Label>
+                <Input type="email" placeholder="email@domain.com" value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={!!editing} />
+                {editing && <p className="text-xs text-muted-foreground mt-1">Email tidak dapat diubah</p>}
+              </div>
+              {!editing && (
+                <div className="col-span-2">
+                  <Label className="mb-1.5 block">Password *</Label>
+                  <Input type="password" placeholder="Minimal 8 karakter" value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })} />
+                </div>
+              )}
+              <div>
+                <Label className="mb-1.5 block">Jabatan</Label>
+                <Select value={form.jabatan} onValueChange={(v) => setForm({ ...form, jabatan: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {JABATAN_OPTIONS.map((j) => <SelectItem key={j.value} value={j.value}>{j.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="mb-1.5 block">Divisi</Label>
+                <Select value={form.division} onValueChange={(v) => setForm({ ...form, division: v })}>
+                  <SelectTrigger><SelectValue placeholder="Pilih divisi" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Tidak ada divisi</SelectItem>
+                    {divisions.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {isSA && (
+                <div className="col-span-2">
+                  <Label className="mb-1.5 block">Role Sistem</Label>
+                  <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as any })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">User (Member)</SelectItem>
+                      <SelectItem value="admin">Admin (Operasional)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">Role sistem menentukan hak akses dashboard</p>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsAddDialogOpen(false);
-                setIsEditDialogOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="bg-primary hover:bg-primary/90"
-              onClick={isEditDialogOpen ? handleEditUser : handleAddUser}
-            >
-              {isEditDialogOpen ? "Update Member" : "Add Member"}
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
+            <Button onClick={handleSave} disabled={saving} className="gap-2">
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {editing ? "Simpan" : "Tambah Anggota"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      {/* Reset Password Dialog */}
+      <Dialog open={resetDialogOpen} onOpenChange={(o) => { if (!o) { setResetDialogOpen(false); setSelectedUser(null); } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>Reset password untuk {selectedUser?.full_name}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="mb-1.5 block">Password Baru *</Label>
+              <div className="relative">
+                <Input type={showPw ? "text" : "password"} placeholder="Minimal 8 karakter"
+                  value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                <button type="button" onClick={() => setShowPw(!showPw)}
+                  className="absolute right-3 top-2.5 text-xs text-muted-foreground hover:text-foreground">
+                  {showPw ? "Sembunyikan" : "Tampilkan"}
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Sesi aktif pengguna akan dihapus setelah password direset.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setResetDialogOpen(false); setSelectedUser(null); }}>Batal</Button>
+            <Button onClick={handleResetPassword} disabled={saving || !newPassword} className="gap-2">
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />} Reset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Member</AlertDialogTitle>
+            <AlertDialogTitle>Hapus Anggota</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedUser?.full_name}? This action cannot be undone.
+              Hapus <strong>{selectedUser?.full_name}</strong>? Seluruh data kehadiran akan ikut terhapus. Tindakan ini tidak dapat dibatalkan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteUser}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Hapus Permanen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

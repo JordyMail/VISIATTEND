@@ -1,3 +1,4 @@
+// client/components/charts/StatusDistributionChart.tsx
 import { useState, useEffect } from "react";
 import {
   PieChart,
@@ -15,11 +16,17 @@ interface StatusDistributionChartProps {
   eventId?: number;
 }
 
+interface ChartEntry {
+  name: string;
+  value: number;
+  color: string;
+}
+
 export function StatusDistributionChart({
   userId,
   eventId,
 }: StatusDistributionChartProps) {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<ChartEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,27 +37,27 @@ export function StatusDistributionChart({
     try {
       setLoading(true);
       const response = await attendanceApi.getAll({ userId, eventId });
-      const attendances = response.data.data;
-      
+      const attendances: any[] = response.data.data || [];
+
       const stats = {
-        present: attendances.filter((a: any) => a.status === 'present').length,
-        late: attendances.filter((a: any) => a.status === 'late').length,
-        excused: attendances.filter((a: any) => a.status === 'excused').length,
-        sick: attendances.filter((a: any) => a.status === 'sick').length,
-        absent: attendances.filter((a: any) => a.status === 'absent').length,
+        present: attendances.filter((a) => a.status === "present").length,
+        late: attendances.filter((a) => a.status === "late").length,
+        excused: attendances.filter((a) => a.status === "excused").length,
+        sick: attendances.filter((a) => a.status === "sick").length,
+        absent: attendances.filter((a) => a.status === "absent").length,
       };
-      
-      const chartData = [
+
+      const chartData: ChartEntry[] = [
         { name: "Present", value: stats.present, color: "hsl(142 71% 45%)" },
         { name: "Late", value: stats.late, color: "hsl(38 92% 50%)" },
         { name: "Excused", value: stats.excused, color: "hsl(216 98% 52%)" },
         { name: "Sick", value: stats.sick, color: "hsl(54 100% 50%)" },
         { name: "Absent", value: stats.absent, color: "hsl(0 84% 60%)" },
       ].filter((item) => item.value > 0);
-      
+
       setData(chartData);
     } catch (error) {
-      console.error('Error fetching status distribution:', error);
+      console.error("Error fetching status distribution:", error);
     } finally {
       setLoading(false);
     }
@@ -69,6 +76,19 @@ export function StatusDistributionChart({
     );
   }
 
+  if (data.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Attendance Status Distribution</CardTitle>
+        </CardHeader>
+        <CardContent className="h-[300px] flex items-center justify-center">
+          <p className="text-muted-foreground text-sm">No data available</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -82,7 +102,6 @@ export function StatusDistributionChart({
               cx="50%"
               cy="50%"
               labelLine={false}
-              label={({ name, value }) => `${name}: ${value}`}
               outerRadius={80}
               fill="#8884d8"
               dataKey="value"
@@ -98,7 +117,7 @@ export function StatusDistributionChart({
                 borderRadius: "8px",
               }}
               labelStyle={{ color: "hsl(var(--foreground))" }}
-              formatter={(value) => `${value} members`}
+              formatter={(value: number) => `${value} members`}
             />
             <Legend />
           </PieChart>
