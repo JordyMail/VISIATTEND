@@ -82,8 +82,26 @@ export const attendanceApi = {
     getTodayStats: () => api.get('/attendance/stats/today'),
     getTrend: (days: number, eventId?: number) => 
         api.get('/attendance/trend', { params: { days, eventId } }),
-    getLeaderboard: (eventId: number, period: string) => 
+    getLeaderboard: (eventId: number | undefined, period: string) => 
         api.get('/attendance/leaderboard', { params: { eventId, period } }),
+};
+
+export const faceAiApi = {
+    previewDetection: (data: { imageBase64: string }) =>
+        api.post('/face-ai/preview', data),
+    captureRegistration: (data: { imageBase64: string; sessionId?: string | null }) =>
+        api.post('/face-ai/registration/capture', data),
+    finalizeRegistration: (data: { sessionId: string; profile: { name: string; email: string; category: string; phone: string; birthday: string } }) =>
+        api.post('/face-ai/registration/finalize', data),
+    verifyAttendance: (data: { imageBase64: string; threshold?: number }) =>
+        api.post('/face-ai/attendance/verify', data),
+};
+
+export const userDashboardApi = {
+    getProfile: (params: { email?: string; name?: string }) =>
+        api.get('/user-dashboard/profile', { params }),
+    awardQuestionPoints: (data: { email?: string; name?: string; reward: number }) =>
+        api.post('/user-dashboard/question/reward', data),
 };
 
 // Dashboard API

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Download, Pencil, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowRight, Plus, Search, Download, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -355,6 +356,16 @@ export default function Attendance() {
           </p>
         </div>
         <div className="flex gap-2 flex-col md:flex-row w-full md:w-auto">
+          <Button
+            asChild
+            variant="outline"
+            className="gap-2 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary"
+          >
+            <Link to="/attendance/home">
+              Home Attendance
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </Button>
           <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
             <Download className="w-4 h-4" />
             Export CSV

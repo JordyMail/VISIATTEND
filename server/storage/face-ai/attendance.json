@@ -1,0 +1,38 @@
+[
+  {
+    "userId": "DAMDY-154078",
+    "name": "damdy ",
+    "confidence": 0.7677140235900879,
+    "capturedAt": "2026-05-15T06:56:16.385Z"
+  },
+  {
+    "userId": "DAMDY-154078",
+    "name": "damdy ",
+    "confidence": 0.4722563326358795,
+    "capturedAt": "2026-05-15T08:37:40.709Z"
+  },
+  {
+    "userId": "DAMDY-154078",
+    "name": "damdy ",
+    "confidence": 0.7433159947395325,
+    "capturedAt": "2026-05-15T08:40:29.120Z"
+  },
+  {
+    "userId": "DAMDY-154078",
+    "name": "damdy ",
+    "confidence": 0.6950602531433105,
+    "capturedAt": "2026-05-15T08:43:58.741Z"
+  },
+  {
+    "userId": "JORDY-763497",
+    "name": "jordy",
+    "confidence": 0.913115918636322,
+    "capturedAt": "2026-05-17T11:03:10.461Z"
+  },
+  {
+    "userId": "JORDY-763497",
+    "name": "jordy",
+    "confidence": 0.7938147187232971,
+    "capturedAt": "2026-05-17T11:04:44.444Z"
+  }
+]

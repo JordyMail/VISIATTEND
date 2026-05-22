@@ -1,0 +1,210 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Activity,
+  ArrowRight,
+  CalendarDays,
+  ShieldCheck,
+  Sparkles,
+  UserPlus,
+  Users,
+  Video,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { attendanceApi, dashboardApi, eventApi } from "@/services/api";
+
+interface DashboardOverview {
+  totalMembers: number;
+  activeEvents: number;
+  checkedIn: number;
+  pending: number;
+  absent: number;
+  attendanceRate: number;
+}
+
+const pickNumber = (...values: unknown[]) => {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
+};
+
+const normalizeArray = <T,>(value: unknown): T[] => {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (Array.isArray((value as { items?: unknown[] } | null | undefined)?.items)) {
+    return ((value as { items?: unknown[] }).items ?? []) as T[];
+  }
+
+  if (Array.isArray((value as { rows?: unknown[] } | null | undefined)?.rows)) {
+    return ((value as { rows?: unknown[] }).rows ?? []) as T[];
+  }
+
+  return [];
+};
+
+const extractPayload = <T,>(result: PromiseSettledResult<any>) => {
+  if (result.status !== "fulfilled") {
+    return undefined as T | undefined;
+  }
+
+  return (result.value?.data?.data ?? result.value?.data) as T;
+};
+
+export default function AttendanceDashboard() {
+  const [overview, setOverview] = useState<DashboardOverview>({
+    totalMembers: 0,
+    activeEvents: 0,
+    checkedIn: 0,
+    pending: 0,
+    absent: 0,
+    attendanceRate: 0,
+  });
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      const [eventsResult, dashboardResult, todayResult] = await Promise.allSettled([
+        eventApi.getAll({ isActive: true }),
+        dashboardApi.getStats(),
+        attendanceApi.getTodayStats(),
+      ]);
+
+      const events = normalizeArray<any>(extractPayload<any>(eventsResult));
+      const dashboardPayload = extractPayload<any>(dashboardResult) ?? {};
+      const todayPayload = extractPayload<any>(todayResult) ?? {};
+      const dashboardToday = dashboardPayload?.todayAttendance ?? {};
+
+      const totalMembers = pickNumber(dashboardPayload?.totalMembers);
+      const activeEvents = pickNumber(dashboardPayload?.activeEvents, events.length);
+      const checkedIn = pickNumber(
+        dashboardToday?.checkedIn,
+        todayPayload?.checkedIn,
+        todayPayload?.present,
+        todayPayload?.present_count,
+      );
+      const absent = pickNumber(
+        dashboardToday?.absent,
+        todayPayload?.absent,
+        todayPayload?.absent_count,
+      );
+      const pending = pickNumber(
+        dashboardToday?.pending,
+        todayPayload?.pending,
+        Math.max(totalMembers - checkedIn - absent, 0),
+      );
+      const attendanceRate = pickNumber(
+        dashboardPayload?.attendanceRate,
+        totalMembers > 0 ? (checkedIn / totalMembers) * 100 : 0,
+      );
+
+      setOverview({
+        totalMembers,
+        activeEvents,
+        checkedIn,
+        pending,
+        absent,
+        attendanceRate,
+      });
+    };
+
+    fetchDashboard();
+  }, []);
+
+  const stats = [
+    { label: "Member aktif", value: overview.totalMembers, icon: Users },
+    { label: "Event aktif", value: overview.activeEvents, icon: CalendarDays },
+    { label: "Sudah check-in", value: overview.checkedIn, icon: Activity },
+    {
+      label: "Attendance rate",
+      value: `${overview.attendanceRate.toFixed(1)}%`,
+      icon: Sparkles,
+    },
+  ];
+
+  return (
+    <div className="min-h-full bg-[radial-gradient(circle_at_top_left,_rgba(124,77,255,0.18),_transparent_22%),radial-gradient(circle_at_bottom_right,_rgba(96,165,250,0.20),_transparent_26%),linear-gradient(180deg,_rgba(248,250,252,0.98),_rgba(241,245,249,0.98))] p-4 md:p-8">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        <section className="relative overflow-hidden rounded-[32px] border border-white/60 bg-gradient-to-r from-[#7c4dff] via-[#5968ff] to-[#5da2ff] px-6 py-8 text-white shadow-[0_28px_90px_-48px_rgba(79,70,229,0.8)] md:px-8">
+          <div className="absolute -left-10 top-8 h-36 w-36 rounded-full bg-white/10" />
+          <div className="absolute -right-8 top-0 h-48 w-48 rounded-full bg-white/10" />
+          <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <div className="space-y-5">
+              <Badge className="w-fit border-0 bg-white/15 px-3 py-1 text-white backdrop-blur-sm">
+                <ShieldCheck className="mr-1 h-3.5 w-3.5" />
+                Attendance control center
+              </Badge>
+              <div className="space-y-3">
+                <h1 className="text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
+                  Dashboard Attendance RESC
+                </h1>
+                <p className="max-w-2xl text-sm text-white/85 sm:text-base">
+                  Pilih aksi utama untuk mulai registrasi anggota baru atau langsung menjalankan attendance dari dashboard ini.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Button asChild size="lg" className="h-14 justify-between rounded-2xl bg-white px-5 text-primary hover:bg-white/90">
+                  <Link to="/attendance/registration">
+                    <span className="flex items-center gap-2">
+                      <UserPlus className="h-5 w-5" />
+                      Start Registrasi
+                    </span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="h-14 justify-between rounded-2xl border-white/30 bg-white/10 px-5 text-white hover:bg-white/15 hover:text-white"
+                >
+                  <Link to="/attendance/face-attendance">
+                    <span className="flex items-center gap-2">
+                      <Video className="h-5 w-5" />
+                      Start Attendance
+                    </span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+
+            <Card className="rounded-[28px] border border-white/25 bg-white/12 text-white shadow-none backdrop-blur-md">
+              <CardContent className="space-y-4 p-6">
+                <div>
+                  <p className="text-sm text-white/75">Status hari ini</p>
+                  <h2 className="mt-1 text-2xl font-semibold">Live Attendance Summary</h2>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {stats.map((stat) => {
+                    const Icon = stat.icon;
+
+                    return (
+                      <div key={stat.label} className="rounded-2xl bg-white/10 p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                          <span className="text-sm text-white/75">{stat.label}</span>
+                          <Icon className="h-4 w-4 text-white/85" />
+                        </div>
+                        <p className="text-2xl font-semibold">{stat.value}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="rounded-2xl bg-slate-950/15 p-4 text-sm text-white/85">
+                  Pending: {overview.pending} orang • Absent: {overview.absent} orang
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}

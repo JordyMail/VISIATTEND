@@ -2,34 +2,14 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard,
-  Users,
-  BookOpen,
   CheckSquare,
   Trophy,
-  FileText,
-  Settings,
   ChevronDown,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const navigation = [
-  {
-    name: "Dashboard",
-    href: "/",
-    icon: LayoutDashboard,
-  },
-  {
-    name: "Members",
-    href: "/members",
-    icon: Users,
-  },
-  {
-    name: "Events",
-    href: "/events",
-    icon: BookOpen,
-  },
   {
     name: "Attendance",
     href: "/attendance",
@@ -39,16 +19,6 @@ const navigation = [
     name: "Leaderboard",
     href: "/leaderboard",
     icon: Trophy,
-  },
-  {
-    name: "Reports",
-    href: "/reports",
-    icon: FileText,
-  },
-  {
-    name: "Settings",
-    href: "/settings",
-    icon: Settings,
   },
 ];
 

@@ -9,6 +9,8 @@ interface LayoutProps {
   userName?: string;
   userRole?: string;
   userAvatar?: string;
+  hideHeader?: boolean;
+  hideUserControls?: boolean;
 }
 
 export function Layout({
@@ -16,6 +18,8 @@ export function Layout({
   userName = "Admin User",
   userRole = "Administrator",
   userAvatar,
+  hideHeader = false,
+  hideUserControls = false,
 }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -42,12 +46,15 @@ export function Layout({
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Header */}
-        <HeaderNav
-          onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          userName={userName}
-          userRole={userRole}
-          userAvatar={userAvatar}
-        />
+        {!hideHeader && (
+          <HeaderNav
+            onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            userName={userName}
+            userRole={userRole}
+            userAvatar={userAvatar}
+            hideUserControls={hideUserControls}
+          />
+        )}
 
         {/* Page Content */}
         <main className="flex-1 overflow-auto">

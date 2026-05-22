@@ -24,7 +24,32 @@ dist-ssr
 *.sw?
 
 .config/
-!.env
-.env".env" 
-.env.*
+
+# Environment variables
 .env
+.env.local
+.env.*.local
+.env.*
+
+# Python & Virtual Environment
+face-ai/venv/
+venv/
+env/
+ENV/
+*.pyc
+*.pyo
+*.pyd
+.Python
+__pycache__/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+
+# Face AI specific
+face-ai/models/
+face-ai/output/
+face-ai/storage/
+face-ai/samples/
+face-ai/app/__pycache__/

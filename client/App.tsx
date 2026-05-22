@@ -12,6 +12,12 @@ import Dashboard from "./pages/Dashboard";
 import Members from "./pages/Members";
 import Events from "./pages/Events";
 import Attendance from "./pages/Attendance";
+import AttendanceDashboard from "./pages/AttendanceDashboard";
+import AttendanceHome from "./pages/AttendanceHome";
+import AttendanceRegistration from "./pages/AttendanceRegistration";
+import FaceRegistrationTraining from "./pages/FaceRegistrationTraining";
+import FaceAttendance from "./pages/FaceAttendance";
+import UserDashboard from "./pages/UserDashboard";
 import Leaderboard from "./pages/Leaderboard";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
@@ -74,12 +80,42 @@ const App = () => (
           } />
           <Route path="/attendance" element={
             <ProtectedRoute>
-              <Layout><Attendance /></Layout>
+              <Layout hideUserControls><AttendanceDashboard /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/attendance/manage" element={
+            <ProtectedRoute>
+              <Layout hideUserControls><Attendance /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/attendance/registration" element={
+            <ProtectedRoute>
+              <Layout hideUserControls><AttendanceRegistration /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/attendance/face-registration" element={
+            <ProtectedRoute>
+              <Layout hideUserControls><FaceRegistrationTraining /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/attendance/face-attendance" element={
+            <ProtectedRoute>
+              <Layout hideUserControls><FaceAttendance /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/user-dashboard" element={
+            <ProtectedRoute>
+              <Layout hideUserControls><UserDashboard /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/attendance/home" element={
+            <ProtectedRoute>
+              <Layout hideHeader><AttendanceHome /></Layout>
             </ProtectedRoute>
           } />
           <Route path="/leaderboard" element={
             <ProtectedRoute>
-              <Layout><Leaderboard /></Layout>
+              <Layout hideUserControls><Leaderboard /></Layout>
             </ProtectedRoute>
           } />
           <Route path="/reports" element={
