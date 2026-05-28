@@ -216,7 +216,7 @@ export default function App() {
             <Route
               path="/user-dashboard"
               element={
-                <RouteGuard requiredRoles={["super_admin", "admin", "user"]}>
+                <RouteGuard requiredRoles={["super_admin", "admin", "user", "attendance"]}>
                   <AppLayout role="user" />
                 </RouteGuard>
               }
