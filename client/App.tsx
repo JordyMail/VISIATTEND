@@ -1,4 +1,4 @@
-﻿import "./global.css";
+import "./global.css";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -45,6 +45,7 @@ import UserLeaderboard from "@/pages/user/Leaderboard";
 
 // Attendance & face flow pages
 import AttendanceDashboard from "./pages/AttendanceDashboard";
+import Leaderboard from "./pages/Leaderboard";
 import AttendanceHome from "./pages/AttendanceHome";
 import AttendanceRegistration from "./pages/AttendanceRegistration";
 import FaceRegistrationTraining from "./pages/FaceRegistrationTraining";
@@ -162,6 +163,26 @@ export default function App() {
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>
 
+            <Route
+              path="/attendance"
+              element={
+                <RouteGuard requiredRoles={["super_admin", "admin", "user", "attendance"]}>
+                  <Layout hideHeader>
+                    <FaceAttendance />
+                  </Layout>
+                </RouteGuard>
+              }
+            />
+            <Route
+              path="/leaderboard"
+              element={
+                <RouteGuard requiredRoles={["super_admin", "admin", "user", "attendance"]}>
+                  <Layout hideHeader>
+                    <Leaderboard />
+                  </Layout>
+                </RouteGuard>
+              }
+            />
             <Route
               path="/attendance/home"
               element={
