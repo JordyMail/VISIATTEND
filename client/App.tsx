@@ -158,7 +158,7 @@ export default function App() {
               element={
                 <RouteGuard requiredRoles={["super_admin", "admin", "user", "attendance"]}>
                   <Layout hideHeader>
-                    <FaceAttendance />
+                    <AttendanceDashboard />
                   </Layout>
                 </RouteGuard>
               }
