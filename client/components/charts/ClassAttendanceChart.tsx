@@ -1,3 +1,4 @@
+// client/components/charts/ClassAttendanceChart.tsx
 import { useState, useEffect } from "react";
 import {
   BarChart,
@@ -31,29 +32,34 @@ export function ClassAttendanceChart() {
     try {
       setLoading(true);
       const eventsRes = await eventApi.getAll({ isActive: true });
-      const events = eventsRes.data.data;
-      
-      const classData: ClassData[] = [];
-      
-      for (const event of events) {
-        const statsRes = await attendanceApi.getAll({ eventId: event.id });
-        const attendances = statsRes.data.data;
-        
-        const present = attendances.filter((a: any) => a.status === 'present' || a.status === 'late').length;
-        const absent = attendances.filter((a: any) => a.status === 'absent').length;
-        const excused = attendances.filter((a: any) => a.status === 'excused' || a.status === 'sick').length;
-        
-        classData.push({
-          name: event.event_code,
-          present,
-          absent,
-          excused,
-        });
-      }
-      
+      const events: any[] = eventsRes.data.data || [];
+
+      // Fetch attendance for all events in parallel
+      const classDataPromises = events.slice(0, 6).map(async (event) => {
+        try {
+          const statsRes = await attendanceApi.getAll({ eventId: event.id });
+          const attendances: any[] = statsRes.data.data || [];
+
+          const present = attendances.filter(
+            (a) => a.status === "present" || a.status === "late"
+          ).length;
+          const absent = attendances.filter(
+            (a) => a.status === "absent"
+          ).length;
+          const excused = attendances.filter(
+            (a) => a.status === "excused" || a.status === "sick"
+          ).length;
+
+          return { name: event.event_code, present, absent, excused };
+        } catch {
+          return { name: event.event_code, present: 0, absent: 0, excused: 0 };
+        }
+      });
+
+      const classData = await Promise.all(classDataPromises);
       setData(classData);
     } catch (error) {
-      console.error('Error fetching class data:', error);
+      console.error("Error fetching class data:", error);
     } finally {
       setLoading(false);
     }
@@ -72,6 +78,19 @@ export function ClassAttendanceChart() {
     );
   }
 
+  if (data.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Attendance by Event</CardTitle>
+        </CardHeader>
+        <CardContent className="h-[300px] flex items-center justify-center">
+          <p className="text-muted-foreground text-sm">No event data available</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -79,8 +98,14 @@ export function ClassAttendanceChart() {
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={data} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <BarChart
+            data={data}
+            margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="hsl(var(--border))"
+            />
             <XAxis
               dataKey="name"
               stroke="hsl(var(--muted-foreground))"
@@ -103,19 +128,19 @@ export function ClassAttendanceChart() {
               dataKey="present"
               fill="hsl(142 71% 45%)"
               name="Present"
-              radius={[8, 8, 0, 0]}
+              radius={[4, 4, 0, 0]}
             />
             <Bar
               dataKey="absent"
               fill="hsl(0 84% 60%)"
               name="Absent"
-              radius={[8, 8, 0, 0]}
+              radius={[4, 4, 0, 0]}
             />
             <Bar
               dataKey="excused"
               fill="hsl(216 98% 52%)"
               name="Excused"
-              radius={[8, 8, 0, 0]}
+              radius={[4, 4, 0, 0]}
             />
           </BarChart>
         </ResponsiveContainer>

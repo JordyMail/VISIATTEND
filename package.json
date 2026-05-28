@@ -11,7 +11,7 @@
     ]
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"pnpm run dev:api\" \"pnpm run dev:frontend\"",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "vite build --config vite.config.server.ts",
@@ -19,10 +19,15 @@
     "db:test": "tsx server/db/test.ts",
     "db:migrate": "tsx server/db/migrate.ts",
     "db:seed": "tsx server/db/seed.ts",
+    "db:migrate:v2": "tsx server/db/migrate_v2.ts",
+    "db:seed:v2": "tsx server/db/seed_v2.ts",
     "db:setup": "npm run db:migrate && npm run db:seed",
     "test": "vitest --run",
     "format.fix": "prettier --write .",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "dev:server": "tsx server/server.ts",
+    "dev:api": "tsx server/server.ts",
+    "dev:frontend": "vite --port 5173"
   },
   "dependencies": {
     "@types/crypto-js": "^4.2.2",
@@ -34,7 +39,7 @@
     "express": "^5.1.0",
     "js-cookie": "^3.0.5",
     "jsonwebtoken": "^9.0.3",
-    "mssql": "^11.0.1",
+    "mssql": "^12.3.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -84,7 +89,9 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "concurrently": "^9.2.1",
     "cors": "^2.8.5",
+    "cross-env": "^10.1.0",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.38.0",
@@ -115,3 +122,4 @@
   },
   "packageManager": "pnpm@10.14.0+sha512.ad27a79641b49c3e481a16a805baa71817a04bbe06a38d17e60e2eaee83f6a146c6a688125f5792e48dd5ba30e7da52a5cda4c3992b9ccf333f9ce223af84748"
 }
+

@@ -1,3 +1,4 @@
+// client/pages/Dashboard.tsx
 import { useState, useEffect } from "react";
 import { Users, BookOpen, CalendarCheck, TrendingUp } from "lucide-react";
 import { StatCard } from "@/components/charts/StatCard";
@@ -15,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import { dashboardApi, userApi, eventApi } from "@/services/api";
 
 interface DashboardStats {
@@ -88,7 +89,7 @@ export default function Dashboard() {
     }
   };
 
-  const containerVariants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
@@ -99,7 +100,7 @@ export default function Dashboard() {
     },
   };
 
-  const itemVariants = {
+  const itemVariants: Variants = {
     hidden: { y: 20, opacity: 0 },
     visible: {
       y: 0,

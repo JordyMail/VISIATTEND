@@ -1,3 +1,4 @@
+// server/db/seed.ts
 import { getConnection, sql } from './config.js';
 import bcrypt from 'bcrypt';
 

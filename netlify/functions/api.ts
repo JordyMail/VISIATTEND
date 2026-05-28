@@ -1,3 +1,4 @@
+// netlify/functions/api.ts
 import serverless from "serverless-http";
 
 import { createServer } from "../../server";

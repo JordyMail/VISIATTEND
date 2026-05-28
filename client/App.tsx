@@ -1,30 +1,59 @@
-// client/App.tsx
-import "./global.css";
-import { createRoot } from "react-dom/client";
+﻿import "./global.css";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { useEffect } from "react";
+import { RouteGuard } from "./components/guards/RouteGuard";
+import { getSession } from "@/lib/auth";
+
+// Public
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
+import ForgotPassword from "@/pages/ForgotPassword";
+
+// Shared layout
+import AppLayout from "@/components/layout/AppLayout";
 import { Layout } from "@/components/Layout";
-import ProtectedRoute from "@/components/ProtectedRoute";
-import Dashboard from "./pages/Dashboard";
-import Members from "./pages/Members";
-import Events from "./pages/Events";
-import Attendance from "./pages/Attendance";
+
+// Super Admin pages
+import SuperAdminDashboard from "@/pages/superadmin/Dashboard";
+import SystemSettings from "@/pages/superadmin/SystemSettings";
+import DivisionsPage from "@/pages/superadmin/Divisions";
+import AuditLogs from "@/pages/superadmin/AuditLogs";
+
+// Admin pages
+import AdminDashboard from "@/pages/admin/Dashboard";
+import Members from "@/pages/Members";
+import Events from "@/pages/Events";
+import Attendance from "@/pages/Attendance";
+import Reports from "@/pages/Reports";
+import Schedules from "@/pages/admin/Schedules";
+import Announcements from "@/pages/admin/Announcements";
+import QRManager from "@/pages/admin/QRManager";
+import AdminLeaderboard from "@/pages/admin/Leaderboard";
+import AdminSettings from "@/pages/Settings";
+
+// User pages
+import UserDashboard from "@/pages/user/Dashboard";
+import UserProfile from "@/pages/user/Profile";
+import UserAttendance from "@/pages/user/MyAttendance";
+import UserCheckin from "@/pages/user/CheckIn";
+import UserSchedules from "@/pages/user/Schedules";
+import UserAnnouncements from "@/pages/user/Announcements";
+import UserLeaderboard from "@/pages/user/Leaderboard";
+
+// Attendance & face flow pages
 import AttendanceDashboard from "./pages/AttendanceDashboard";
 import AttendanceHome from "./pages/AttendanceHome";
 import AttendanceRegistration from "./pages/AttendanceRegistration";
 import FaceRegistrationTraining from "./pages/FaceRegistrationTraining";
 import FaceAttendance from "./pages/FaceAttendance";
-import UserDashboard from "./pages/UserDashboard";
-import Leaderboard from "./pages/Leaderboard";
-import Reports from "./pages/Reports";
-import Settings from "./pages/Settings";
-import NotFound from "./pages/NotFound";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ForgotPassword from "./pages/ForgotPassword";
+import AttendanceUserDashboard from "./pages/UserDashboard";
+
+// Misc
+import Unauthorized from "@/pages/Unauthorized";
+import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,105 +64,159 @@ const queryClient = new QueryClient({
   },
 });
 
-// Komponen untuk auto scroll ke atas saat route berubah
+function RoleHome() {
+  const session = getSession();
+  if (!session) return <Navigate to="/login" replace />;
+  const { role } = session.user;
+  if (role === "super_admin") return <Navigate to="/superadmin/dashboard" replace />;
+  if (role === "admin") return <Navigate to="/admin/dashboard" replace />;
+  return <Navigate to="/user/dashboard" replace />;
+}
+
 const ScrollToTop = () => {
   const { pathname } = useLocation();
 
   useEffect(() => {
     window.scrollTo({
       top: 0,
-      behavior: "smooth" // Memberikan efek smooth scroll
+      behavior: "smooth",
     });
   }, [pathname]);
 
   return null;
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <BrowserRouter>
-        <ScrollToTop /> {/* Tambahkan komponen ini di sini */}
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          
-          {/* Protected Routes dengan Layout */}
-          <Route path="/" element={
-            <ProtectedRoute>
-              <Layout><Dashboard /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <BrowserRouter>
+          <ScrollToTop />
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/unauthorized" element={<Unauthorized />} />
+            <Route path="/" element={<RoleHome />} />
 
-          
-          <Route path="/members" element={
-            <ProtectedRoute>
-              <Layout><Members /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/events" element={
-            <ProtectedRoute>
-              <Layout><Events /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/attendance" element={
-            <ProtectedRoute>
-              <Layout hideUserControls><AttendanceDashboard /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/attendance/manage" element={
-            <ProtectedRoute>
-              <Layout hideUserControls><Attendance /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/attendance/registration" element={
-            <ProtectedRoute>
-              <Layout hideUserControls><AttendanceRegistration /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/attendance/face-registration" element={
-            <ProtectedRoute>
-              <Layout hideUserControls><FaceRegistrationTraining /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/attendance/face-attendance" element={
-            <ProtectedRoute>
-              <Layout hideUserControls><FaceAttendance /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/user-dashboard" element={
-            <ProtectedRoute>
-              <Layout hideUserControls><UserDashboard /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/attendance/home" element={
-            <ProtectedRoute>
-              <Layout hideHeader><AttendanceHome /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/leaderboard" element={
-            <ProtectedRoute>
-              <Layout hideUserControls><Leaderboard /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/reports" element={
-            <ProtectedRoute>
-              <Layout><Reports /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/settings" element={
-            <ProtectedRoute>
-              <Layout><Settings /></Layout>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+            <Route
+              path="/superadmin"
+              element={
+                <RouteGuard requiredRoles={["super_admin"]}>
+                  <AppLayout role="super_admin" />
+                </RouteGuard>
+              }
+            >
+              <Route path="dashboard" element={<SuperAdminDashboard />} />
+              <Route path="members" element={<Members />} />
+              <Route path="events" element={<Events />} />
+              <Route path="attendance" element={<Attendance />} />
+              <Route path="schedules" element={<Schedules />} />
+              <Route path="announcements" element={<Announcements />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="leaderboard" element={<AdminLeaderboard />} />
+              <Route path="divisions" element={<DivisionsPage />} />
+              <Route path="system" element={<SystemSettings />} />
+              <Route path="audit" element={<AuditLogs />} />
+              <Route path="settings" element={<AdminSettings />} />
+              <Route index element={<Navigate to="dashboard" replace />} />
+            </Route>
 
-createRoot(document.getElementById("root")!).render(<App />);
+            <Route
+              path="/admin"
+              element={
+                <RouteGuard requiredRoles={["super_admin", "admin"]}>
+                  <AppLayout role="admin" />
+                </RouteGuard>
+              }
+            >
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="members" element={<Members />} />
+              <Route path="events" element={<Events />} />
+              <Route path="attendance" element={<Attendance />} />
+              <Route path="schedules" element={<Schedules />} />
+              <Route path="announcements" element={<Announcements />} />
+              <Route path="qr" element={<QRManager />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="leaderboard" element={<AdminLeaderboard />} />
+              <Route path="settings" element={<AdminSettings />} />
+              <Route index element={<Navigate to="dashboard" replace />} />
+            </Route>
+
+            <Route
+              path="/user"
+              element={
+                <RouteGuard requiredRoles={["super_admin", "admin", "user"]}>
+                  <AppLayout role="user" />
+                </RouteGuard>
+              }
+            >
+              <Route path="dashboard" element={<UserDashboard />} />
+              <Route path="profile" element={<UserProfile />} />
+              <Route path="attendance" element={<UserAttendance />} />
+              <Route path="checkin" element={<UserCheckin />} />
+              <Route path="schedules" element={<UserSchedules />} />
+              <Route path="announcements" element={<UserAnnouncements />} />
+              <Route path="leaderboard" element={<UserLeaderboard />} />
+              <Route index element={<Navigate to="dashboard" replace />} />
+            </Route>
+
+            <Route
+              path="/attendance/home"
+              element={
+                <RouteGuard requiredRoles={["super_admin", "admin", "user", "attendance"]}>
+                  <Layout hideHeader>
+                    <AttendanceHome />
+                  </Layout>
+                </RouteGuard>
+              }
+            />
+            <Route
+              path="/attendance/registration"
+              element={
+                <RouteGuard requiredRoles={["super_admin", "admin", "user", "attendance"]}>
+                  <Layout hideHeader>
+                    <AttendanceRegistration />
+                  </Layout>
+                </RouteGuard>
+              }
+            />
+            <Route
+              path="/attendance/face-registration"
+              element={
+                <RouteGuard requiredRoles={["super_admin", "admin", "user", "attendance"]}>
+                  <Layout hideHeader>
+                    <FaceRegistrationTraining />
+                  </Layout>
+                </RouteGuard>
+              }
+            />
+            <Route
+              path="/attendance/face-attendance"
+              element={
+                <RouteGuard requiredRoles={["super_admin", "admin", "user", "attendance"]}>
+                  <Layout hideHeader>
+                    <FaceAttendance />
+                  </Layout>
+                </RouteGuard>
+              }
+            />
+            <Route
+              path="/user-dashboard"
+              element={
+                <RouteGuard requiredRoles={["super_admin", "admin", "user"]}>
+                  <AppLayout role="user" />
+                </RouteGuard>
+              }
+            >
+              <Route index element={<AttendanceUserDashboard />} />
+            </Route>
+
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}

@@ -1,3 +1,4 @@
+// client/pages/LeaderBoard.tsx
 import { useState, useEffect } from "react";
 import { Crown, Medal } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

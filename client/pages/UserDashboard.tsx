@@ -339,7 +339,7 @@ export default function UserDashboard() {
                 <h2 className="text-center text-4xl font-medium text-slate-900">Leaderboard</h2>
                 <div className="mt-6 rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_16px_45px_-35px_rgba(15,23,42,0.4)]">
                   {leaderboardPreview.length > 0 ? leaderboardPreview.map((member) => (
-                    <div key={member.id} className="flex items-center justify-between gap-4">
+                    <div key={member.user_id} className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 text-violet-600">
                           <Trophy className="h-5 w-5" />

@@ -1,5 +1,6 @@
+// client/data/mockData.ts
 // Mock data for VISIATTEND Dashboard - Church Organization
-
+// beberapa hanya dummy testing
 export interface User {
   id: number;
   memberId: string;

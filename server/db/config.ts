@@ -1,26 +1,20 @@
+// server/db/config.ts
 import sql from 'mssql';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const dbConfig: sql.config = {
-    user: process.env.DB_USER || 'sa',
-    password: process.env.DB_PASSWORD || 'YourStrong!Password123',
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
     server: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'VISIATTEND_DB',
+    database: process.env.DB_NAME,
     port: parseInt(process.env.DB_PORT || '1433'),
     options: {
-        encrypt: false, // Set ke false untuk local SQL Server
+        encrypt: false,
         trustServerCertificate: true,
-        enableArithAbort: true
+        enableArithAbort: true,
     },
-    connectionTimeout: 30000,
-    requestTimeout: 30000,
-    pool: {
-        max: 10,
-        min: 0,
-        idleTimeoutMillis: 30000
-    }
 };
 
 let pool: sql.ConnectionPool | null = null;
@@ -28,8 +22,10 @@ let pool: sql.ConnectionPool | null = null;
 export async function getConnection(): Promise<sql.ConnectionPool> {
     if (!pool) {
         try {
+            console.log('📦 Connecting to database...');
+            console.log(`🔧 Target: ${dbConfig.server}:${dbConfig.port} as ${dbConfig.user}`);
             pool = await sql.connect(dbConfig);
-            console.log('✅ Database connected successfully to', process.env.DB_NAME);
+            console.log('✅ Database connected successfully to', dbConfig.database);
         } catch (error) {
             console.error('❌ Database connection failed:', error);
             throw error;
