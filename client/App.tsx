@@ -64,16 +64,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-function RoleHome() {
-  const session = getSession();
-  if (!session) return <Navigate to="/login" replace />;
-  const { role } = session.user;
-  if (role === "super_admin") return <Navigate to="/superadmin/dashboard" replace />;
-  if (role === "admin") return <Navigate to="/admin/dashboard" replace />;
-  return <Navigate to="/user/dashboard" replace />;
-}
-
 const ScrollToTop = () => {
   const { pathname } = useLocation();
 
@@ -99,7 +89,7 @@ export default function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
-            <Route path="/" element={<RoleHome />} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
 
             <Route
               path="/superadmin"

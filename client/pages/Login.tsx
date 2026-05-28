@@ -1,7 +1,7 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Camera, Eye, EyeOff, LogIn, Mail, Lock, Shield } from "lucide-react";
-import { setSession, clearSession } from "@/lib/auth";
+import { setSession, clearSession, getSessionUser } from "@/lib/auth";
 import { authApi } from "@/services/api";
 
 export default function Login() {
@@ -58,7 +58,16 @@ export default function Login() {
         refreshToken: data.refreshToken,
       });
 
-      navigate("/");
+      const { role } = data.user;
+      if (role === "super_admin") {
+        navigate("/superadmin/dashboard");
+      } else if (role === "admin") {
+        navigate("/admin/dashboard");
+      } else if (role === "attendance") {
+        navigate("/attendance/home");
+      } else {
+        navigate("/user/dashboard");
+      }
     } catch (err: any) {
       const msg = err.response?.data?.message || "Email atau password salah";
       setError(msg);
@@ -91,7 +100,21 @@ export default function Login() {
     setLoading(true);
     try {
       if (twoFactorCode === "123456") {
-        navigate("/");
+        const user = getSessionUser();
+        if (user) {
+          const { role } = user;
+          if (role === "super_admin") {
+            navigate("/superadmin/dashboard");
+          } else if (role === "admin") {
+            navigate("/admin/dashboard");
+          } else if (role === "attendance") {
+            navigate("/attendance/home");
+          } else {
+            navigate("/user/dashboard");
+          }
+        } else {
+          navigate("/login");
+        }
       } else {
         setError("Kode 2FA salah");
       }
