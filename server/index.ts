@@ -15,6 +15,7 @@ import {
   ROLE_PERMISSIONS,
 } from "./middleware/rbac.js";
 import { handleDemo } from "./routes/demo.js";
+import { QuestionRepository } from './db/repositories/QuestionRepository';
 
 // ─── Activity logger ──────────────────────────────────────────────────────────
 async function log(
@@ -1230,42 +1231,64 @@ export function createServer() {
   );
 
   // GET /api/attendance/leaderboard (any role)
-  app.get(
-    "/api/attendance/leaderboard",
-    authenticateToken,
-    requireAnyRole,
-    async (req, res) => {
-      try {
-        const { eventId, period = "month" } = req.query;
-        const days =
-          ({ week: 7, month: 30, semester: 180 } as any)[period as string] ||
-          30;
-        const pool = await getConnection();
-        const rq = pool.request().input("days", sql.Int, days);
-        let ef = "";
-        if (eventId) {
-          rq.input("eid", sql.Int, Number(eventId));
-          ef = " AND a.event_id=@eid";
-        }
-        const r = await rq.query(
-          `SELECT u.id as user_id,u.full_name,u.member_id,u.jabatan,u.division,
-            COUNT(CASE WHEN a.status IN('present','late') THEN 1 END) as total_present,
-            COUNT(CASE WHEN a.status='late' THEN 1 END) as total_late,
-            COUNT(*) as total_records,
-            CAST(ROUND(CAST(COUNT(CASE WHEN a.status IN('present','late') THEN 1 END) AS FLOAT)/
-              NULLIF(COUNT(*),0)*100,2) AS DECIMAL(5,2)) as attendance_percentage
-           FROM users u JOIN attendance a ON u.id=a.user_id
-           WHERE a.attendance_date>=DATEADD(DAY,-@days,GETDATE())
-             AND u.is_active=1 ${ef}
-           GROUP BY u.id,u.full_name,u.member_id,u.jabatan,u.division
-           ORDER BY attendance_percentage DESC,total_present DESC`
-        );
-        res.json({ success: true, data: r.recordset });
-      } catch {
-        res.status(500).json({ success: false, message: "DB error" });
+app.get(
+  "/api/attendance/leaderboard",
+  authenticateToken,
+  requireAnyRole,
+  async (req, res) => {
+    try {
+      const { eventId, period = "month" } = req.query;
+      const days =
+        ({ week: 7, month: 30, semester: 180 } as any)[period as string] ||
+        30;
+      const pool = await getConnection();
+      const rq = pool.request().input("days", sql.Int, days);
+      let ef = "";
+      if (eventId) {
+        rq.input("eid", sql.Int, Number(eventId));
+        ef = " AND a.event_id=@eid";
       }
+      
+      // Query dengan gabungan poin dari questions
+      const r = await rq.query(`
+        SELECT 
+          u.id as user_id,
+          u.full_name,
+          u.member_id,
+          u.jabatan,
+          u.division,
+          u.avatar_url,
+          COUNT(CASE WHEN a.status IN('present','late') THEN 1 END) as total_present,
+          COUNT(CASE WHEN a.status='late' THEN 1 END) as total_late,
+          COUNT(*) as total_records,
+          CAST(ROUND(CAST(COUNT(CASE WHEN a.status IN('present','late') THEN 1 END) AS FLOAT)/
+            NULLIF(COUNT(*),0)*100,2) AS DECIMAL(5,2)) as attendance_percentage,
+          ISNULL(up.total_points, 0) as question_points,
+          ISNULL(up.questions_answered, 0) as questions_answered,
+          ISNULL(up.correct_answers, 0) as correct_answers,
+          ISNULL(up.streak_count, 0) as streak_count,
+          -- Combined score: attendance percentage + bonus points from questions
+          CAST(ROUND(CAST(COUNT(CASE WHEN a.status IN('present','late') THEN 1 END) AS FLOAT)/
+            NULLIF(COUNT(*),0)*100,2) AS DECIMAL(5,2)) + 
+          ISNULL(up.total_points, 0) * 0.1 as combined_score
+        FROM users u 
+        LEFT JOIN attendance a ON u.id = a.user_id
+          AND a.attendance_date >= DATEADD(DAY, -@days, GETDATE())
+          ${ef}
+        LEFT JOIN user_points up ON u.id = up.user_id
+        WHERE u.is_active = 1 
+          AND u.role = 'user'
+        GROUP BY u.id, u.full_name, u.member_id, u.jabatan, u.division, u.avatar_url, up.total_points, up.questions_answered, up.correct_answers, up.streak_count
+        ORDER BY combined_score DESC, attendance_percentage DESC, total_present DESC
+      `);
+      
+      res.json({ success: true, data: r.recordset });
+    } catch (error: any) {
+      console.error('[LEADERBOARD ERROR]', error);
+      res.status(500).json({ success: false, message: "DB error" });
     }
-  );
+  }
+);
 
   // GET /api/attendance/my (user's own records)
   app.get(
@@ -1305,6 +1328,15 @@ export function createServer() {
       }
     }
   );
+
+  app.get('/api/user/question-stats', authenticateToken, requireAnyRole, async (req: any, res) => {
+  try {
+    const stats = await questionRepo.getUserPoints(req.user.id);
+    res.json({ success: true, data: stats });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 
   // GET /api/attendance/my/stats
   app.get(
@@ -2464,6 +2496,259 @@ export function createServer() {
       }
     }
   );
+
+
+  // ============================================
+// QUESTIONS API
+// ============================================
+
+const questionRepo = new QuestionRepository();
+
+// GET /api/questions - Admin melihat semua soal
+app.get('/api/questions', authenticateToken, requireAdmin, async (req: any, res) => {
+  try {
+    const questions = await questionRepo.findAll();
+    res.json({ success: true, data: questions });
+  } catch (error: any) {
+    console.error('[GET QUESTIONS]', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// GET /api/questions/available - User melihat soal yang tersedia
+app.get('/api/questions/available', authenticateToken, requireAnyRole, async (req: any, res) => {
+  try {
+    const questions = await questionRepo.getAvailableQuestions(req.user.id);
+    res.json({ success: true, data: questions });
+  } catch (error: any) {
+    console.error('[GET AVAILABLE QUESTIONS]', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// GET /api/questions/:id
+app.get('/api/questions/:id', authenticateToken, requireAnyRole, async (req, res) => {
+  try {
+    const question = await questionRepo.findById(parseInt(req.params.id));
+    if (!question) {
+      return res.status(404).json({ success: false, message: 'Question not found' });
+    }
+    res.json({ success: true, data: question });
+  } catch (error: any) {
+    console.error('[GET QUESTION]', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// POST /api/questions - Admin membuat soal
+app.post('/api/questions', authenticateToken, requireAdmin, async (req: any, res) => {
+  try {
+    const { title, questionText, questionType, options, correctAnswer, points, timeLimitMinutes, startDate, endDate, maxAttempts } = req.body;
+    
+    console.log('📝 Creating question:', { title, questionType }); // DEBUG LOG
+    
+    if (!title || !questionText || !questionType || !correctAnswer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, question text, question type, and correct answer are required'
+      });
+    }
+    
+    // Validasi question type
+    const validTypes = ['multiple_choice', 'true_false', 'short_answer'];
+    if (!validTypes.includes(questionType)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid question type. Must be one of: ${validTypes.join(', ')}`
+      });
+    }
+    
+    const question = await questionRepo.create({
+      title,
+      question_text: questionText,  // Gunakan snake_case untuk DB
+      question_type: questionType,   // Gunakan snake_case untuk DB
+      options: options ? JSON.stringify(options) : null,
+      correct_answer: String(correctAnswer),
+      points: parseInt(points) || 10,
+      time_limit_minutes: parseInt(timeLimitMinutes) || 5,
+      created_by: req.user.id,
+      start_date: startDate || null,
+      end_date: endDate || null,
+      max_attempts: parseInt(maxAttempts) || 1
+    });
+    
+    const pool = await getConnection();
+    await log(pool, req.user.id, 'CREATE_QUESTION', 'question', question.id, `Created question: ${title}`, req.ip);
+    
+    console.log('✅ Question created:', question.id); // DEBUG LOG
+    
+    res.status(201).json({ success: true, data: question });
+  } catch (error: any) {
+    console.error('❌ [CREATE QUESTION]', error.message); // DEBUG LOG
+    console.error('Stack:', error.stack); // DEBUG STACK
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to create question: ' + (error.message || 'Server error')
+    });
+  }
+});
+
+// PUT /api/questions/:id
+app.put('/api/questions/:id', authenticateToken, requireAdmin, async (req: any, res) => {
+  try {
+    await questionRepo.update(parseInt(req.params.id), req.body);
+    res.json({ success: true, message: 'Question updated' });
+  } catch (error: any) {
+    console.error('[UPDATE QUESTION]', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// DELETE /api/questions/:id
+app.delete('/api/questions/:id', authenticateToken, requireAdmin, async (req: any, res) => {
+  try {
+    await questionRepo.delete(parseInt(req.params.id));
+    res.json({ success: true, message: 'Question deleted' });
+  } catch (error: any) {
+    console.error('[DELETE QUESTION]', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// POST /api/questions/:id/submit - User menjawab soal
+app.post('/api/questions/:id/submit', authenticateToken, requireAnyRole, async (req: any, res) => {
+  try {
+    const { answer, timeSpentSeconds } = req.body;
+    const questionId = parseInt(req.params.id);
+    
+    console.log('📝 Submit answer:', { questionId, userId: req.user.id, answer, timeSpentSeconds });
+    
+    if (!answer) {
+      return res.status(400).json({ success: false, message: 'Answer is required' });
+    }
+    
+    const pool = await getConnection();
+    
+    // Get question details
+    const qResult = await pool
+      .request()
+      .input('id', sql.Int, questionId)
+      .query('SELECT * FROM questions WHERE id = @id');
+    
+    if (!qResult.recordset.length) {
+      return res.status(404).json({ success: false, message: 'Question not found' });
+    }
+    
+    const question = qResult.recordset[0];
+    
+    // Check remaining attempts
+    const attemptResult = await pool
+      .request()
+      .input('userId', sql.Int, req.user.id)
+      .input('questionId', sql.Int, questionId)
+      .query(`
+        SELECT COUNT(*) as attempts 
+        FROM user_answers 
+        WHERE user_id = @userId AND question_id = @questionId
+      `);
+    
+    const currentAttempts = attemptResult.recordset[0].attempts;
+    console.log('Current attempts:', currentAttempts, 'Max:', question.max_attempts);
+    
+    if (currentAttempts >= question.max_attempts) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Maximum attempts reached' 
+      });
+    }
+    
+    // Check answer
+    let isCorrect = false;
+    const userAnswer = String(answer).trim();
+    const correctAnswer = String(question.correct_answer).trim();
+    
+    console.log('Comparing:', { userAnswer, correctAnswer, type: question.question_type });
+    
+    if (question.question_type === 'multiple_choice') {
+      // Multiple choice: compare letter (A, B, C, D) case-insensitive
+      isCorrect = userAnswer.toUpperCase() === correctAnswer.toUpperCase();
+    } else if (question.question_type === 'true_false') {
+      // True/False: compare case-insensitive
+      isCorrect = userAnswer.toLowerCase() === correctAnswer.toLowerCase();
+    } else if (question.question_type === 'short_answer') {
+      // Short answer: check if answer contains keyword
+      isCorrect = userAnswer.toLowerCase().includes(correctAnswer.toLowerCase());
+    }
+    
+    console.log('Is correct?', isCorrect);
+    
+    const pointsEarned = isCorrect ? (question.points || 10) : 0;
+    const nextAttempt = currentAttempts + 1;
+    
+    // Insert answer
+    const insertResult = await pool
+      .request()
+      .input('user_id', sql.Int, req.user.id)
+      .input('question_id', sql.Int, questionId)
+      .input('answer_text', sql.NVarChar, userAnswer)
+      .input('is_correct', sql.Bit, isCorrect ? 1 : 0)
+      .input('points_earned', sql.Int, pointsEarned)
+      .input('time_spent_seconds', sql.Int, timeSpentSeconds || null)
+      .input('attempt_number', sql.Int, nextAttempt)
+      .query(`
+        INSERT INTO user_answers 
+        (user_id, question_id, answer_text, is_correct, points_earned, time_spent_seconds, attempt_number, answered_at)
+        VALUES (@user_id, @question_id, @answer_text, @is_correct, @points_earned, @time_spent_seconds, @attempt_number, GETDATE());
+        
+        SELECT * FROM user_answers WHERE id = SCOPE_IDENTITY();
+      `);
+    
+    const answerResult = insertResult.recordset[0];
+    
+    console.log('✅ Answer saved:', answerResult);
+    
+    res.json({
+      success: true,
+      data: {
+        id: answerResult.id,
+        isCorrect: isCorrect,
+        pointsEarned: pointsEarned,
+        message: isCorrect 
+          ? `Benar! Kamu mendapatkan ${pointsEarned} poin!` 
+          : `Salah. Jawaban benar: ${correctAnswer}`
+      }
+    });
+    
+  } catch (error: any) {
+    console.error('❌ [SUBMIT ANSWER ERROR]', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error: ' + (error.message || 'Unknown error')
+    });
+  }
+});
+
+// GET /api/questions/leaderboard
+app.get('/api/questions/leaderboard', authenticateToken, requireAnyRole, async (req: any, res) => {
+  try {
+    const leaderboard = await questionRepo.getLeaderboard(20);
+    res.json({ success: true, data: leaderboard });
+  } catch (error: any) {
+    console.error('[QUESTION LEADERBOARD]', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// GET /api/questions/stats/:userId
+app.get('/api/questions/stats/:userId', authenticateToken, requireSelfOrAdmin('userId'), async (req: any, res) => {
+  try {
+    const points = await questionRepo.getUserPoints(parseInt(req.params.userId));
+    res.json({ success: true, data: points });
+  } catch (error: any) {
+    console.error('[QUESTION STATS]', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 
   // ════════════════════════════════════════════════════════════════════════════
   // DEV + MISC

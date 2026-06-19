@@ -29,6 +29,7 @@ import Announcements from "@/pages/admin/Announcements";
 import QRManager from "@/pages/admin/QRManager";
 import AdminLeaderboard from "@/pages/admin/Leaderboard";
 import AdminSettings from "@/pages/Settings";
+import QuestionsManagement from "@/pages/admin/Questions";
 
 // User pages
 import UserDashboard from "@/pages/user/Dashboard";
@@ -38,6 +39,7 @@ import UserCheckin from "@/pages/user/CheckIn";
 import UserSchedules from "@/pages/user/Schedules";
 import UserAnnouncements from "@/pages/user/Announcements";
 import UserLeaderboard from "@/pages/user/Leaderboard";
+import AnswerQuestion from "@/pages/user/AnswerQuestion";
 
 // Misc
 import Unauthorized from "@/pages/Unauthorized";
@@ -87,6 +89,7 @@ export default function App() {
           <Route path="system" element={<SystemSettings />} />
           <Route path="audit" element={<AuditLogs />} />
           <Route path="settings" element={<AdminSettings />} />
+          <Route path="questions" element={<QuestionsManagement />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 
@@ -109,6 +112,7 @@ export default function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="leaderboard" element={<AdminLeaderboard />} />
           <Route path="settings" element={<AdminSettings />} />
+          <Route path="questions" element={<QuestionsManagement />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 
@@ -128,6 +132,7 @@ export default function App() {
           <Route path="schedules" element={<UserSchedules />} />
           <Route path="announcements" element={<UserAnnouncements />} />
           <Route path="leaderboard" element={<UserLeaderboard />} />
+          <Route path="questions" element={<AnswerQuestion />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 

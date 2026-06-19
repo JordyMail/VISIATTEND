@@ -6,6 +6,7 @@ import {
   Settings, LogOut, ChevronLeft, ChevronRight, Megaphone,
   QrCode, ListChecks, Trophy, ShieldCheck, Layers, FileText,
   UserCircle, CheckSquare, BookOpen, Bell, Menu, X,
+  HelpCircle,
 } from "lucide-react";
 import { getSession, clearSession } from "@/lib/auth";
 import { authApi } from "@/services/api"; 
@@ -30,6 +31,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { to: "/superadmin/audit",         icon: FileText,        label: "Audit Logs" },
   { to: "/superadmin/system",        icon: ShieldCheck,     label: "System" },
   { to: "/superadmin/settings",      icon: Settings,        label: "Settings" },
+  { to: "/superadmin/questions",     icon: HelpCircle,      label: "Soal" },
 ];
 
 const ADMIN_NAV: NavItem[] = [
@@ -43,6 +45,7 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/admin/reports",       icon: BarChart3,       label: "Reports" },
   { to: "/admin/leaderboard",   icon: Trophy,          label: "Leaderboard" },
   { to: "/admin/settings",      icon: Settings,        label: "Settings" },
+  { to: "/admin/questions",     icon: HelpCircle,      label: "Soal" },
 ];
 
 const USER_NAV: NavItem[] = [
@@ -53,6 +56,7 @@ const USER_NAV: NavItem[] = [
   { to: "/user/announcements", icon: Bell,            label: "Announcements" },
   { to: "/user/leaderboard",   icon: Trophy,          label: "Leaderboard" },
   { to: "/user/profile",       icon: UserCircle,      label: "Profile" },
+  { to: "/user/questions",     icon: HelpCircle,      label: "Jawab Soal" },
 ];
 
 const NAV_MAP: Record<AppRole, NavItem[]> = {

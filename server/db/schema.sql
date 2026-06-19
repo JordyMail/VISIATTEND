@@ -166,6 +166,103 @@ CREATE TABLE activity_logs (
 CREATE INDEX idx_activity_user ON activity_logs(user_id);
 CREATE INDEX idx_activity_created ON activity_logs(created_at);
 
+
+
+-- ============================================
+-- QUESTIONS TABLE
+-- ============================================
+CREATE TABLE questions (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    title NVARCHAR(200) NOT NULL,
+    question_text NVARCHAR(MAX) NOT NULL,
+    question_type NVARCHAR(20) NOT NULL CHECK (question_type IN ('multiple_choice', 'true_false', 'short_answer')),
+    options NVARCHAR(MAX), -- JSON array untuk multiple choice: ["A","B","C","D"]
+    correct_answer NVARCHAR(500), -- Jawaban yang benar
+    points INT DEFAULT 10, -- Poin yang diberikan jika benar
+    time_limit_minutes INT DEFAULT 5, -- Batas waktu menjawab (menit)
+    is_active BIT DEFAULT 1,
+    created_by INT NULL REFERENCES users(id) ON DELETE SET NULL,
+    start_date DATETIME NULL, -- Kapan soal mulai aktif
+    end_date DATETIME NULL, -- Kapan soal berakhir
+    max_attempts INT DEFAULT 1, -- Berapa kali bisa dicoba
+    created_at DATETIME DEFAULT GETDATE(),
+    updated_at DATETIME DEFAULT GETDATE()
+);
+
+CREATE INDEX idx_questions_active ON questions(is_active);
+CREATE INDEX idx_questions_dates ON questions(start_date, end_date);
+
+-- ============================================
+-- USER_ANSWERS TABLE
+-- ============================================
+CREATE TABLE user_answers (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    user_id INT NOT NULL,
+    question_id INT NOT NULL,
+    answer_text NVARCHAR(MAX) NOT NULL, -- Jawaban user
+    is_correct BIT DEFAULT 0,
+    points_earned INT DEFAULT 0,
+    time_spent_seconds INT, -- Berapa detik user menjawab
+    attempt_number INT DEFAULT 1,
+    answered_at DATETIME DEFAULT GETDATE(),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_user_answers_user ON user_answers(user_id);
+CREATE INDEX idx_user_answers_question ON user_answers(question_id);
+CREATE INDEX idx_user_answers_correct ON user_answers(is_correct);
+
+-- ============================================
+-- USER_POINTS TABLE (Total poin user)
+-- ============================================
+CREATE TABLE user_points (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    user_id INT NOT NULL UNIQUE,
+    total_points INT DEFAULT 0,
+    questions_answered INT DEFAULT 0,
+    correct_answers INT DEFAULT 0,
+    streak_count INT DEFAULT 0, -- Jawaban benar berturut-turut
+    last_answered_at DATETIME,
+    updated_at DATETIME DEFAULT GETDATE(),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Trigger untuk update user_points setelah insert user_answers
+CREATE TRIGGER tr_update_user_points ON user_answers
+AFTER INSERT AS
+BEGIN
+    DECLARE @user_id INT, @is_correct BIT, @points INT, @question_id INT;
+    
+    SELECT @user_id = user_id, @is_correct = is_correct, 
+           @points = points_earned, @question_id = question_id
+    FROM inserted;
+    
+    -- Update atau insert user_points
+    IF EXISTS (SELECT 1 FROM user_points WHERE user_id = @user_id)
+    BEGIN
+        UPDATE user_points 
+        SET total_points = total_points + @points,
+            questions_answered = questions_answered + 1,
+            correct_answers = correct_answers + CASE WHEN @is_correct = 1 THEN 1 ELSE 0 END,
+            streak_count = CASE 
+                WHEN @is_correct = 1 THEN streak_count + 1 
+                ELSE 0 
+            END,
+            last_answered_at = GETDATE(),
+            updated_at = GETDATE()
+        WHERE user_id = @user_id;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO user_points (user_id, total_points, questions_answered, correct_answers, streak_count, last_answered_at)
+        VALUES (@user_id, @points, 1, CASE WHEN @is_correct = 1 THEN 1 ELSE 0 END, 
+                CASE WHEN @is_correct = 1 THEN 1 ELSE 0 END, GETDATE());
+    END
+END
+GO
+
+
 -- ============================================
 -- 9. SYSTEM_SETTINGS TABLE
 -- ============================================

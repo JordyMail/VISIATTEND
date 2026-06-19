@@ -203,4 +203,69 @@ async function migrateV2() {
   process.exit(0);
 }
 
+// server/db/migrate_v2.ts - Tambahkan fungsi ini
+
+async function createQuestionsSystem() {
+  console.log("  Creating questions system tables...");
+  const pool = await getConnection();
+  
+  // Questions table
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='questions' AND xtype='U')
+    CREATE TABLE questions (
+      id INT IDENTITY(1,1) PRIMARY KEY,
+      title NVARCHAR(200) NOT NULL,
+      question_text NVARCHAR(MAX) NOT NULL,
+      question_type NVARCHAR(20) NOT NULL CHECK (question_type IN ('multiple_choice', 'true_false', 'short_answer')),
+      options NVARCHAR(MAX),
+      correct_answer NVARCHAR(500),
+      points INT DEFAULT 10,
+      time_limit_minutes INT DEFAULT 5,
+      is_active BIT DEFAULT 1,
+      created_by INT NULL REFERENCES users(id) ON DELETE SET NULL,
+      start_date DATETIME NULL,
+      end_date DATETIME NULL,
+      max_attempts INT DEFAULT 1,
+      created_at DATETIME DEFAULT GETDATE(),
+      updated_at DATETIME DEFAULT GETDATE()
+    );
+  `);
+
+  // User answers table
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='user_answers' AND xtype='U')
+    CREATE TABLE user_answers (
+      id INT IDENTITY(1,1) PRIMARY KEY,
+      user_id INT NOT NULL,
+      question_id INT NOT NULL,
+      answer_text NVARCHAR(MAX) NOT NULL,
+      is_correct BIT DEFAULT 0,
+      points_earned INT DEFAULT 0,
+      time_spent_seconds INT,
+      attempt_number INT DEFAULT 1,
+      answered_at DATETIME DEFAULT GETDATE(),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+    );
+  `);
+
+  // User points table
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='user_points' AND xtype='U')
+    CREATE TABLE user_points (
+      id INT IDENTITY(1,1) PRIMARY KEY,
+      user_id INT NOT NULL UNIQUE,
+      total_points INT DEFAULT 0,
+      questions_answered INT DEFAULT 0,
+      correct_answers INT DEFAULT 0,
+      streak_count INT DEFAULT 0,
+      last_answered_at DATETIME,
+      updated_at DATETIME DEFAULT GETDATE(),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+
+  console.log("  ✅ Questions system tables created");
+}
+
 migrateV2().catch((e) => { console.error("❌ Migration failed:", e); process.exit(1); });
