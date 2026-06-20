@@ -198,6 +198,9 @@ export default function UserDashboard() {
         setDbQuestions(list);
         const unanswered = list.filter((q: any) => !q.answered);
         setQuizCompleted(unanswered.length === 0);
+        if (unanswered.length > 0) {
+          setRulesOpen(true);
+        }
 
         // Process Leaderboard
         const previewRows = Array.isArray(leaderboardResponse.data?.data) ? leaderboardResponse.data.data : [];
