@@ -22,10 +22,11 @@ export interface Question {
 export interface UserAnswer {
   id: number;
   userId: number;
+  memberId?: string;
   questionId: number;
   answerText: string;
   isCorrect: boolean;
-  pointsEarned: number;
+  pointsEarned: number | null;
   timeSpentSeconds?: number;
   attemptNumber: number;
   answeredAt: string;
@@ -87,16 +88,16 @@ export class QuestionRepository {
     const result = await pool
       .request()
       .input('title', sql.NVarChar, question.title)
-      .input('question_text', sql.NVarChar, question.questionText || question.question_text) // FIX: handle both cases
-      .input('question_type', sql.NVarChar, question.questionType || question.question_type) // FIX: handle both cases
+      .input('question_text', sql.NVarChar, question.questionText || (question as any).question_text) // FIX: handle both cases
+      .input('question_type', sql.NVarChar, question.questionType || (question as any).question_type) // FIX: handle both cases
       .input('options', sql.NVarChar, question.options || null)
-      .input('correct_answer', sql.NVarChar, question.correctAnswer || question.correct_answer) // FIX: handle both cases
+      .input('correct_answer', sql.NVarChar, question.correctAnswer || (question as any).correct_answer) // FIX: handle both cases
       .input('points', sql.Int, question.points || 10)
-      .input('time_limit_minutes', sql.Int, question.timeLimitMinutes || question.time_limit_minutes || 5) // FIX
-      .input('created_by', sql.Int, question.createdBy || question.created_by) // FIX: handle both cases
-      .input('start_date', sql.DateTime, question.startDate || question.start_date || null) // FIX
-      .input('end_date', sql.DateTime, question.endDate || question.end_date || null) // FIX
-      .input('max_attempts', sql.Int, question.maxAttempts || question.max_attempts || 1) // FIX
+      .input('time_limit_minutes', sql.Int, question.timeLimitMinutes || (question as any).time_limit_minutes || 5) // FIX
+      .input('created_by', sql.Int, question.createdBy || (question as any).created_by) // FIX: handle both cases
+      .input('start_date', sql.DateTime, question.startDate || (question as any).start_date || null) // FIX
+      .input('end_date', sql.DateTime, question.endDate || (question as any).end_date || null) // FIX
+      .input('max_attempts', sql.Int, question.maxAttempts || (question as any).max_attempts || 1) // FIX
       .query(`
         INSERT INTO questions (title, question_text, question_type, options, correct_answer, 
           points, time_limit_minutes, created_by, start_date, end_date, max_attempts)
@@ -170,19 +171,26 @@ export class QuestionRepository {
 
   async getAvailableQuestions(userId: number): Promise<Question[]> {
     const pool = await getConnection();
+    
+    // Resolve member_id from userId
+    const userRes = await pool.request()
+      .input('userId', sql.Int, userId)
+      .query('SELECT member_id FROM users WHERE id = @userId');
+    const memberId = userRes.recordset[0]?.member_id || '';
+
     const result = await pool
       .request()
-      .input('userId', sql.Int, userId)
+      .input('memberId', sql.NVarChar, memberId)
       .query(`
         SELECT q.*, 
           (SELECT COUNT(*) FROM user_answers ua 
-           WHERE ua.question_id = q.id AND ua.user_id = @userId) as attempts_count
+           WHERE ua.question_id = q.id AND ua.member_id = @memberId) as attempts_count
         FROM questions q
         WHERE q.is_active = 1
           AND (q.start_date IS NULL OR q.start_date <= GETDATE())
           AND (q.end_date IS NULL OR q.end_date >= GETDATE())
           AND (SELECT COUNT(*) FROM user_answers ua 
-               WHERE ua.question_id = q.id AND ua.user_id = @userId) < q.max_attempts
+               WHERE ua.question_id = q.id AND ua.member_id = @memberId) < q.max_attempts
         ORDER BY q.created_at DESC
       `);
     
@@ -198,33 +206,38 @@ export class QuestionRepository {
     
     // Check answer
     let isCorrect = false;
-    let pointsEarned = 0;
+    let pointsEarned: number | null = null;
     
     if (question.questionType === 'multiple_choice' || question.questionType === 'true_false') {
       isCorrect = answer.answerText?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim();
     } else if (question.questionType === 'short_answer') {
-      // Simple string matching (bisa ditingkatkan dengan NLP)
       isCorrect = answer.answerText?.toLowerCase().trim().includes(question.correctAnswer.toLowerCase().trim());
     }
     
-    pointsEarned = isCorrect ? question.points : 0;
+    pointsEarned = isCorrect ? 10 : null;
     
+    // Resolve member_id from userId
+    const userRes = await pool.request()
+      .input('userId', sql.Int, answer.userId)
+      .query('SELECT member_id FROM users WHERE id = @userId');
+    const memberId = userRes.recordset[0]?.member_id || '';
+
     // Get attempt number
     const attemptResult = await pool
       .request()
-      .input('userId', sql.Int, answer.userId)
+      .input('memberId', sql.NVarChar, memberId)
       .input('questionId', sql.Int, answer.questionId)
       .query(`
         SELECT ISNULL(MAX(attempt_number), 0) + 1 as next_attempt
         FROM user_answers
-        WHERE user_id = @userId AND question_id = @questionId
+        WHERE member_id = @memberId AND question_id = @questionId
       `);
     
     const attemptNumber = attemptResult.recordset[0].next_attempt;
     
     const result = await pool
       .request()
-      .input('userId', sql.Int, answer.userId)
+      .input('memberId', sql.NVarChar, memberId)
       .input('questionId', sql.Int, answer.questionId)
       .input('answerText', sql.NVarChar, answer.answerText)
       .input('isCorrect', sql.Bit, isCorrect)
@@ -232,9 +245,10 @@ export class QuestionRepository {
       .input('timeSpentSeconds', sql.Int, answer.timeSpentSeconds || null)
       .input('attemptNumber', sql.Int, attemptNumber)
       .query(`
-        INSERT INTO user_answers (user_id, question_id, answer_text, is_correct, points_earned, time_spent_seconds, attempt_number)
-        OUTPUT INSERTED.*
-        VALUES (@userId, @questionId, @answerText, @isCorrect, @pointsEarned, @timeSpentSeconds, @attemptNumber)
+        INSERT INTO user_answers (member_id, question_id, answer_text, is_correct, points_earned, time_spent_seconds, attempt_number)
+        VALUES (@memberId, @questionId, @answerText, @isCorrect, @pointsEarned, @timeSpentSeconds, @attemptNumber);
+
+        SELECT * FROM user_answers WHERE id = SCOPE_IDENTITY();
       `);
     
     return result.recordset[0];
@@ -246,7 +260,16 @@ export class QuestionRepository {
       .request()
       .input('userId', sql.Int, userId)
       .query(`
-        SELECT * FROM user_points WHERE user_id = @userId
+        SELECT 
+          u.id as userId,
+          COALESCE(mp.points, 0) as totalPoints,
+          (SELECT COUNT(*) FROM user_answers ua WHERE ua.member_id = u.member_id) as questionsAnswered,
+          (SELECT COUNT(*) FROM user_answers ua WHERE ua.member_id = u.member_id AND ua.is_correct = 1) as correctAnswers,
+          0 as streakCount,
+          (SELECT MAX(answered_at) FROM user_answers ua WHERE ua.member_id = u.member_id) as lastAnsweredAt
+        FROM users u
+        LEFT JOIN member_point mp ON u.member_id = mp.member_id
+        WHERE u.id = @userId
       `);
     
     return result.recordset[0] || {
@@ -266,15 +289,19 @@ export class QuestionRepository {
       .input('limit', sql.Int, limit)
       .query(`
         SELECT TOP (@limit) 
-          up.*, 
+          mp.points as total_points,
+          (SELECT COUNT(*) FROM user_answers ua WHERE ua.member_id = u.member_id) as questions_answered,
+          (SELECT COUNT(*) FROM user_answers ua WHERE ua.member_id = u.member_id AND ua.is_correct = 1) as correct_answers,
+          0 as streak_count,
+          u.id as user_id,
           u.full_name, 
           u.member_id,
           u.division,
           u.avatar_url
-        FROM user_points up
-        JOIN users u ON up.user_id = u.id
+        FROM member_point mp
+        JOIN users u ON mp.member_id = u.member_id
         WHERE u.is_active = 1
-        ORDER BY up.total_points DESC
+        ORDER BY mp.points DESC
       `);
     
     return result.recordset;
