@@ -1385,103 +1385,156 @@ app.get(
   );
 
   // POST /api/attendance/checkin (self check-in)
-  app.post(
-    "/api/attendance/checkin",
-    authenticateToken,
-    requireAnyRole,
-    async (req: any, res) => {
-      try {
-        const { qrToken, eventId } = req.body;
-        const pool = await getConnection();
-        const today = new Date().toISOString().split("T")[0];
+  // POST /api/attendance/checkin (self check-in) - PERBAIKAN DENGAN DEBUG
+app.post(
+  "/api/attendance/checkin",
+  authenticateToken,
+  requireAnyRole,
+  async (req: any, res) => {
+    try {
+      const { qrToken, eventId } = req.body;
+      const pool = await getConnection();
+      const today = new Date().toISOString().split("T")[0];
 
-        let resolvedEventId = eventId;
-        if (qrToken) {
-          const tokenR = await pool
-            .request()
-            .input("t", sql.NVarChar, qrToken)
-            .query(
-              "SELECT * FROM qr_tokens WHERE token=@t AND expires_at>GETDATE()"
-            );
-          if (!tokenR.recordset.length)
-            return res.status(400).json({
-              success: false,
-              message: "QR code expired or invalid",
-            });
-          resolvedEventId = tokenR.recordset[0].event_id;
-        }
-        if (!resolvedEventId)
-          return res.status(400).json({
-            success: false,
-            message: "Event ID or QR token required",
-          });
+      console.log('📱 Check-in attempt:', { 
+        userId: req.user.id, 
+        qrToken: qrToken ? qrToken.substring(0, 20) + '...' : null, 
+        eventId 
+      });
 
-        const dup = await pool
+      let resolvedEventId = eventId;
+      
+      if (qrToken) {
+        // Cari token di database
+        const tokenR = await pool
           .request()
-          .input("uid", sql.Int, req.user.id)
-          .input("eid", sql.Int, resolvedEventId)
-          .input("d", sql.Date, today)
-          .query(
-            "SELECT id FROM attendance WHERE user_id=@uid AND event_id=@eid AND attendance_date=@d"
-          );
-        if (dup.recordset.length)
-          return res.status(400).json({
-            success: false,
-            message: "Already checked in today for this event",
-          });
-
-        const settR = await pool
-          .request()
-          .query(
-            "SELECT setting_value FROM system_settings WHERE setting_key='lateness_threshold'"
-          );
-        const lateMin = parseInt(settR.recordset[0]?.setting_value || "15");
-
-        let status = "present";
-        const schedR = await pool
-          .request()
-          .input("eid", sql.Int, resolvedEventId)
-          .input("d", sql.Date, today)
-          .query(
-            "SELECT start_time FROM schedules WHERE event_id=@eid AND scheduled_date=@d"
-          );
-        if (schedR.recordset.length) {
-          const [h, m] = schedR.recordset[0].start_time
-            .split(":")
-            .map(Number);
-          const schedStart = new Date();
-          schedStart.setHours(h, m, 0, 0);
-          const lateThreshold = new Date(
-            schedStart.getTime() + lateMin * 60000
-          );
-          if (new Date() > lateThreshold) status = "late";
-        }
-
-        const r = await pool
-          .request()
-          .input("uid", sql.Int, req.user.id)
-          .input("eid", sql.Int, resolvedEventId)
-          .input("d", sql.Date, today)
-          .input("ci", sql.DateTime, new Date())
-          .input("s", sql.NVarChar, status)
-          .input("di", sql.NVarChar, "Self Check-in")
-          .query(
-            `INSERT INTO attendance (user_id,event_id,attendance_date,check_in_time,status,device_info,created_at)
-             OUTPUT INSERTED.*
-             VALUES (@uid,@eid,@d,@ci,@s,@di,GETDATE())`
-          );
-        res.status(201).json({
-          success: true,
-          data: r.recordset[0],
-          status,
-          message: `Check-in successful (${status})`,
+          .input("t", sql.NVarChar, qrToken)
+          .query(`
+            SELECT * FROM qr_tokens 
+            WHERE token = @t
+          `);
+        
+        console.log('🔍 Token search result:', {
+          found: tokenR.recordset.length > 0,
+          token: qrToken.substring(0, 20) + '...'
         });
-      } catch (e: any) {
-        console.error("[CHECKIN]", e);
-        res.status(500).json({ success: false, message: "DB error" });
+        
+        if (tokenR.recordset.length === 0) {
+          console.log('❌ Token not found in database');
+          return res.status(400).json({
+            success: false,
+            message: "QR code tidak valid. Token tidak ditemukan.",
+          });
+        }
+        
+        const tokenData = tokenR.recordset[0];
+        console.log('🎫 Token data:', {
+          id: tokenData.id,
+          eventId: tokenData.event_id,
+          expiresAt: tokenData.expires_at,
+          now: new Date(),
+          isExpired: new Date(tokenData.expires_at) < new Date()
+        });
+        
+        // Cek apakah token expired
+        if (new Date(tokenData.expires_at) < new Date()) {
+          console.log('⏰ Token expired');
+          return res.status(400).json({
+            success: false,
+            message: "QR code sudah kadaluarsa",
+          });
+        }
+        
+        resolvedEventId = tokenData.event_id;
       }
+      
+      if (!resolvedEventId) {
+        return res.status(400).json({
+          success: false,
+          message: "Event ID atau QR token diperlukan",
+        });
+      }
+
+      // Cek apakah sudah check-in hari ini
+      const dup = await pool
+        .request()
+        .input("uid", sql.Int, req.user.id)
+        .input("eid", sql.Int, resolvedEventId)
+        .input("d", sql.Date, today)
+        .query(
+          "SELECT id FROM attendance WHERE user_id=@uid AND event_id=@eid AND attendance_date=@d"
+        );
+      
+      if (dup.recordset.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Kamu sudah check-in hari ini untuk event ini",
+        });
+      }
+
+      // Tentukan status (present/late)
+      const settR = await pool
+        .request()
+        .query(
+          "SELECT setting_value FROM system_settings WHERE setting_key='lateness_threshold'"
+        );
+      const lateMin = parseInt(settR.recordset[0]?.setting_value || "15");
+
+      let status = "present";
+      const schedR = await pool
+        .request()
+        .input("eid", sql.Int, resolvedEventId)
+        .input("d", sql.Date, today)
+        .query(
+          "SELECT start_time FROM schedules WHERE event_id=@eid AND scheduled_date=@d"
+        );
+      
+      if (schedR.recordset.length) {
+        const [h, m] = schedR.recordset[0].start_time
+          .split(":")
+          .map(Number);
+        const schedStart = new Date();
+        schedStart.setHours(h, m, 0, 0);
+        const lateThreshold = new Date(
+          schedStart.getTime() + lateMin * 60000
+        );
+        if (new Date() > lateThreshold) status = "late";
+      }
+
+      // Insert attendance
+      const r = await pool
+        .request()
+        .input("uid", sql.Int, req.user.id)
+        .input("eid", sql.Int, resolvedEventId)
+        .input("d", sql.Date, today)
+        .input("ci", sql.DateTime, new Date())
+        .input("s", sql.NVarChar, status)
+        .input("di", sql.NVarChar, qrToken ? "QR Code Scan" : "Self Check-in")
+        .query(
+          `INSERT INTO attendance (user_id,event_id,attendance_date,check_in_time,status,device_info,created_at)
+           OUTPUT INSERTED.*
+           VALUES (@uid,@eid,@d,@ci,@s,@di,GETDATE())`
+        );
+      
+      console.log('✅ Check-in successful:', {
+        attendanceId: r.recordset[0].id,
+        status: status
+      });
+      
+      res.status(201).json({
+        success: true,
+        data: r.recordset[0],
+        status,
+        message: `Check-in berhasil (${status === 'present' ? 'Hadir' : 'Terlambat'})`,
+      });
+      
+    } catch (e: any) {
+      console.error("❌ [CHECKIN ERROR]", e);
+      res.status(500).json({ success: false, message: "Server error" });
     }
-  );
+  }
+);
+
 
   // GET /api/attendance (admin — all records)
   app.get(

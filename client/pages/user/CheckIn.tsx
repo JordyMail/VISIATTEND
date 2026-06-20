@@ -1,6 +1,6 @@
 // client/pages/user/CheckIn.tsx
-import { useState, useEffect } from "react";
-import { CheckCircle2, QrCode, Loader2, Calendar } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { CheckCircle2, QrCode, Loader2, Calendar, Scan, Camera, StopCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,14 +18,22 @@ export default function UserCheckin() {
   const [events, setEvents]   = useState<Event[]>([]);
   const [eventId, setEventId] = useState("");
   const [qrToken, setQrToken] = useState("");
-  const [mode, setMode]       = useState<"button" | "qr">("button");
+  const [mode, setMode]       = useState<"button" | "qr" | "scan">("button");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<{ status: string; message: string } | null>(null);
   const [todayAttendance, setTodayAttendance] = useState<any[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const scannerRef = useRef<any>(null);
+  const scannerDivRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     eventApi.getAll({ isActive: true }).then((r) => setEvents(r.data.data)).catch(() => {});
     loadTodayAttendance();
+    
+    return () => {
+      // Cleanup scanner on unmount
+      stopScanning();
+    };
   }, []);
 
   const loadTodayAttendance = async () => {
@@ -36,18 +44,76 @@ export default function UserCheckin() {
     } catch { /* ignore */ }
   };
 
-  const handleCheckin = async () => {
+  const startScanning = async () => {
+    setScanning(true);
+    
+    try {
+      // Dynamic import html5-qrcode
+      const { Html5Qrcode } = await import("html5-qrcode");
+      
+      const scanner = new Html5Qrcode("qr-reader");
+      scannerRef.current = scanner;
+      
+      await scanner.start(
+        { facingMode: "environment" }, // Kamera belakang
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+        },
+        (decodedText: string) => {
+          // QR Code berhasil di-scan
+          console.log('QR Scanned:', decodedText);
+          setQrToken(decodedText);
+          stopScanning();
+          
+          // Auto check-in dengan token yang di-scan
+          toast({ title: "QR Terdeteksi!", description: "Memproses check-in..." });
+          handleCheckin(decodedText);
+        },
+        (errorMessage: string) => {
+          // Scanning error (biasanya karena belum ada QR di frame)
+          // Tidak perlu toast, biarkan user menyesuaikan posisi
+        }
+      );
+    } catch (err: any) {
+      console.error('Scanner error:', err);
+      toast({ 
+        title: "Error", 
+        description: "Gagal mengakses kamera. Pastikan kamera diizinkan.", 
+        variant: "destructive" 
+      });
+      setScanning(false);
+    }
+  };
+
+  const stopScanning = async () => {
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop();
+        scannerRef.current = null;
+      } catch (err) {
+        console.error('Stop scanner error:', err);
+      }
+    }
+    setScanning(false);
+  };
+
+  const handleCheckin = async (token?: string) => {
+    const useToken = token || qrToken;
+    
     if (mode === "button" && !eventId)
       return toast({ title: "Pilih event terlebih dahulu", variant: "destructive" });
-    if (mode === "qr" && !qrToken.trim())
-      return toast({ title: "Masukkan kode QR", variant: "destructive" });
+    if ((mode === "qr" || mode === "scan") && !useToken?.trim())
+      return toast({ title: "Masukkan kode QR atau scan terlebih dahulu", variant: "destructive" });
 
     setLoading(true);
     setSuccess(null);
     try {
-      const payload = mode === "qr"
-        ? { qrToken: qrToken.trim() }
+      const payload = (mode === "qr" || mode === "scan")
+        ? { qrToken: useToken!.trim() }
         : { eventId: parseInt(eventId) };
+      
       const r = await attendanceApi.checkIn(payload);
       const { status, message } = r.data;
       setSuccess({ status, message });
@@ -69,6 +135,14 @@ export default function UserCheckin() {
     sick:    "bg-orange-100 text-orange-700 border-orange-200",
   };
 
+  const STATUS_LABEL: Record<string, string> = {
+    present: "Hadir",
+    late: "Terlambat",
+    absent: "Absen",
+    excused: "Izin",
+    sick: "Sakit",
+  };
+
   return (
     <div className="p-4 md:p-6 max-w-lg mx-auto space-y-6">
       <div>
@@ -85,7 +159,7 @@ export default function UserCheckin() {
               <p className="font-semibold text-green-800">Check-in berhasil!</p>
               <p className="text-sm text-green-700">{success.message}</p>
               <Badge className={`mt-1 text-xs ${STATUS_BADGE[success.status]}`}>
-                {success.status}
+                {STATUS_LABEL[success.status] || success.status}
               </Badge>
             </div>
           </CardContent>
@@ -98,22 +172,33 @@ export default function UserCheckin() {
           <CardTitle className="text-base">Metode Check-in</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Button
               variant={mode === "button" ? "default" : "outline"}
-              onClick={() => setMode("button")}
+              onClick={() => { setMode("button"); stopScanning(); }}
               className="gap-2"
+              size="sm"
             >
               <Calendar className="w-4 h-4" />
-              Pilih Event
+              Pilih
             </Button>
             <Button
               variant={mode === "qr" ? "default" : "outline"}
-              onClick={() => setMode("qr")}
+              onClick={() => { setMode("qr"); stopScanning(); }}
               className="gap-2"
+              size="sm"
             >
               <QrCode className="w-4 h-4" />
-              Kode QR
+              Token
+            </Button>
+            <Button
+              variant={mode === "scan" ? "default" : "outline"}
+              onClick={() => { setMode("scan"); }}
+              className="gap-2"
+              size="sm"
+            >
+              <Scan className="w-4 h-4" />
+              Scan
             </Button>
           </div>
 
@@ -145,22 +230,54 @@ export default function UserCheckin() {
                 onKeyDown={(e) => e.key === "Enter" && handleCheckin()}
               />
               <p className="text-xs text-muted-foreground">
-                Minta kode QR kepada admin atau scan QR yang tersedia di lokasi.
+                Minta kode QR kepada admin atau salin token dari QR Code.
               </p>
             </div>
           )}
 
-          <Button
-            className="w-full gap-2"
-            onClick={handleCheckin}
-            disabled={loading}
-          >
-            {loading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Memproses...</>
-            ) : (
-              <><CheckCircle2 className="w-4 h-4" /> Check In Sekarang</>
-            )}
-          </Button>
+          {mode === "scan" && (
+            <div className="space-y-2">
+              <Label>Scan QR Code</Label>
+              
+              {/* QR Scanner Area */}
+              {!scanning ? (
+                <div className="flex flex-col items-center gap-3 p-6 border-2 border-dashed rounded-xl bg-muted/30">
+                  <Camera className="w-12 h-12 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground text-center">
+                    Arahkan kamera ke QR Code yang disediakan admin
+                  </p>
+                  <Button onClick={startScanning} className="gap-2">
+                    <Scan className="w-4 h-4" /> Mulai Scan
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div id="qr-reader" ref={scannerDivRef} className="rounded-xl overflow-hidden border-2 border-primary" />
+                  <Button 
+                    variant="outline" 
+                    className="w-full gap-2" 
+                    onClick={stopScanning}
+                  >
+                    <StopCircle className="w-4 h-4" /> Berhenti Scan
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {mode !== "scan" && (
+            <Button
+              className="w-full gap-2"
+              onClick={() => handleCheckin()}
+              disabled={loading}
+            >
+              {loading ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Memproses...</>
+              ) : (
+                <><CheckCircle2 className="w-4 h-4" /> Check In Sekarang</>
+              )}
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -176,11 +293,13 @@ export default function UserCheckin() {
                 <div>
                   <p className="text-sm font-medium">{a.event_name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(a.check_in_time).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(a.check_in_time).toLocaleTimeString("id-ID", { 
+                      hour: "2-digit", minute: "2-digit" 
+                    })}
                   </p>
                 </div>
                 <Badge variant="outline" className={STATUS_BADGE[a.status]}>
-                  {a.status}
+                  {STATUS_LABEL[a.status] || a.status}
                 </Badge>
               </div>
             ))}

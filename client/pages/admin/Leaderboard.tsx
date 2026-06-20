@@ -45,7 +45,7 @@ export default function AdminLeaderboardPage() {
   const [data, setData] = useState<LeaderboardEntry[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [eventId, setEventId] = useState("all");
-  const [period, setPeriod] = useState("month");
+  const [period, setPeriod] = useState("semester");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
