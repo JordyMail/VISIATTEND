@@ -17,6 +17,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/components/ui/use-toast";
 import { clearCurrentAttendanceUser, clearPendingRegistrationProfile, getCurrentAttendanceUser } from "@/lib/attendanceFlow";
 import { attendanceApi, userDashboardApi } from "@/services/api";
+import { clearSession } from "@/lib/auth";
 
 type DashboardTrendPoint = {
   label: string;
@@ -40,68 +41,26 @@ type QuestionItem = {
   question: string;
   options: QuestionOption[];
   correctOptionId: string;
+  points?: number;
 };
 
-const QUESTION_REWARD = 5;
 const QUESTION_TIME_LIMIT = 15;
 
-const QUESTION_BANK: QuestionItem[] = [
-  {
-    id: "q-1",
-    question: "Siapa yang memimpin bangsa Israel keluar dari Mesir?",
-    correctOptionId: "b",
-    options: [
-      { id: "a", label: "Abraham" },
-      { id: "b", label: "Musa" },
-      { id: "c", label: "Daud" },
-      { id: "d", label: "Salomo" },
-    ],
-  },
-  {
-    id: "q-2",
-    question: "Berapa jumlah murid utama Yesus?",
-    correctOptionId: "c",
-    options: [
-      { id: "a", label: "7" },
-      { id: "b", label: "10" },
-      { id: "c", label: "12" },
-      { id: "d", label: "14" },
-    ],
-  },
-  {
-    id: "q-3",
-    question: "Kitab pertama dalam Perjanjian Baru adalah?",
-    correctOptionId: "a",
-    options: [
-      { id: "a", label: "Matius" },
-      { id: "b", label: "Markus" },
-      { id: "c", label: "Lukas" },
-      { id: "d", label: "Yohanes" },
-    ],
-  },
-  {
-    id: "q-4",
-    question: "Siapakah yang terkenal karena mengalahkan Goliat?",
-    correctOptionId: "d",
-    options: [
-      { id: "a", label: "Yusuf" },
-      { id: "b", label: "Yosua" },
-      { id: "c", label: "Samuel" },
-      { id: "d", label: "Daud" },
-    ],
-  },
-  {
-    id: "q-5",
-    question: "Di kota mana Yesus dilahirkan?",
-    correctOptionId: "b",
-    options: [
-      { id: "a", label: "Nazaret" },
-      { id: "b", label: "Betlehem" },
-      { id: "c", label: "Yerusalem" },
-      { id: "d", label: "Kapernaum" },
-    ],
-  },
-];
+const formatAttendanceTime = (isoString?: string | null) => {
+  if (!isoString) return "Belum attendance hari ini";
+  try {
+    const date = new Date(isoString);
+    const day = date.getDate().toString().padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `Attendance: ${day} ${month} ${year}, ${hours}:${minutes}`;
+  } catch {
+    return "Belum attendance hari ini";
+  }
+};
 
 const createFallbackTrend = (points: number): DashboardTrendPoint[] => {
   const safePoints = Math.max(points, 0);
@@ -159,13 +118,24 @@ export default function UserDashboard() {
   const [trend, setTrend] = useState<DashboardTrendPoint[]>(createFallbackTrend(0));
   const [leaderboardPreview, setLeaderboardPreview] = useState<LeaderboardPreviewRow[]>([]);
   const [displayName, setDisplayName] = useState(currentUser?.name ?? "[User Name]");
+  const [attendanceDate, setAttendanceDate] = useState<string | null>(null);
+  const [dbQuestions, setDbQuestions] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
 
-  const questionButtonLabel = quizCompleted ? "Question Completed" : `Start Question (${QUESTION_TIME_LIMIT}s)`;
+  const unansweredQuestions = dbQuestions.filter((q: any) => !q.answered);
+  const questionsCount = unansweredQuestions.length;
+  const questionButtonLabel = loadingData
+    ? "Loading Questions..."
+    : quizCompleted
+    ? "Question Completed"
+    : `Start Question (${QUESTION_TIME_LIMIT}s)`;
   const trendPath = useMemo(() => buildTrendPath(trend), [trend]);
+  const rulesText = `Terdapat ${questionsCount} pertanyaan untuk dijawab. Jika berhasil menjawab dengan benar, Anda akan mendapatkan poin sesuai bobot masing-masing soal. Pertanyaan berkaitan dengan Bible Study.`;
 
   const handleLogout = () => {
     clearCurrentAttendanceUser();
     clearPendingRegistrationProfile();
+    clearSession();
     navigate("/attendance/home");
   };
 
@@ -177,37 +147,75 @@ export default function UserDashboard() {
         return;
       }
 
+      setLoadingData(true);
+
+      const profilePromise = userDashboardApi.getProfile({
+        email: currentUser.email,
+        name: currentUser.name,
+      });
+
+      const questionsPromise = userDashboardApi.getQuestions({
+        email: currentUser.email,
+        name: currentUser.name,
+      });
+
+      const leaderboardPromise = attendanceApi.getLeaderboard(undefined, "week");
+
       try {
-        const [{ data: profileResponse }, { data: leaderboardResponse }] = await Promise.all([
-          userDashboardApi.getProfile({ email: currentUser.email, name: currentUser.name }),
-          attendanceApi.getLeaderboard(undefined, "week"),
+        const [profileResponse, questionsResponse, leaderboardResponse] = await Promise.all([
+          profilePromise,
+          questionsPromise,
+          leaderboardPromise.catch((err) => {
+            console.error("Failed to load leaderboard preview:", err);
+            return { data: { data: [] } };
+          }),
         ]);
 
         if (!active) {
           return;
         }
 
-        const profileData = profileResponse.data;
+        // Process profile/points
+        const profileData = profileResponse.data?.data;
         if (profileData?.matched) {
           setDisplayName(profileData.profile?.fullName ?? currentUser.name);
-          setPoints(Number(profileData.points ?? 0));
-          setTrend(Array.isArray(profileData.trend) ? profileData.trend : createFallbackTrend(Number(profileData.points ?? 0)));
+          setAttendanceDate(profileData.attendanceDate);
+          const nextPoints = Number(profileData.points ?? 0);
+          setPoints(nextPoints);
+          setTrend(
+            Array.isArray(profileData.trend)
+              ? profileData.trend
+              : createFallbackTrend(nextPoints)
+          );
         } else {
           setDisplayName(currentUser.name);
           setPoints(0);
           setTrend(createFallbackTrend(0));
         }
 
-        const previewRows = Array.isArray(leaderboardResponse.data) ? leaderboardResponse.data : [];
-        setLeaderboardPreview(previewRows.slice(0, 1));
-      } catch {
-        if (!active) {
-          return;
-        }
+        // Process Questions
+        const list = Array.isArray(questionsResponse.data?.data) ? questionsResponse.data.data : [];
+        setDbQuestions(list);
+        const unanswered = list.filter((q: any) => !q.answered);
+        setQuizCompleted(unanswered.length === 0);
 
-        setDisplayName(currentUser.name);
-        setTrend(createFallbackTrend(points));
-        setLeaderboardPreview([]);
+        // Process Leaderboard
+        const previewRows = Array.isArray(leaderboardResponse.data?.data) ? leaderboardResponse.data.data : [];
+        setLeaderboardPreview(previewRows.slice(0, 1));
+      } catch (error) {
+        console.error("Failed to load dashboard data:", error);
+        if (active) {
+          setDisplayName(currentUser.name);
+          setPoints(0);
+          setTrend(createFallbackTrend(0));
+          setDbQuestions([]);
+          setQuizCompleted(true);
+          setLeaderboardPreview([]);
+        }
+      } finally {
+        if (active) {
+          setLoadingData(false);
+        }
       }
     };
 
@@ -224,13 +232,75 @@ export default function UserDashboard() {
     }
 
     if (secondsLeft <= 0) {
-      setQuestionOpen(false);
-      setQuizCompleted(true);
-      toast({
-        title: "Waktu habis",
-        description: "Question selesai tanpa poin karena waktu 15 detik sudah habis.",
-        variant: "destructive",
-      });
+      const autoSubmitTimeout = async () => {
+        if (!activeQuestion || !currentUser) return;
+        setSubmittingAnswer(true);
+        try {
+          const response = await userDashboardApi.submitQuestionAnswer({
+            email: currentUser.email,
+            name: currentUser.name,
+            questionId: Number(activeQuestion.id),
+            answer: "Timeout",
+            timeSpentSeconds: QUESTION_TIME_LIMIT,
+          });
+
+          toast({
+            title: "Waktu habis",
+            description: "Waktu 15 detik sudah habis. Soal ini dianggap salah.",
+            variant: "destructive",
+          });
+
+          const updatedQuestions = dbQuestions.map((q: any) => {
+            if (q.id === activeQuestion.id) {
+              return { ...q, answered: true };
+            }
+            return q;
+          });
+          setDbQuestions(updatedQuestions);
+
+          const unanswered = updatedQuestions.filter((q: any) => !q.answered);
+
+          if (unanswered.length > 0) {
+            const nextQ = unanswered[0];
+            let parsedOptions: any[] = [];
+            if (nextQ.question_type === 'multiple_choice') {
+              try {
+                const optArr = typeof nextQ.options === 'string' ? JSON.parse(nextQ.options) : nextQ.options;
+                parsedOptions = (Array.isArray(optArr) ? optArr : []).map((text: string, idx: number) => ({
+                  id: String.fromCharCode(65 + idx),
+                  label: text
+                }));
+              } catch (e) {
+                console.error(e);
+              }
+            } else if (nextQ.question_type === 'true_false') {
+              parsedOptions = [
+                { id: 'Benar', label: 'Benar' },
+                { id: 'Salah', label: 'Salah' }
+              ];
+            }
+
+            setActiveQuestion({
+              id: nextQ.id,
+              question: nextQ.question_text,
+              options: parsedOptions,
+              correctOptionId: nextQ.correct_answer,
+              points: nextQ.points
+            } as any);
+            setSelectedOption("");
+            setSecondsLeft(QUESTION_TIME_LIMIT);
+          } else {
+            setQuestionOpen(false);
+            setQuizCompleted(true);
+          }
+        } catch (error) {
+          setQuestionOpen(false);
+          setQuizCompleted(true);
+        } finally {
+          setSubmittingAnswer(false);
+        }
+      };
+      autoSubmitTimeout();
       return;
     }
 
@@ -241,11 +311,40 @@ export default function UserDashboard() {
     return () => {
       window.clearTimeout(timerId);
     };
-  }, [questionOpen, secondsLeft]);
+  }, [questionOpen, secondsLeft, activeQuestion, currentUser, dbQuestions]);
 
   const startQuestionFlow = () => {
-    const randomQuestion = QUESTION_BANK[Math.floor(Math.random() * QUESTION_BANK.length)];
-    setActiveQuestion(randomQuestion);
+    const unanswered = dbQuestions.filter((q: any) => !q.answered);
+    if (unanswered.length === 0) return;
+    
+    const firstQ = unanswered[0];
+    
+    let parsedOptions: any[] = [];
+    if (firstQ.question_type === 'multiple_choice') {
+      try {
+        const optArr = typeof firstQ.options === 'string' ? JSON.parse(firstQ.options) : firstQ.options;
+        parsedOptions = (Array.isArray(optArr) ? optArr : []).map((text: string, idx: number) => ({
+          id: String.fromCharCode(65 + idx),
+          label: text
+        }));
+      } catch (e) {
+        console.error("Failed to parse options:", e);
+      }
+    } else if (firstQ.question_type === 'true_false') {
+      parsedOptions = [
+        { id: 'Benar', label: 'Benar' },
+        { id: 'Salah', label: 'Salah' }
+      ];
+    }
+
+    setActiveQuestion({
+      id: firstQ.id,
+      question: firstQ.question_text,
+      options: parsedOptions,
+      correctOptionId: firstQ.correct_answer,
+      points: firstQ.points
+    } as any);
+
     setSelectedOption("");
     setSecondsLeft(QUESTION_TIME_LIMIT);
     setRulesOpen(false);
@@ -258,41 +357,85 @@ export default function UserDashboard() {
     }
 
     setSubmittingAnswer(true);
-    const isCorrect = selectedOption === activeQuestion.correctOptionId;
 
     try {
-      if (isCorrect) {
-        const response = await userDashboardApi.awardQuestionPoints({
-          email: currentUser.email,
-          name: currentUser.name,
-          reward: QUESTION_REWARD,
-        });
+      const response = await userDashboardApi.submitQuestionAnswer({
+        email: currentUser.email,
+        name: currentUser.name,
+        questionId: Number(activeQuestion.id),
+        answer: selectedOption,
+        timeSpentSeconds: QUESTION_TIME_LIMIT - secondsLeft,
+      });
 
-        const rewardData = response.data.data;
-        const nextPoints = Number(rewardData.points ?? points + QUESTION_REWARD);
-        setPoints(nextPoints);
-        setTrend(Array.isArray(rewardData.trend) ? rewardData.trend : createFallbackTrend(nextPoints));
+      const result = response.data.data;
+      const nextPoints = Number(result.updatedPoints);
+      setPoints(nextPoints);
+      setTrend(Array.isArray(result.trend) ? result.trend : createFallbackTrend(nextPoints));
+
+      if (result.isCorrect) {
         toast({
           title: "Jawaban benar",
-          description: `Kamu mendapatkan ${QUESTION_REWARD} poin dari Bible Study question.`,
+          description: result.message || `Anda mendapatkan ${result.pointsEarned} poin!`,
         });
       } else {
         toast({
-          title: "Jawaban belum tepat",
-          description: "Belum ada poin yang ditambahkan untuk pertanyaan ini.",
+          title: "Jawaban salah",
+          description: result.message || "Belum ada poin yang ditambahkan.",
           variant: "destructive",
         });
       }
+
+      const updatedQuestions = dbQuestions.map((q: any) => {
+        if (q.id === activeQuestion.id) {
+          return { ...q, answered: true };
+        }
+        return q;
+      });
+      setDbQuestions(updatedQuestions);
+
+      const unanswered = updatedQuestions.filter((q: any) => !q.answered);
+
+      if (unanswered.length > 0) {
+        const nextQ = unanswered[0];
+        let parsedOptions: any[] = [];
+        if (nextQ.question_type === 'multiple_choice') {
+          try {
+            const optArr = typeof nextQ.options === 'string' ? JSON.parse(nextQ.options) : nextQ.options;
+            parsedOptions = (Array.isArray(optArr) ? optArr : []).map((text: string, idx: number) => ({
+              id: String.fromCharCode(65 + idx),
+              label: text
+            }));
+          } catch (e) {
+            console.error(e);
+          }
+        } else if (nextQ.question_type === 'true_false') {
+          parsedOptions = [
+            { id: 'Benar', label: 'Benar' },
+            { id: 'Salah', label: 'Salah' }
+          ];
+        }
+
+        setActiveQuestion({
+          id: nextQ.id,
+          question: nextQ.question_text,
+          options: parsedOptions,
+          correctOptionId: nextQ.correct_answer,
+          points: nextQ.points
+        } as any);
+        setSelectedOption("");
+        setSecondsLeft(QUESTION_TIME_LIMIT);
+      } else {
+        setQuestionOpen(false);
+        setQuizCompleted(true);
+      }
     } catch (error: any) {
       toast({
-        title: "Question gagal diproses",
+        title: "Submit gagal",
         description: error.response?.data?.message || "Poin user belum bisa diperbarui.",
         variant: "destructive",
       });
     } finally {
       setSubmittingAnswer(false);
-      setQuestionOpen(false);
-      setQuizCompleted(true);
     }
   };
 
@@ -326,7 +469,7 @@ export default function UserDashboard() {
                   <Button
                     className="h-16 w-full justify-center rounded-[20px] bg-transparent text-2xl font-bold text-white shadow-none hover:bg-white/5"
                     onClick={() => setRulesOpen(true)}
-                    disabled={quizCompleted}
+                    disabled={loadingData || quizCompleted}
                   >
                     {questionButtonLabel}
                   </Button>
@@ -406,7 +549,7 @@ export default function UserDashboard() {
 
                 <div className="flex items-center justify-center gap-2 rounded-2xl bg-violet-50 px-4 py-3 text-violet-700">
                   <Medal className="h-5 w-5" />
-                  <span className="font-medium">Jawaban benar memberi +{QUESTION_REWARD} poin</span>
+                  <span className="font-medium">{formatAttendanceTime(attendanceDate)}</span>
                   <ChevronRight className="h-4 w-4" />
                 </div>
               </div>
@@ -427,7 +570,7 @@ export default function UserDashboard() {
 
             <div className="space-y-5 px-6 py-6 text-slate-700">
               <p className="text-base leading-7">
-                Hanya ada 1 pertanyaan. Jika berhasil menjawab dengan benar, maka akan mendapatkan {QUESTION_REWARD} poin. Pertanyaan berbentuk pilihan ganda dengan 4 pilihan jawaban dan berkaitan dengan Bible Study.
+                {rulesText}
               </p>
 
               <DialogFooter className="gap-3 sm:justify-end">
@@ -451,7 +594,7 @@ export default function UserDashboard() {
                   Bible Study Question
                 </DialogTitle>
                 <DialogDescription className="text-white/85">
-                  Sisa waktu {secondsLeft} detik. Jawaban benar mendapat +{QUESTION_REWARD} poin.
+                  Sisa waktu {secondsLeft} detik. Jawaban benar mendapat +{activeQuestion?.points || 10} poin.
                 </DialogDescription>
               </DialogHeader>
             </div>
