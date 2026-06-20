@@ -1,4 +1,4 @@
-[ 
+[
   {
     "userId": "DAMDY-154078",
     "name": "damdy ",
@@ -9,5 +9,16 @@
     "createdAt": "2026-05-15T06:55:54.477Z",
     "updatedAt": "2026-05-15T06:55:54.477Z",
     "registrationSessionId": "2550715a63ff47daadb22304492199f9"
+  },
+  {
+    "userId": "SILFAN-048393",
+    "name": "Silfan",
+    "email": "mendsilfa@gmail.com",
+    "category": "student",
+    "phone": "91827328911234321",
+    "birthday": "2000-12-01",
+    "createdAt": "2026-05-28T13:14:09.007Z",
+    "updatedAt": "2026-05-28T13:14:09.007Z",
+    "registrationSessionId": "119b6dad3dcf4f5b91a7bd8f0fc097e9"
   }
 ]

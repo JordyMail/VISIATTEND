@@ -22,5 +22,29 @@
     "name": "damdy ",
     "confidence": 0.6950602531433105,
     "capturedAt": "2026-05-15T08:43:58.741Z"
+  },
+  {
+    "userId": "SILFAN-048393",
+    "name": "Silfan",
+    "confidence": 0.8646200299263,
+    "capturedAt": "2026-05-28T13:14:21.790Z"
+  },
+  {
+    "userId": "SILFAN-048393",
+    "name": "Silfan",
+    "confidence": 0.9033727645874023,
+    "capturedAt": "2026-05-28T13:15:26.696Z"
+  },
+  {
+    "userId": "SILFAN-048393",
+    "name": "Silfan",
+    "confidence": 0.8523043394088745,
+    "capturedAt": "2026-05-28T13:20:10.070Z"
+  },
+  {
+    "userId": "SILFAN-048393",
+    "name": "Silfan",
+    "confidence": 0.8955109119415283,
+    "capturedAt": "2026-05-28T13:24:33.896Z"
   }
 ]
