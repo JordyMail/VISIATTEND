@@ -17,7 +17,7 @@ import {
 import { handleDemo } from "./routes/demo.js";
 import { QuestionRepository } from './db/repositories/QuestionRepository';
 import { handleGetLeaderboard } from "./routes/attendance.js";
-import { handleAwardQuestionPoints, handleGetUserDashboard } from "./routes/userDashboard.js";
+import { handleAwardQuestionPoints, handleGetUserDashboard, handleGetUserDashboardQuestions, handleAnswerUserDashboardQuestion } from "./routes/userDashboard.js";
 import {
   handlePreviewDetection,
   handleCaptureRegistration,
@@ -884,13 +884,112 @@ export function createServer() {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
+  // ATTENDANCE SCHEDULE
+  // ════════════════════════════════════════════════════════════════════════════
+
+  // GET all scheduled dates
+  app.get("/api/attendance-schedule", authenticateToken, requireAnyRole, async (_req, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().query(
+        `SELECT schedule_date FROM attendance_schedules ORDER BY schedule_date ASC`
+      );
+      const dates: string[] = r.recordset.map((row: any) => {
+        const d = new Date(row.schedule_date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      });
+      res.json({ success: true, data: dates });
+    } catch {
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // GET check if today is scheduled (public for attendance landing flow)
+  app.get("/api/attendance-schedule/today", async (_req, res) => {
+    try {
+      const pool = await getConnection();
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const r = await pool.request()
+        .input("d", sql.Date, new Date(todayStr))
+        .query(`SELECT COUNT(*) as cnt FROM attendance_schedules WHERE schedule_date=@d`);
+      res.json({ success: true, isOpen: r.recordset[0].cnt > 0 });
+    } catch {
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // POST add a date
+  app.post("/api/attendance-schedule", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { date } = req.body;
+      if (!date) return res.status(400).json({ success: false, message: "date required" });
+      const pool = await getConnection();
+      await pool.request()
+        .input("d", sql.Date, new Date(date))
+        .input("uid", sql.Int, req.user.id)
+        .query(`
+          IF NOT EXISTS (SELECT 1 FROM attendance_schedules WHERE schedule_date=@d)
+            INSERT INTO attendance_schedules (schedule_date, created_by) VALUES (@d, @uid)
+        `);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // DELETE remove a date
+  app.delete("/api/attendance-schedule/:date", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      const pool = await getConnection();
+      await pool.request()
+        .input("d", sql.Date, new Date(req.params.date))
+        .query(`DELETE FROM attendance_schedules WHERE schedule_date=@d`);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // USER MEMBER REGISTRATION (PUBLIC)
+  // ════════════════════════════════════════════════════════════════════════════
+
+  app.post("/api/user-members", async (req, res) => {
+    try {
+      const { name, email, category, phone, birthday } = req.body ?? {};
+
+      if (!name || !email || !category || !phone || !birthday) {
+        return res.status(400).json({ success: false, message: "name, email, category, phone, birthday required" });
+      }
+
+      const pool = await getConnection();
+      const result = await pool
+        .request()
+        .input("name", sql.NVarChar, String(name).trim())
+        .input("email", sql.NVarChar, String(email).trim())
+        .input("category", sql.NVarChar, String(category).trim())
+        .input("phone", sql.NVarChar, String(phone).trim())
+        .input("birthday", sql.Date, new Date(String(birthday)))
+        .query(`
+          INSERT INTO user_member (name, email, category, phone, birthday)
+          VALUES (@name, @email, @category, @phone, @birthday);
+
+          SELECT * FROM user_member WHERE id = SCOPE_IDENTITY();
+        `);
+
+      res.status(201).json({ success: true, data: result.recordset[0] });
+    } catch {
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
   // EVENTS
   // ════════════════════════════════════════════════════════════════════════════
 
   app.get(
     "/api/events",
-    authenticateToken,
-    requireAnyRole,
     async (req, res) => {
       try {
         const { isActive, eventType } = req.query;
@@ -947,7 +1046,7 @@ export function createServer() {
     requireAdmin,
     async (req: any, res) => {
       try {
-        const { eventCode, eventName, description, preacherId, season, eventType } =
+        const { eventCode, eventName, description, preacherId, season, eventType, eventDate } =
           req.body;
         if (!eventCode || !eventName || !eventType)
           return res.status(400).json({
@@ -972,10 +1071,11 @@ export function createServer() {
           .input("pid", sql.Int, preacherId || null)
           .input("s", sql.NVarChar, season || null)
           .input("et", sql.NVarChar, eventType)
+          .input("ed", sql.Date, eventDate ? new Date(eventDate) : null)
           .query(
-            `INSERT INTO events (event_code,event_name,description,preacher_id,season,event_type,is_active,created_at)
+            `INSERT INTO events (event_code,event_name,description,preacher_id,season,event_type,event_date,is_active,created_at)
              OUTPUT INSERTED.*
-             VALUES (@ec,@en,@d,@pid,@s,@et,1,GETDATE())`
+             VALUES (@ec,@en,@d,@pid,@s,@et,@ed,1,GETDATE())`
           );
         await log(
           pool,
@@ -1000,7 +1100,7 @@ export function createServer() {
     requireAdmin,
     async (req: any, res) => {
       try {
-        const { eventName, description, preacherId, eventType, isActive } =
+        const { eventName, description, preacherId, eventType, isActive, eventDate } =
           req.body;
         const pool = await getConnection();
         const rq = pool.request().input("id", sql.Int, req.params.id);
@@ -1024,6 +1124,10 @@ export function createServer() {
         if (isActive !== undefined) {
           rq.input("ia", sql.Bit, isActive ? 1 : 0);
           sets.push("is_active=@ia");
+        }
+        if (eventDate !== undefined) {
+          rq.input("ed", sql.Date, eventDate ? new Date(eventDate) : null);
+          sets.push("event_date=@ed");
         }
         await rq.query(
           `UPDATE events SET ${sets.join(",")} WHERE id=@id`
@@ -1208,6 +1312,48 @@ export function createServer() {
     }
   );
 
+  // GET /api/attendance/public-overview (public attendance landing/dashboard)
+  app.get(
+    "/api/attendance/public-overview",
+    async (_req, res) => {
+      try {
+        const pool = await getConnection();
+        const today = new Date().toISOString().split("T")[0];
+
+        const [memberCountResult, eventCountResult, attendanceCountResult] = await Promise.all([
+          pool.request().query("SELECT COUNT(*) as c FROM user_member"),
+          pool.request().query("SELECT COUNT(*) as c FROM events WHERE is_active=1"),
+          pool.request()
+            .input("d", sql.Date, today)
+            .query("SELECT COUNT(*) as c FROM attendance_member WHERE CAST(attendance_date AS DATE)=@d"),
+        ]);
+
+        const totalMembers = Number(memberCountResult.recordset[0]?.c ?? 0);
+        const checkedIn = Number(attendanceCountResult.recordset[0]?.c ?? 0);
+        const activeEvents = Number(eventCountResult.recordset[0]?.c ?? 0);
+        const pending = Math.max(totalMembers - checkedIn, 0);
+        const attendanceRate = totalMembers > 0 ? Number(((checkedIn / totalMembers) * 100).toFixed(1)) : 0;
+
+        res.json({
+          success: true,
+          data: {
+            totalMembers,
+            activeEvents,
+            todayAttendance: {
+              checkedIn,
+              pending,
+              absent: 0,
+            },
+            attendanceRate,
+          },
+        });
+      } catch (e: any) {
+        console.error("[ATTENDANCE PUBLIC OVERVIEW]", e);
+        res.status(500).json({ success: false, message: "DB error" });
+      }
+    }
+  );
+
   // GET /api/attendance/trend (admin only)
   app.get(
     "/api/attendance/trend",
@@ -1271,22 +1417,22 @@ app.get(
           COUNT(*) as total_records,
           CAST(ROUND(CAST(COUNT(CASE WHEN a.status IN('present','late') THEN 1 END) AS FLOAT)/
             NULLIF(COUNT(*),0)*100,2) AS DECIMAL(5,2)) as attendance_percentage,
-          ISNULL(up.total_points, 0) as question_points,
-          ISNULL(up.questions_answered, 0) as questions_answered,
-          ISNULL(up.correct_answers, 0) as correct_answers,
-          ISNULL(up.streak_count, 0) as streak_count,
+          ISNULL(mp.points, 0) as question_points,
+          (SELECT COUNT(*) FROM user_answers ua WHERE ua.member_id = u.member_id) as questions_answered,
+          (SELECT COUNT(*) FROM user_answers ua WHERE ua.member_id = u.member_id AND ua.is_correct = 1) as correct_answers,
+          0 as streak_count,
           -- Combined score: attendance percentage + bonus points from questions
           CAST(ROUND(CAST(COUNT(CASE WHEN a.status IN('present','late') THEN 1 END) AS FLOAT)/
             NULLIF(COUNT(*),0)*100,2) AS DECIMAL(5,2)) + 
-          ISNULL(up.total_points, 0) * 0.1 as combined_score
+          ISNULL(mp.points, 0) * 0.1 as combined_score
         FROM users u 
         LEFT JOIN attendance a ON u.id = a.user_id
           AND a.attendance_date >= DATEADD(DAY, -@days, GETDATE())
           ${ef}
-        LEFT JOIN user_points up ON u.id = up.user_id
+        LEFT JOIN member_point mp ON u.member_id = mp.member_id
         WHERE u.is_active = 1 
           AND u.role = 'user'
-        GROUP BY u.id, u.full_name, u.member_id, u.jabatan, u.division, u.avatar_url, up.total_points, up.questions_answered, up.correct_answers, up.streak_count
+        GROUP BY u.id, u.full_name, u.member_id, u.jabatan, u.division, u.avatar_url, mp.points
         ORDER BY combined_score DESC, attendance_percentage DESC, total_present DESC
       `);
       
@@ -2614,6 +2760,26 @@ app.post('/api/questions', authenticateToken, requireAdmin, async (req: any, res
         message: 'Title, question text, question type, and correct answer are required'
       });
     }
+
+    // Validate max 3 questions on the same date
+    if (startDate) {
+      const pool = await getConnection();
+      const countResult = await pool
+        .request()
+        .input('startDate', sql.DateTime, startDate)
+        .query(`
+          SELECT COUNT(*) as count 
+          FROM questions 
+          WHERE CAST(start_date AS DATE) = CAST(@startDate AS DATE)
+        `);
+      const count = countResult.recordset[0].count;
+      if (count >= 3) {
+        return res.status(400).json({
+          success: false,
+          message: 'Maksimal hanya 3 pertanyaan yang dapat dibuat untuk tanggal yang sama.'
+        });
+      }
+    }
     
     // Validasi question type
     const validTypes = ['multiple_choice', 'true_false', 'short_answer'];
@@ -2626,16 +2792,16 @@ app.post('/api/questions', authenticateToken, requireAdmin, async (req: any, res
     
     const question = await questionRepo.create({
       title,
-      question_text: questionText,  // Gunakan snake_case untuk DB
-      question_type: questionType,   // Gunakan snake_case untuk DB
+      questionText,
+      questionType: questionType as 'multiple_choice' | 'true_false' | 'short_answer',
       options: options ? JSON.stringify(options) : null,
-      correct_answer: String(correctAnswer),
+      correctAnswer: String(correctAnswer),
       points: parseInt(points) || 10,
-      time_limit_minutes: parseInt(timeLimitMinutes) || 5,
-      created_by: req.user.id,
-      start_date: startDate || null,
-      end_date: endDate || null,
-      max_attempts: parseInt(maxAttempts) || 1
+      timeLimitMinutes: parseInt(timeLimitMinutes) || 5,
+      createdBy: req.user.id,
+      startDate: startDate || null,
+      endDate: endDate || null,
+      maxAttempts: parseInt(maxAttempts) || 1
     });
     
     const pool = await getConnection();
@@ -2657,7 +2823,33 @@ app.post('/api/questions', authenticateToken, requireAdmin, async (req: any, res
 // PUT /api/questions/:id
 app.put('/api/questions/:id', authenticateToken, requireAdmin, async (req: any, res) => {
   try {
-    await questionRepo.update(parseInt(req.params.id), req.body);
+    const questionId = parseInt(req.params.id);
+    const data = { ...req.body };
+    if (data.startDate) {
+      const pool = await getConnection();
+      const countResult = await pool
+        .request()
+        .input('id', sql.Int, questionId)
+        .input('startDate', sql.DateTime, data.startDate)
+        .query(`
+          SELECT COUNT(*) as count 
+          FROM questions 
+          WHERE CAST(start_date AS DATE) = CAST(@startDate AS DATE)
+            AND id != @id
+        `);
+      const count = countResult.recordset[0].count;
+      if (count >= 3) {
+        return res.status(400).json({
+          success: false,
+          message: 'Maksimal hanya 3 pertanyaan yang dapat dibuat untuk tanggal yang sama.'
+        });
+      }
+    }
+
+    if (data.options !== undefined) {
+      data.options = typeof data.options === 'string' ? data.options : JSON.stringify(data.options);
+    }
+    await questionRepo.update(questionId, data);
     res.json({ success: true, message: 'Question updated' });
   } catch (error: any) {
     console.error('[UPDATE QUESTION]', error);
@@ -2702,15 +2894,25 @@ app.post('/api/questions/:id/submit', authenticateToken, requireAnyRole, async (
     
     const question = qResult.recordset[0];
     
+    // Resolve member_id
+    const userRes = await pool
+      .request()
+      .input('userId', sql.Int, req.user.id)
+      .query('SELECT member_id FROM users WHERE id = @userId');
+    const memberId = userRes.recordset[0]?.member_id;
+    if (!memberId) {
+      return res.status(400).json({ success: false, message: 'User member_id not found' });
+    }
+
     // Check remaining attempts
     const attemptResult = await pool
       .request()
-      .input('userId', sql.Int, req.user.id)
+      .input('memberId', sql.NVarChar, memberId)
       .input('questionId', sql.Int, questionId)
       .query(`
         SELECT COUNT(*) as attempts 
         FROM user_answers 
-        WHERE user_id = @userId AND question_id = @questionId
+        WHERE member_id = @memberId AND question_id = @questionId
       `);
     
     const currentAttempts = attemptResult.recordset[0].attempts;
@@ -2743,13 +2945,13 @@ app.post('/api/questions/:id/submit', authenticateToken, requireAnyRole, async (
     
     console.log('Is correct?', isCorrect);
     
-    const pointsEarned = isCorrect ? (question.points || 10) : 0;
+    const pointsEarned = isCorrect ? 10 : null;
     const nextAttempt = currentAttempts + 1;
     
     // Insert answer
     const insertResult = await pool
       .request()
-      .input('user_id', sql.Int, req.user.id)
+      .input('member_id', sql.NVarChar, memberId)
       .input('question_id', sql.Int, questionId)
       .input('answer_text', sql.NVarChar, userAnswer)
       .input('is_correct', sql.Bit, isCorrect ? 1 : 0)
@@ -2758,8 +2960,8 @@ app.post('/api/questions/:id/submit', authenticateToken, requireAnyRole, async (
       .input('attempt_number', sql.Int, nextAttempt)
       .query(`
         INSERT INTO user_answers 
-        (user_id, question_id, answer_text, is_correct, points_earned, time_spent_seconds, attempt_number, answered_at)
-        VALUES (@user_id, @question_id, @answer_text, @is_correct, @points_earned, @time_spent_seconds, @attempt_number, GETDATE());
+        (member_id, question_id, answer_text, is_correct, points_earned, time_spent_seconds, attempt_number, answered_at)
+        VALUES (@member_id, @question_id, @answer_text, @is_correct, @points_earned, @time_spent_seconds, @attempt_number, GETDATE());
         
         SELECT * FROM user_answers WHERE id = SCOPE_IDENTITY();
       `);
@@ -2767,6 +2969,20 @@ app.post('/api/questions/:id/submit', authenticateToken, requireAnyRole, async (
     const answerResult = insertResult.recordset[0];
     
     console.log('✅ Answer saved:', answerResult);
+
+    // If correct, insert into point_logs
+    if (isCorrect) {
+      await pool
+        .request()
+        .input("member_id", sql.NVarChar, memberId)
+        .input("points", sql.Int, 10)
+        .input("type", sql.NVarChar, "question")
+        .input("notes", sql.NVarChar, `Bible Study Quiz reward for question: ${question.title}`)
+        .query(`
+          INSERT INTO point_logs (member_id, points, type, notes, created_at)
+          VALUES (@member_id, @points, @type, @notes, GETDATE())
+        `);
+    }
     
     res.json({
       success: true,
@@ -2852,6 +3068,8 @@ app.get('/api/questions/stats/:userId', authenticateToken, requireSelfOrAdmin('u
   app.get("/api/demo", handleDemo);
   app.get("/api/attendance/leaderboard", handleGetLeaderboard);
   app.get("/api/user-dashboard/profile", handleGetUserDashboard);
+  app.get("/api/user-dashboard/questions", handleGetUserDashboardQuestions);
+  app.post("/api/user-dashboard/questions/submit", handleAnswerUserDashboardQuestion);
   app.post("/api/user-dashboard/question/reward", handleAwardQuestionPoints);
   app.post("/api/face-ai/preview", handlePreviewDetection);
   app.post("/api/face-ai/registration/capture", handleCaptureRegistration);
