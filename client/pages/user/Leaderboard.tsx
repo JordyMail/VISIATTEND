@@ -1,6 +1,6 @@
 // client/pages/user/Leaderboard.tsx
 import { useState, useEffect } from "react";
-import { Trophy, Medal } from "lucide-react";
+import { Trophy, Medal, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -16,6 +16,9 @@ interface LeaderboardEntry {
   jabatan?: string; division?: string;
   total_present: number; total_late: number; total_records: number;
   attendance_percentage: number;
+  question_points?: number;
+  questions_answered?: number;
+  correct_answers?: number;
 }
 interface Event { id: number; event_code: string; event_name: string; }
 
@@ -26,7 +29,7 @@ export default function UserLeaderboard() {
   const [data, setData]         = useState<LeaderboardEntry[]>([]);
   const [events, setEvents]     = useState<Event[]>([]);
   const [eventId, setEventId]   = useState("all");
-  const [period, setPeriod]     = useState("month");
+  const [period, setPeriod]     = useState("semester");
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
@@ -160,28 +163,64 @@ export default function UserLeaderboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                {rest.map((entry, idx) => {
-                  const rank  = idx + 4;
-                  const isMe  = entry.user_id === me?.id;
-                  return (
-                    <div key={entry.user_id}
-                      className={`flex items-center gap-4 px-5 py-3 border-b last:border-0 transition-colors
-                        ${isMe ? "bg-primary/5 font-semibold" : "hover:bg-muted/50"}`}>
-                      <span className="w-7 text-sm text-muted-foreground font-medium">#{rank}</span>
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold flex-shrink-0">
-                        {entry.full_name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate">{entry.full_name}{isMe && " (Kamu)"}</p>
-                        <p className="text-xs text-muted-foreground">{entry.division || entry.jabatan || "-"}</p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="font-bold text-primary">{entry.attendance_percentage}%</p>
-                        <p className="text-xs text-muted-foreground">{entry.total_present} hadir</p>
-                      </div>
-                    </div>
-                  );
-                })}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Rank</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Nama</th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold">Kehadiran</th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold">
+                          <div className="flex items-center justify-center gap-1">
+                            <Zap className="w-3 h-3 text-purple-500" /> Poin
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rest.map((entry, idx) => {
+                        const rank  = idx + 4;
+                        const isMe  = entry.user_id === me?.id;
+                        return (
+                          <tr key={entry.user_id}
+                            className={`border-b last:border-0 transition-colors
+                              ${isMe ? "bg-primary/5 font-semibold" : "hover:bg-muted/50"}`}>
+                            <td className="px-4 py-3">
+                              <span className="text-sm text-muted-foreground font-medium">#{rank}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                  {entry.full_name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="text-sm truncate">{entry.full_name}{isMe && " (Kamu)"}</p>
+                                  <p className="text-xs text-muted-foreground">{entry.division || entry.jabatan || "-"}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div>
+                                <p className="font-bold text-primary">{entry.attendance_percentage}%</p>
+                                <p className="text-xs text-muted-foreground">{entry.total_present} hadir</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div className="flex flex-col items-center">
+                                <span className="font-bold text-purple-600 text-sm">{entry.question_points || 0}</span>
+                                {entry.questions_answered && entry.questions_answered > 0 && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {entry.correct_answers || 0}/{entry.questions_answered} benar
+        </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           )}

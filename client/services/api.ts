@@ -206,6 +206,48 @@ export const settingsApi = {
     api.get("/settings/activity-logs", { params: { limit, offset } }),
 };
 
+
+
+
+// ─── Questions ────────────────────────────────────────────────────────────────
+export const questionApi = {
+  // Admin endpoints
+  getAll: (filters?: { isActive?: boolean }) =>
+    api.get('/questions', { params: filters }),
+  getById: (id: number) =>
+    api.get(`/questions/${id}`),
+  create: (data: {
+    title: string;
+    questionText: string;
+    questionType: string;
+    options?: string[] | null;
+    correctAnswer: string;
+    points?: number;
+    timeLimitMinutes?: number;
+    startDate?: string | null;
+    endDate?: string | null;
+    maxAttempts?: number;
+  }) => api.post('/questions', data),
+  update: (id: number, data: any) =>
+    api.put(`/questions/${id}`, data),
+  delete: (id: number) =>
+    api.delete(`/questions/${id}`),
+  
+  // User endpoints
+  getAvailable: () =>
+    api.get('/questions/available'),
+  submitAnswer: (questionId: number, answer: string, timeSpentSeconds?: number) =>
+    api.post(`/questions/${questionId}/submit`, { answer, timeSpentSeconds }),
+  
+  // Stats & Leaderboard
+  getLeaderboard: () =>
+    api.get('/questions/leaderboard'),
+  getUserStats: (userId: number) =>
+    api.get(`/questions/stats/${userId}`),
+  getMyStats: () => api.get('/user/question-stats'),
+};
+
+
 export const faceAiApi = {
   previewDetection: (data: { imageBase64: string }) =>
     api.post("/face-ai/preview", data),

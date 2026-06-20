@@ -1,6 +1,7 @@
 // client/pages/admin/QRManager.tsx
-import { useState, useEffect, useRef } from "react";
-import { QrCode, Plus, Copy, CheckCircle, Clock, Loader2, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { QRCodeSVG } from "qrcode.react"; // IMPORT QR CODE
+import { QrCode, Plus, Copy, CheckCircle, Clock, Loader2, RefreshCw, Download, Eye } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,8 @@ export default function QRManager() {
   const [generating, setGenerating] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState("");
   const [dialogOpen, setDialogOpen]       = useState(false);
+  const [viewQRDialog, setViewQRDialog]   = useState(false);
+  const [selectedQR, setSelectedQR]       = useState<QRToken | null>(null);
   const [copiedId, setCopiedId]           = useState<number | null>(null);
   const [newToken, setNewToken]           = useState<any>(null);
   const [form, setForm] = useState({ eventId: "", validDate: "", expiryMinutes: "60" });
@@ -42,8 +45,11 @@ export default function QRManager() {
     try {
       const r = await qrApi.getByEvent(parseInt(evId));
       setTokens(r.data.data);
-    } catch { toast({ title: "Error", description: "Gagal memuat QR token", variant: "destructive" }); }
-    finally { setLoading(false); }
+    } catch { 
+      toast({ title: "Error", description: "Gagal memuat QR token", variant: "destructive" }); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleEventChange = (v: string) => {
@@ -76,6 +82,36 @@ export default function QRManager() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const downloadQR = (token: string) => {
+    const svg = document.getElementById(`qr-${token.substring(0, 8)}`);
+    if (!svg) return;
+    
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx?.drawImage(img, 0, 0);
+      const pngFile = canvas.toDataURL("image/png");
+      
+      const downloadLink = document.createElement("a");
+      downloadLink.download = `QR_Absensi_${new Date().toISOString().split('T')[0]}.png`;
+      downloadLink.href = pngFile;
+      downloadLink.click();
+    };
+    
+    img.src = "data:image/svg+xml;base64," + btoa(svgData);
+    toast({ title: "Berhasil!", description: "QR Code telah didownload" });
+  };
+
+  const viewQR = (token: QRToken) => {
+    setSelectedQR(token);
+    setViewQRDialog(true);
+  };
+
   const isExpired = (d: string) => new Date(d) < new Date();
   const formatDateTime = (d: string) => new Date(d).toLocaleString("id-ID");
   const timeRemaining = (d: string) => {
@@ -87,6 +123,8 @@ export default function QRManager() {
     return `${m}m lagi`;
   };
 
+  const selectedEventName = events.find(e => e.id.toString() === selectedEvent)?.event_name || "";
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -94,9 +132,22 @@ export default function QRManager() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <QrCode className="w-6 h-6" /> QR Manager
           </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Generate dan kelola QR token untuk absensi</p>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Generate dan kelola QR token untuk absensi
+          </p>
         </div>
-        <Button onClick={() => { setForm({ eventId: selectedEvent, validDate: new Date().toISOString().split("T")[0], expiryMinutes: "60" }); setNewToken(null); setDialogOpen(true); }} className="gap-2">
+        <Button 
+          onClick={() => { 
+            setForm({ 
+              eventId: selectedEvent, 
+              validDate: new Date().toISOString().split("T")[0], 
+              expiryMinutes: "60" 
+            }); 
+            setNewToken(null); 
+            setDialogOpen(true); 
+          }} 
+          className="gap-2"
+        >
           <Plus className="w-4 h-4" /> Generate QR
         </Button>
       </div>
@@ -110,7 +161,9 @@ export default function QRManager() {
             </SelectTrigger>
             <SelectContent>
               {events.map((e) => (
-                <SelectItem key={e.id} value={e.id.toString()}>{e.event_code} – {e.event_name}</SelectItem>
+                <SelectItem key={e.id} value={e.id.toString()}>
+                  {e.event_code} – {e.event_name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -126,7 +179,12 @@ export default function QRManager() {
       {selectedEvent && (
         <Card className="overflow-hidden">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Token QR Tersedia</CardTitle>
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>Token QR Tersedia</span>
+              <span className="text-sm font-normal text-muted-foreground">
+                {selectedEventName}
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (
@@ -144,23 +202,45 @@ export default function QRManager() {
                   const expired = isExpired(t.expires_at);
                   return (
                     <div key={t.id} className={`flex items-center gap-4 px-5 py-4 ${expired ? "opacity-50" : ""}`}>
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${expired ? "bg-gray-100" : "bg-primary/10"}`}>
-                        {expired ? <Clock className="w-5 h-5 text-gray-400" /> : <QrCode className="w-5 h-5 text-primary" />}
-                      </div>
+                      {/* QR Code Preview */}
+                      {!expired && (
+                        <div className="w-12 h-12 bg-white rounded-lg border p-1 flex-shrink-0 cursor-pointer hover:shadow-md transition-shadow"
+                             onClick={() => viewQR(t)}>
+                          <QRCodeSVG 
+                            value={t.token} 
+                            size={40} 
+                            level="L"
+                          />
+                        </div>
+                      )}
+                      {expired && (
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-gray-100">
+                          <Clock className="w-6 h-6 text-gray-400" />
+                        </div>
+                      )}
+                      
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-mono font-medium truncate">{t.token.slice(0, 20)}...</p>
                         <p className="text-xs text-muted-foreground">
                           Valid: {new Date(t.valid_date).toLocaleDateString("id-ID")} · {expired ? "Kadaluarsa" : timeRemaining(t.expires_at)}
                         </p>
                       </div>
+                      
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <Badge variant="outline" className={expired ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"}>
                           {expired ? "Kadaluarsa" : "Aktif"}
                         </Badge>
                         {!expired && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copyToken(t.token, t.id)}>
-                            {copiedId === t.id ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                          </Button>
+                          <>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" 
+                              onClick={() => viewQR(t)} title="Lihat QR">
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" 
+                              onClick={() => copyToken(t.token, t.id)} title="Salin Token">
+                              {copiedId === t.id ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -171,6 +251,51 @@ export default function QRManager() {
           </CardContent>
         </Card>
       )}
+
+      {/* View QR Dialog */}
+      <Dialog open={viewQRDialog} onOpenChange={setViewQRDialog}>
+        <DialogContent className="sm:max-w-md text-center">
+          <DialogHeader>
+            <DialogTitle>QR Code Absensi</DialogTitle>
+            <DialogDescription>
+              Scan QR ini untuk check-in di event: <strong>{selectedEventName}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedQR && (
+            <div className="space-y-4">
+              <div className="bg-white p-6 rounded-xl border-2 border-dashed border-primary flex justify-center">
+                <QRCodeSVG 
+                  id={`qr-${selectedQR.token.substring(0, 8)}`}
+                  value={selectedQR.token} 
+                  size={250} 
+                  level="H"
+                  includeMargin={true}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <p className="text-sm font-mono bg-muted p-2 rounded break-all">
+                  {selectedQR.token}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Berlaku hingga: {formatDateTime(selectedQR.expires_at)}
+                </p>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button className="flex-1 gap-2" onClick={() => copyToken(selectedQR.token, selectedQR.id)}>
+                  <Copy className="w-4 h-4" /> Salin Token
+                </Button>
+                <Button variant="outline" className="flex-1 gap-2" 
+                  onClick={() => downloadQR(selectedQR.token)}>
+                  <Download className="w-4 h-4" /> Download QR
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Generate Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -185,12 +310,27 @@ export default function QRManager() {
               <div className="bg-green-50 border border-green-200 rounded-xl p-5 text-center">
                 <CheckCircle className="w-10 h-10 text-green-500 mx-auto mb-3" />
                 <p className="font-semibold text-green-800 mb-3">QR Token Berhasil Dibuat!</p>
-                <div className="bg-white rounded-lg p-3 font-mono text-sm break-all border">{newToken.token}</div>
+                
+                {/* Tampilkan QR Code */}
+                <div className="bg-white p-4 rounded-lg mb-3 flex justify-center">
+                  <QRCodeSVG 
+                    value={newToken.token} 
+                    size={200} 
+                    level="H"
+                  />
+                </div>
+                
+                <div className="bg-white rounded-lg p-3 font-mono text-sm break-all border">
+                  {newToken.token}
+                </div>
                 <p className="text-xs text-muted-foreground mt-2">
                   Berlaku hingga: {formatDateTime(newToken.expiresAt)}
                 </p>
               </div>
-              <Button className="w-full gap-2" onClick={() => { navigator.clipboard.writeText(newToken.token); toast({ title: "Disalin!" }); }}>
+              <Button className="w-full gap-2" onClick={() => { 
+                navigator.clipboard.writeText(newToken.token); 
+                toast({ title: "Disalin!" }); 
+              }}>
                 <Copy className="w-4 h-4" /> Salin Token
               </Button>
               <Button variant="outline" className="w-full" onClick={() => setNewToken(null)}>
@@ -206,14 +346,17 @@ export default function QRManager() {
                     <SelectTrigger><SelectValue placeholder="Pilih event" /></SelectTrigger>
                     <SelectContent>
                       {events.map((e) => (
-                        <SelectItem key={e.id} value={e.id.toString()}>{e.event_code} – {e.event_name}</SelectItem>
+                        <SelectItem key={e.id} value={e.id.toString()}>
+                          {e.event_code} – {e.event_name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
                   <Label className="mb-1.5 block">Tanggal Berlaku</Label>
-                  <Input type="date" value={form.validDate} onChange={(e) => setForm({ ...form, validDate: e.target.value })} />
+                  <Input type="date" value={form.validDate} 
+                    onChange={(e) => setForm({ ...form, validDate: e.target.value })} />
                   <p className="text-xs text-muted-foreground mt-1">Kosongkan untuk hari ini</p>
                 </div>
                 <div>

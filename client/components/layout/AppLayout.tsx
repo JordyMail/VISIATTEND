@@ -6,6 +6,7 @@ import {
   Settings, LogOut, ChevronLeft, ChevronRight, Megaphone,
   QrCode, ListChecks, Trophy, ShieldCheck, Layers, FileText,
   UserCircle, CheckSquare, BookOpen, Bell, Menu, X,
+  HelpCircle,
 } from "lucide-react";
 import { getSession, clearSession } from "@/lib/auth";
 import { authApi } from "@/services/api"; 
@@ -30,6 +31,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { to: "/superadmin/audit",         icon: FileText,        label: "Audit Logs" },
   { to: "/superadmin/system",        icon: ShieldCheck,     label: "System" },
   { to: "/superadmin/settings",      icon: Settings,        label: "Settings" },
+  { to: "/superadmin/questions",     icon: HelpCircle,      label: "Soal" },
 ];
 
 const ADMIN_NAV: NavItem[] = [
@@ -43,6 +45,7 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/admin/reports",       icon: BarChart3,       label: "Reports" },
   { to: "/admin/leaderboard",   icon: Trophy,          label: "Leaderboard" },
   { to: "/admin/settings",      icon: Settings,        label: "Settings" },
+  { to: "/admin/questions",     icon: HelpCircle,      label: "Soal" },
 ];
 
 const ATTENDANCE_NAV: NavItem[] = [
@@ -60,6 +63,7 @@ const USER_NAV: NavItem[] = [
   { to: "/user/announcements", icon: Bell,            label: "Announcements" },
   { to: "/user/leaderboard",   icon: Trophy,          label: "Leaderboard" },
   { to: "/user/profile",       icon: UserCircle,      label: "Profile" },
+  { to: "/user/questions",     icon: HelpCircle,      label: "Jawab Soal" },
 ];
 
 const NAV_MAP: Record<AppRole, NavItem[]> = {
@@ -104,9 +108,10 @@ export default function AppLayout({ role }: Props) {
     <aside className={`
       flex flex-col bg-gray-900 text-white transition-all duration-300
       ${mobile ? "w-72 h-full" : (collapsed ? "w-16" : "w-64")}
+      flex-shrink-0
     `}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700 min-h-[64px]">
+      <div className="flex items-center justify-between p-4 border-b border-gray-700 min-h-[64px] flex-shrink-0">
         {(!collapsed || mobile) && (
           <div className="flex items-center gap-2 overflow-hidden">
             <div className={`w-8 h-8 rounded-lg ${ROLE_COLOR[role]} flex items-center justify-center flex-shrink-0`}>
@@ -131,8 +136,8 @@ export default function AppLayout({ role }: Props) {
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+      {/* Nav - FIXED: Added overflow-y-auto and flex-1 */}
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto min-h-0">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -149,8 +154,8 @@ export default function AppLayout({ role }: Props) {
         ))}
       </nav>
 
-      {/* User info + logout */}
-      <div className="border-t border-gray-700 p-3">
+      {/* User info + logout - FIXED: Added flex-shrink-0 */}
+      <div className="border-t border-gray-700 p-3 flex-shrink-0">
         {(!collapsed || mobile) ? (
           <div className="flex items-center gap-3 mb-3">
             <div className={`w-8 h-8 rounded-full ${ROLE_COLOR[role]} flex items-center justify-center flex-shrink-0`}>
@@ -176,9 +181,10 @@ export default function AppLayout({ role }: Props) {
   );
 
   return (
+    // FIXED: Main container uses h-screen and flex
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop sidebar */}
-      <div className="hidden md:flex">
+      <div className="hidden md:flex flex-shrink-0">
         <Sidebar />
       </div>
 
@@ -192,10 +198,10 @@ export default function AppLayout({ role }: Props) {
         </div>
       )}
 
-      {/* Main content */}
+      {/* Main content - FIXED: flex-1 and overflow-y-auto */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile topbar */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b bg-background">
+        {/* Mobile topbar - FIXED: flex-shrink-0 */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b bg-background flex-shrink-0">
           <button onClick={() => setMobileOpen(true)} className="p-1 rounded hover:bg-muted">
             <Menu className="w-5 h-5" />
           </button>
@@ -207,9 +213,11 @@ export default function AppLayout({ role }: Props) {
           </div>
         </div>
 
-        {/* Page content */}
+        {/* Page content - FIXED: flex-1 and overflow-y-auto for scrolling */}
         <main className="flex-1 overflow-y-auto">
-          <Outlet />
+          <div className="min-h-full">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

@@ -33,6 +33,7 @@ import Announcements from "@/pages/admin/Announcements";
 import QRManager from "@/pages/admin/QRManager";
 import AdminLeaderboard from "@/pages/admin/Leaderboard";
 import AdminSettings from "@/pages/Settings";
+import QuestionsManagement from "@/pages/admin/Questions";
 
 // User pages
 import UserDashboard from "@/pages/user/Dashboard";
@@ -42,6 +43,7 @@ import UserCheckin from "@/pages/user/CheckIn";
 import UserSchedules from "@/pages/user/Schedules";
 import UserAnnouncements from "@/pages/user/Announcements";
 import UserLeaderboard from "@/pages/user/Leaderboard";
+import AnswerQuestion from "@/pages/user/AnswerQuestion";
 
 // Attendance & face flow pages
 import AttendanceDashboard from "./pages/AttendanceDashboard";
@@ -91,67 +93,73 @@ export default function App() {
             <Route path="/unauthorized" element={<Unauthorized />} />
             <Route path="/" element={<Navigate to="/login" replace />} />
 
-            <Route
-              path="/superadmin"
-              element={
-                <RouteGuard requiredRoles={["super_admin"]}>
-                  <AppLayout role="super_admin" />
-                </RouteGuard>
-              }
-            >
-              <Route path="dashboard" element={<SuperAdminDashboard />} />
-              <Route path="members" element={<Members />} />
-              <Route path="events" element={<Events />} />
-              <Route path="attendance" element={<Attendance />} />
-              <Route path="schedules" element={<Schedules />} />
-              <Route path="announcements" element={<Announcements />} />
-              <Route path="reports" element={<Reports />} />
-              <Route path="leaderboard" element={<AdminLeaderboard />} />
-              <Route path="divisions" element={<DivisionsPage />} />
-              <Route path="system" element={<SystemSettings />} />
-              <Route path="audit" element={<AuditLogs />} />
-              <Route path="settings" element={<AdminSettings />} />
-              <Route index element={<Navigate to="dashboard" replace />} />
-            </Route>
+        {/* ══ SUPER ADMIN ════════════════════════════════════════════════════ */}
+        <Route
+          path="/superadmin"
+          element={
+            <RouteGuard requiredRoles={["super_admin"]}>
+              <AppLayout role="super_admin" />
+            </RouteGuard>
+          }
+        >
+          <Route path="dashboard" element={<SuperAdminDashboard />} />
+          <Route path="members" element={<Members />} />
+          <Route path="events" element={<Events />} />
+          <Route path="attendance" element={<Attendance />} />
+          <Route path="schedules" element={<Schedules />} />
+          <Route path="announcements" element={<Announcements />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="leaderboard" element={<AdminLeaderboard />} />
+          <Route path="divisions" element={<DivisionsPage />} />
+          <Route path="system" element={<SystemSettings />} />
+          <Route path="audit" element={<AuditLogs />} />
+          <Route path="settings" element={<AdminSettings />} />
+          <Route path="questions" element={<QuestionsManagement />} />
+          <Route index element={<Navigate to="dashboard" replace />} />
+        </Route>
 
-            <Route
-              path="/admin"
-              element={
-                <RouteGuard requiredRoles={["super_admin", "admin"]}>
-                  <AppLayout role="admin" />
-                </RouteGuard>
-              }
-            >
-              <Route path="dashboard" element={<AdminDashboard />} />
-              <Route path="members" element={<Members />} />
-              <Route path="events" element={<Events />} />
-              <Route path="attendance" element={<Attendance />} />
-              <Route path="schedules" element={<Schedules />} />
-              <Route path="announcements" element={<Announcements />} />
-              <Route path="qr" element={<QRManager />} />
-              <Route path="reports" element={<Reports />} />
-              <Route path="leaderboard" element={<AdminLeaderboard />} />
-              <Route path="settings" element={<AdminSettings />} />
-              <Route index element={<Navigate to="dashboard" replace />} />
-            </Route>
+        {/* ══ ADMIN ══════════════════════════════════════════════════════════ */}
+        <Route
+          path="/admin"
+          element={
+            <RouteGuard requiredRoles={["super_admin", "admin"]}>
+              <AppLayout role="admin" />
+            </RouteGuard>
+          }
+        >
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="members" element={<Members />} />
+          <Route path="events" element={<Events />} />
+          <Route path="attendance" element={<Attendance />} />
+          <Route path="schedules" element={<Schedules />} />
+          <Route path="announcements" element={<Announcements />} />
+          <Route path="qr" element={<QRManager />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="leaderboard" element={<AdminLeaderboard />} />
+          <Route path="settings" element={<AdminSettings />} />
+          <Route path="questions" element={<QuestionsManagement />} />
+          <Route index element={<Navigate to="dashboard" replace />} />
+        </Route>
 
-            <Route
-              path="/user"
-              element={
-                <RouteGuard requiredRoles={["super_admin", "admin", "user"]}>
-                  <AppLayout role="user" />
-                </RouteGuard>
-              }
-            >
-              <Route path="dashboard" element={<UserDashboard />} />
-              <Route path="profile" element={<UserProfile />} />
-              <Route path="attendance" element={<UserAttendance />} />
-              <Route path="checkin" element={<UserCheckin />} />
-              <Route path="schedules" element={<UserSchedules />} />
-              <Route path="announcements" element={<UserAnnouncements />} />
-              <Route path="leaderboard" element={<UserLeaderboard />} />
-              <Route index element={<Navigate to="dashboard" replace />} />
-            </Route>
+        {/* ══ USER ═══════════════════════════════════════════════════════════ */}
+        <Route
+          path="/user"
+          element={
+            <RouteGuard requiredRoles={["super_admin", "admin", "user"]}>
+              <AppLayout role="user" />
+            </RouteGuard>
+          }
+        >
+          <Route path="dashboard" element={<UserDashboard />} />
+          <Route path="profile" element={<UserProfile />} />
+          <Route path="attendance" element={<UserAttendance />} />
+          <Route path="checkin" element={<UserCheckin />} />
+          <Route path="schedules" element={<UserSchedules />} />
+          <Route path="announcements" element={<UserAnnouncements />} />
+          <Route path="leaderboard" element={<UserLeaderboard />} />
+          <Route path="questions" element={<AnswerQuestion />} />
+          <Route index element={<Navigate to="dashboard" replace />} />
+        </Route>
 
             <Route
               path="/attendance"

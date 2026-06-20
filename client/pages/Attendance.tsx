@@ -30,6 +30,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
   FormField,
@@ -45,7 +55,7 @@ import { attendanceApi, userApi, eventApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
 
 const attendanceFormSchema = z.object({
-  attendanceDate: z.date({
+  attendanceDate: z.string({
     required_error: "Date is required",
   }),
   userId: z.string({
@@ -79,6 +89,7 @@ interface AttendanceRecord {
   confidence_score?: number;
   liveness_verified?: boolean;
   device_info?: string;
+  notes?: string;
   created_at: string;
 }
 
@@ -86,12 +97,17 @@ interface User {
   id: number;
   full_name: string;
   member_id: string;
+  email: string;
+  jabatan?: string;
+  division?: string;
 }
 
 interface Event {
   id: number;
   event_code: string;
   event_name: string;
+  event_type: string;
+  is_active: boolean;
 }
 
 export default function Attendance() {
@@ -112,7 +128,7 @@ export default function Attendance() {
   const form = useForm<AttendanceFormValues>({
     resolver: zodResolver(attendanceFormSchema),
     defaultValues: {
-      attendanceDate: new Date(),
+      attendanceDate: format(new Date(), "yyyy-MM-dd"),
       userId: "",
       eventId: "",
       checkInTime: "07:00",
@@ -130,17 +146,18 @@ export default function Attendance() {
       setLoading(true);
       const [attendanceRes, usersRes, eventsRes] = await Promise.all([
         attendanceApi.getAll(),
-        userApi.getAll({ role: 'member' }),
+        userApi.getAll({ isActive: true }),
         eventApi.getAll({ isActive: true }),
       ]);
-      setAttendances(attendanceRes.data.data);
-      setUsers(usersRes.data.data);
-      setEvents(eventsRes.data.data);
-    } catch (error) {
+      
+      setAttendances(attendanceRes.data.data || []);
+      setUsers(usersRes.data.data || []);
+      setEvents(eventsRes.data.data || []);
+    } catch (error: any) {
       console.error('Error fetching data:', error);
       toast({
         title: "Error",
-        description: "Failed to load attendance data",
+        description: error.response?.data?.message || "Failed to load attendance data",
         variant: "destructive",
       });
     } finally {
@@ -151,11 +168,11 @@ export default function Attendance() {
   const openEditDialog = (record: AttendanceRecord) => {
     setEditingRecord(record);
     form.reset({
-      attendanceDate: new Date(record.attendance_date),
+      attendanceDate: record.attendance_date,
       userId: record.user_id.toString(),
       eventId: record.event_id.toString(),
-      checkInTime: record.check_in_time.split("T")[1].substring(0, 5),
-      checkOutTime: record.check_out_time ? record.check_out_time.split("T")[1].substring(0, 5) : "",
+      checkInTime: record.check_in_time ? record.check_in_time.split("T")[1]?.substring(0, 5) || "07:00" : "07:00",
+      checkOutTime: record.check_out_time ? record.check_out_time.split("T")[1]?.substring(0, 5) : "",
       status: record.status as any,
     });
     setIsDialogOpen(true);
@@ -164,7 +181,7 @@ export default function Attendance() {
   const openNewDialog = () => {
     setEditingRecord(null);
     form.reset({
-      attendanceDate: new Date(),
+      attendanceDate: format(new Date(), "yyyy-MM-dd"),
       userId: "",
       eventId: "",
       checkInTime: "07:00",
@@ -175,36 +192,36 @@ export default function Attendance() {
   };
 
   const handleDelete = async () => {
-    if (recordToDelete) {
-      try {
-        await attendanceApi.delete(recordToDelete);
-        toast({
-          title: "Success",
-          description: "Attendance record deleted successfully",
-        });
-        fetchData();
-        setDeleteDialogOpen(false);
-        setRecordToDelete(null);
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to delete attendance record",
-          variant: "destructive",
-        });
-      }
+    if (!recordToDelete) return;
+    
+    try {
+      await attendanceApi.delete(recordToDelete);
+      toast({
+        title: "Success",
+        description: "Attendance record deleted successfully",
+      });
+      fetchData();
+      setDeleteDialogOpen(false);
+      setRecordToDelete(null);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to delete attendance record",
+        variant: "destructive",
+      });
     }
   };
 
   const onSubmit = async (data: AttendanceFormValues) => {
     try {
-      const dateStr = format(data.attendanceDate, "yyyy-MM-dd");
-      const checkInDateTime = `${dateStr}T${data.checkInTime}:00`;
-      const checkOutDateTime = data.checkOutTime ? `${dateStr}T${data.checkOutTime}:00` : undefined;
+      const checkInDateTime = `${data.attendanceDate}T${data.checkInTime}:00`;
+      const checkOutDateTime = data.checkOutTime ? `${data.attendanceDate}T${data.checkOutTime}:00` : undefined;
 
       if (editingRecord) {
         await attendanceApi.update(editingRecord.id, {
           checkOutTime: checkOutDateTime,
           status: data.status,
+          notes: data.status === "excused" ? "Excused absence" : data.status === "sick" ? "Medical leave" : undefined,
         });
         toast({
           title: "Success",
@@ -214,11 +231,12 @@ export default function Attendance() {
         await attendanceApi.create({
           userId: parseInt(data.userId),
           eventId: parseInt(data.eventId),
-          attendanceDate: dateStr,
+          attendanceDate: data.attendanceDate,
           checkInTime: checkInDateTime,
           checkOutTime: checkOutDateTime,
           status: data.status,
           deviceInfo: "Manual Entry - Web",
+          notes: data.status === "excused" ? "Excused absence" : data.status === "sick" ? "Medical leave" : undefined,
         });
         toast({
           title: "Success",
@@ -240,9 +258,10 @@ export default function Attendance() {
 
   const filteredAttendances = attendances.filter((record) => {
     const user = users.find((u) => u.id === record.user_id);
-    const matchSearch =
-      (user?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user?.member_id.toLowerCase().includes(searchTerm.toLowerCase())) ?? false;
+    const matchSearch = !searchTerm || 
+      (user?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+       user?.member_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+       user?.email?.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchEvent = filterEvent === "all" || record.event_id.toString() === filterEvent;
     const matchStatus = filterStatus === "all" || record.status === filterStatus;
@@ -256,64 +275,75 @@ export default function Attendance() {
     return user?.full_name || "Unknown";
   };
 
+  const getUserMemberId = (userId: number) => {
+    const user = users.find((u) => u.id === userId);
+    return user?.member_id || "";
+  };
+
   const getEventName = (eventId: number) => {
     const event = events.find((e) => e.id === eventId);
-    return event?.event_code || "Unknown";
+    return event?.event_name || event?.event_code || "Unknown";
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: "default" | "secondary" | "outline"; className: string }> = {
-      present: {
-        variant: "outline",
-        className: "bg-status-success/20 text-status-success border-status-success/20",
-      },
-      late: {
-        variant: "outline",
-        className: "bg-status-warning/20 text-status-warning border-status-warning/20",
-      },
-      excused: {
-        variant: "outline",
-        className: "bg-accent/20 text-accent border-accent/20",
-      },
-      sick: {
-        variant: "outline",
-        className: "bg-yellow-500/20 text-yellow-700 border-yellow-500/20",
-      },
-      absent: {
-        variant: "outline",
-        className: "bg-status-error/20 text-status-error border-status-error/20",
-      },
+    const statusMap: Record<string, { label: string; className: string }> = {
+      present: { label: "Present", className: "bg-green-100 text-green-700 border-green-200" },
+      late: { label: "Late", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+      excused: { label: "Excused", className: "bg-blue-100 text-blue-700 border-blue-200" },
+      sick: { label: "Sick", className: "bg-purple-100 text-purple-700 border-purple-200" },
+      absent: { label: "Absent", className: "bg-red-100 text-red-700 border-red-200" },
     };
-
-    const config = variants[status] || variants.present;
+    
+    const config = statusMap[status] || statusMap.present;
     return (
-      <Badge variant={config.variant} className={config.className}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+      <Badge variant="outline" className={config.className}>
+        {config.label}
       </Badge>
     );
   };
 
   const formatTime = (dateTimeString: string) => {
-    const date = new Date(dateTimeString);
-    return date.toLocaleTimeString("id-ID", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    if (!dateTimeString) return "-";
+    try {
+      const date = new Date(dateTimeString);
+      if (isNaN(date.getTime())) return "-";
+      return date.toLocaleTimeString("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "-";
+    }
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("id-ID", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    if (!dateString) return "-";
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
+      return date.toLocaleDateString("id-ID", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
   };
 
   const handleExportCSV = () => {
-    const headers = ["Date", "Member", "Event", "Check-in", "Check-out", "Status", "Confidence"];
+    if (filteredAttendances.length === 0) {
+      toast({
+        title: "Info",
+        description: "No data to export",
+      });
+      return;
+    }
+
+    const headers = ["Date", "Member ID", "Member Name", "Event", "Check-in", "Check-out", "Status", "Confidence"];
     const rows = filteredAttendances.map((record) => [
       record.attendance_date,
+      getUserMemberId(record.user_id),
       getUserName(record.user_id),
       getEventName(record.event_id),
       formatTime(record.check_in_time),
@@ -322,37 +352,50 @@ export default function Attendance() {
       record.confidence_score ? `${record.confidence_score.toFixed(2)}%` : "-",
     ]);
 
-    const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
+    const csvContent = [headers, ...rows].map((row) => 
+      row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+    ).join("\n");
+    
+    // Add BOM for UTF-8
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `attendance_report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `attendance_report_${format(new Date(), "yyyy-MM-dd")}.csv`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Success",
+      description: "Report exported successfully",
+    });
   };
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
   }
 
-  // Summary stats
   const totalRecords = filteredAttendances.length;
   const presentCount = filteredAttendances.filter((a) => a.status === "present").length;
   const lateCount = filteredAttendances.filter((a) => a.status === "late").length;
-  const excusedSickCount = filteredAttendances.filter((a) => a.status === "excused" || a.status === "sick").length;
+  const excusedCount = filteredAttendances.filter((a) => a.status === "excused").length;
+  const sickCount = filteredAttendances.filter((a) => a.status === "sick").length;
   const absentCount = filteredAttendances.filter((a) => a.status === "absent").length;
+  const excusedSickCount = excusedCount + sickCount;
 
   return (
-    <div className="p-6 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold">Attendance Management</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl md:text-3xl font-bold">Attendance Management</h1>
+          <p className="text-muted-foreground text-sm mt-1">
             View and manage attendance records
           </p>
         </div>
@@ -371,45 +414,45 @@ export default function Attendance() {
             <Download className="w-4 h-4" />
             Export CSV
           </Button>
-          <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={openNewDialog}>
+          <Button onClick={openNewDialog} className="gap-2 flex-1 md:flex-none">
             <Plus className="w-4 h-4" />
             Manual Entry
           </Button>
         </div>
       </div>
 
-            {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground mb-1">Total Records</p>
-          <p className="text-2xl font-bold">{totalRecords}</p>
+      {/* Summary Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <Card className="p-3 md:p-4">
+          <p className="text-xs md:text-sm text-muted-foreground mb-1">Total Records</p>
+          <p className="text-xl md:text-2xl font-bold">{totalRecords}</p>
         </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground mb-1">Present</p>
-          <p className="text-2xl font-bold text-status-success">{presentCount}</p>
+        <Card className="p-3 md:p-4 border-l-4 border-l-green-500">
+          <p className="text-xs md:text-sm text-muted-foreground mb-1">Present</p>
+          <p className="text-xl md:text-2xl font-bold text-green-600">{presentCount}</p>
         </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground mb-1">Late</p>
-          <p className="text-2xl font-bold text-status-warning">{lateCount}</p>
+        <Card className="p-3 md:p-4 border-l-4 border-l-yellow-500">
+          <p className="text-xs md:text-sm text-muted-foreground mb-1">Late</p>
+          <p className="text-xl md:text-2xl font-bold text-yellow-600">{lateCount}</p>
         </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground mb-1">Excused/Sick</p>
-          <p className="text-2xl font-bold text-accent">{excusedSickCount}</p>
+        <Card className="p-3 md:p-4 border-l-4 border-l-blue-500">
+          <p className="text-xs md:text-sm text-muted-foreground mb-1">Excused/Sick</p>
+          <p className="text-xl md:text-2xl font-bold text-blue-600">{excusedSickCount}</p>
         </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground mb-1">Absent</p>
-          <p className="text-2xl font-bold text-status-error">{absentCount}</p>
+        <Card className="p-3 md:p-4 border-l-4 border-l-red-500">
+          <p className="text-xs md:text-sm text-muted-foreground mb-1">Absent</p>
+          <p className="text-xl md:text-2xl font-bold text-red-600">{absentCount}</p>
         </Card>
       </div>
 
       {/* Filters */}
       <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name or ID..."
-              className="pl-10"
+              placeholder="Search by name, ID or email..."
+              className="pl-9"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -447,6 +490,11 @@ export default function Attendance() {
             placeholder="Filter by date"
           />
         </div>
+        {filteredAttendances.length !== attendances.length && (
+          <p className="text-xs text-muted-foreground mt-3">
+            Showing {filteredAttendances.length} of {attendances.length} records
+          </p>
+        )}
       </Card>
 
       {/* Attendance Table */}
@@ -455,48 +503,47 @@ export default function Attendance() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Member</TableHead>
-                <TableHead>Event</TableHead>
-                <TableHead>Check-in</TableHead>
-                <TableHead>Check-out</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Confidence</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="whitespace-nowrap">Date</TableHead>
+                <TableHead className="whitespace-nowrap">Member ID</TableHead>
+                <TableHead className="whitespace-nowrap">Member Name</TableHead>
+                <TableHead className="whitespace-nowrap">Event</TableHead>
+                <TableHead className="whitespace-nowrap">Check-in</TableHead>
+                <TableHead className="whitespace-nowrap">Check-out</TableHead>
+                <TableHead className="whitespace-nowrap">Status</TableHead>
+                <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredAttendances.length > 0 ? (
                 filteredAttendances.map((record) => (
                   <TableRow key={record.id}>
-                    <TableCell className="font-medium">
+                    <TableCell className="whitespace-nowrap">
                       {formatDate(record.attendance_date)}
                     </TableCell>
-                    <TableCell>{getUserName(record.user_id)}</TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="font-mono text-xs">
+                      {getUserMemberId(record.user_id)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {getUserName(record.user_id)}
+                    </TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">
                       {getEventName(record.event_id)}
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm whitespace-nowrap">
                       {formatTime(record.check_in_time)}
                     </TableCell>
-                    <TableCell className="text-sm">
-                      {record.check_out_time
-                        ? formatTime(record.check_out_time)
-                        : "-"}
+                    <TableCell className="text-sm whitespace-nowrap">
+                      {record.check_out_time ? formatTime(record.check_out_time) : "-"}
                     </TableCell>
                     <TableCell>{getStatusBadge(record.status)}</TableCell>
-                    <TableCell className="text-sm">
-                      {record.confidence_score
-                        ? `${record.confidence_score.toFixed(2)}%`
-                        : "-"}
-                    </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => openEditDialog(record)}
                           className="h-8 w-8"
+                          title="Edit"
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
@@ -507,7 +554,8 @@ export default function Attendance() {
                             setRecordToDelete(record.id);
                             setDeleteDialogOpen(true);
                           }}
-                          className="h-8 w-8"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          title="Delete"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -517,7 +565,7 @@ export default function Attendance() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
                     No attendance records found
                   </TableCell>
                 </TableRow>
@@ -527,11 +575,9 @@ export default function Attendance() {
         </div>
       </Card>
 
-
-
       {/* Form Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingRecord ? "Edit Attendance Record" : "Manual Attendance Entry"}
@@ -544,21 +590,17 @@ export default function Attendance() {
           </DialogHeader>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
                 name="attendanceDate" 
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Date</FormLabel>
+                    <FormLabel>Date *</FormLabel>
                     <FormControl>
                       <Input
                         type="date"
-                        value={field.value ? format(field.value, "yyyy-MM-dd") : ""}
-                        onChange={(e) => {
-                          const date = e.target.value ? new Date(e.target.value) : null;
-                          field.onChange(date);
-                        }}
+                        {...field}
                       />
                     </FormControl>
                     <FormMessage />
@@ -571,7 +613,7 @@ export default function Attendance() {
                 name="userId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Member</FormLabel>
+                    <FormLabel>Member *</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -579,13 +621,11 @@ export default function Attendance() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {users
-                          .filter(u => u.id)
-                          .map((user) => (
-                            <SelectItem key={user.id} value={user.id.toString()}>
-                              {user.full_name} ({user.member_id})
-                            </SelectItem>
-                          ))}
+                        {users.map((user) => (
+                          <SelectItem key={user.id} value={user.id.toString()}>
+                            {user.full_name} ({user.member_id})
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -598,7 +638,7 @@ export default function Attendance() {
                 name="eventId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Event</FormLabel>
+                    <FormLabel>Event *</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -624,7 +664,7 @@ export default function Attendance() {
                   name="checkInTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Check-in</FormLabel>
+                      <FormLabel>Check-in *</FormLabel>
                       <FormControl>
                         <Input type="time" {...field} />
                       </FormControl>
@@ -653,7 +693,7 @@ export default function Attendance() {
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Status</FormLabel>
+                    <FormLabel>Status *</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -673,7 +713,7 @@ export default function Attendance() {
                 )}
               />
 
-              <DialogFooter>
+              <DialogFooter className="gap-2">
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancel
                 </Button>
@@ -687,24 +727,22 @@ export default function Attendance() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Attendance Record</DialogTitle>
-            <DialogDescription>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Attendance Record</AlertDialogTitle>
+            <AlertDialogDescription>
               Are you sure you want to delete this attendance record? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDelete}>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
