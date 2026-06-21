@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Loader2, ScanFace, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Camera, Loader2, ScanFace, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
@@ -153,14 +153,24 @@ export default function FaceAttendance() {
       const response = await faceAiApi.verifyAttendance({ imageBase64: frame.imageBase64 });
       const payload = response.data.data;
       setFaceDetection(payload.faceDetection ?? null);
-      const profile = payload.profile ?? {
-        userId: payload.matchedUserId,
-        name: payload.matchedName ?? payload.matchedUserId,
-        email: "-",
-        category: "registered",
-        phone: "-",
-        birthday: "-",
-      };
+      const profile = payload.member
+        ? {
+            userId: payload.matchedUserId,
+            memberId: payload.member.memberId,
+            name: payload.member.name,
+            email: payload.member.email ?? "-",
+            category: payload.profile?.category ?? "registered",
+            phone: payload.profile?.phone ?? "-",
+            birthday: payload.profile?.birthday ?? "-",
+          }
+        : payload.profile ?? {
+            userId: payload.matchedUserId,
+            name: payload.matchedName ?? payload.matchedUserId,
+            email: "-",
+            category: "registered",
+            phone: "-",
+            birthday: "-",
+          };
 
       setCurrentAttendanceUser(profile);
       toast({
@@ -181,28 +191,56 @@ export default function FaceAttendance() {
   };
 
   return (
-    <div className="min-h-full bg-[radial-gradient(circle_at_top_left,_rgba(124,77,255,0.16),_transparent_18%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.16),_transparent_20%),linear-gradient(180deg,_rgba(248,250,252,0.99),_rgba(241,245,249,0.98))] p-4 md:p-8">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-        <section className="overflow-hidden rounded-[30px] bg-gradient-to-r from-[#7c4dff] via-[#5968ff] to-[#5da2ff] px-6 py-8 text-white shadow-[0_28px_90px_-48px_rgba(79,70,229,0.78)] md:px-8">
-          <div className="flex flex-col gap-3">
-            <div className="inline-flex w-fit items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-sm backdrop-blur-sm">
-              <ShieldCheck className="h-4 w-4" />
+    <div className="h-full overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(124,77,255,0.16),_transparent_18%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.16),_transparent_20%),linear-gradient(180deg,_rgba(248,250,252,0.99),_rgba(241,245,249,0.98))] p-3 md:p-4">
+      <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4">
+        <section className="overflow-hidden rounded-[22px] bg-gradient-to-r from-[#7c4dff] via-[#5968ff] to-[#5da2ff] px-4 py-3 text-white shadow-[0_20px_60px_-40px_rgba(79,70,229,0.78)] md:px-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-9 w-fit rounded-xl border-0 bg-white/15 px-3 text-white hover:bg-white/20"
+              onClick={() => navigate("/attendance")}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+
+            <div className="flex items-center gap-3">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs backdrop-blur-sm">
+              <ShieldCheck className="h-3.5 w-3.5" />
               AI Face Attendance
             </div>
-            <h1 className="text-3xl font-bold sm:text-4xl">Attendance wajah untuk user yang sudah registrasi</h1>
-            <p className="max-w-2xl text-sm text-white/85 sm:text-base">Button ini hanya bisa berhasil untuk user yang sudah menyelesaikan registrasi wajah 3 kali di awal.</p>
+            <h1 className="text-lg font-bold">Attendance wajah untuk user yang sudah registrasi</h1>
+            </div>
           </div>
         </section>
 
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <Card className="rounded-[28px] border-white/60 bg-white/85 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-sm">
-            <CardContent className="p-6 md:p-8">
-              <div className="relative overflow-hidden rounded-[24px] bg-slate-950">
+        <div className="mx-auto grid w-full max-w-5xl flex-1 gap-4 overflow-hidden lg:grid-cols-[280px_minmax(0,1fr)] lg:items-center">
+          <Card className="rounded-[24px] border-white/60 bg-white/85 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-sm">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <ScanFace className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900">Attendance Check</h2>
+                  <p className="text-xs text-slate-500">Verifikasi sekali scan.</p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-600">{statusText}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="flex-1 rounded-[28px] border-white/60 bg-white/85 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-sm">
+            <CardContent className="flex h-full flex-col justify-center p-4 md:p-5">
+              <div className="mx-auto w-full max-w-[42rem]">
+                <div className="relative overflow-hidden rounded-[24px] bg-slate-950">
                 {cameraError ? (
-                  <div className="flex aspect-video items-center justify-center px-6 text-center text-sm text-white/80">{cameraError}</div>
+                  <div className="flex aspect-[4/3] items-center justify-center px-6 text-center text-sm text-white/80">{cameraError}</div>
                 ) : (
                   <>
-                    <video ref={videoRef} autoPlay playsInline muted className="aspect-video w-full object-cover" />
+                    <video ref={videoRef} autoPlay playsInline muted className="aspect-[4/3] w-full object-cover" />
                     {faceDetection && (
                       <div className="pointer-events-none absolute inset-0">
                         <div
@@ -217,38 +255,15 @@ export default function FaceAttendance() {
                     )}
                   </>
                 )}
+                </div>
               </div>
 
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <Button type="button" className="h-12 rounded-2xl" disabled={!cameraReady || processing} onClick={handleAttendance}>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <Button type="button" className="h-11 rounded-2xl" disabled={!cameraReady || processing} onClick={handleAttendance}>
                   {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                   Start Attendance
                 </Button>
-                <Button type="button" variant="outline" className="h-12 rounded-2xl" onClick={() => navigate("/attendance")}>Kembali ke Dashboard</Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-[28px] border-white/60 bg-white/85 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-sm">
-            <CardContent className="space-y-5 p-6 md:p-8">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <ScanFace className="h-6 w-6" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">Attendance Check</h2>
-                  <p className="text-sm text-slate-500">Verifikasi sekali scan.</p>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">{statusText}</div>
-
-              <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                Jika wajah sudah pernah diregistrasi dan AI cocok, attendance langsung berhasil lalu masuk ke user dashboard.
-              </div>
-
-              <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                Kotak hijau tampil live dari preview YuNet realtime dan akan diperbarui saat kamu menggerakkan wajah.
+                <Button type="button" variant="outline" className="h-11 rounded-2xl" onClick={() => navigate("/attendance")}>Kembali ke Dashboard</Button>
               </div>
             </CardContent>
           </Card>

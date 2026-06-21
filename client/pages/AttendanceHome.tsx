@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
-import { Activity, ArrowRight, CalendarDays, Camera, Shield, Sparkles, Users } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Activity, ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Shield, Sparkles, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { attendanceApi, dashboardApi, eventApi, userApi } from "@/services/api";
+import { attendanceApi, eventApi } from "@/services/api";
 
 interface AttendanceOverview {
   totalMembers: number;
@@ -14,6 +14,17 @@ interface AttendanceOverview {
   pending: number;
   absent: number;
   attendanceRate: number;
+}
+
+interface EventItem {
+  id: number;
+  event_code: string;
+  event_name: string;
+  event_type: string;
+  season: string;
+  event_date?: string;
+  description?: string;
+  preacher_name?: string;
 }
 
 const formatRate = (value: number) => `${Number.isFinite(value) ? value.toFixed(1) : "0.0"}%`;
@@ -37,6 +48,12 @@ const extractPayload = <T,>(result: PromiseSettledResult<any>) => {
   return (result.value?.data?.data ?? result.value?.data) as T;
 };
 
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  worship: "Ibadah",
+  meeting: "Rapat",
+  study: "Studi",
+};
+
 export default function AttendanceHome() {
   const [overview, setOverview] = useState<AttendanceOverview>({
     totalMembers: 0,
@@ -46,41 +63,37 @@ export default function AttendanceHome() {
     absent: 0,
     attendanceRate: 0,
   });
+  const [activeEventList, setActiveEventList] = useState<EventItem[]>([]);
+  const [currentEventIndex, setCurrentEventIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const autoSlideRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const fetchOverview = async () => {
       setLoading(true);
 
-      const [membersResult, dashboardResult, todayResult] = await Promise.allSettled([
-        userApi.getAll({ role: "member", isActive: true }),
-        dashboardApi.getStats(),
-        attendanceApi.getTodayStats(),
+      const [overviewResult, eventsResult] = await Promise.allSettled([
+        attendanceApi.getPublicOverview(),
+        eventApi.getAll({ isActive: true }),
       ]);
 
-      const members = Array.isArray(extractPayload<any>(membersResult))
-        ? (extractPayload<any[]>(membersResult) ?? [])
-        : [];
-      const dashboardPayload = extractPayload<any>(dashboardResult) ?? {};
-      const todayPayload = extractPayload<any>(todayResult) ?? {};
+      const dashboardPayload = extractPayload<any>(overviewResult) ?? {};
+      const eventsPayload = extractPayload<any[]>(eventsResult);
+      const fetchedEvents: EventItem[] = Array.isArray(eventsPayload) ? eventsPayload : [];
+      setActiveEventList(fetchedEvents);
+      setCurrentEventIndex(0);
       const dashboardToday = dashboardPayload?.todayAttendance ?? {};
 
-      const totalMembers = pickNumber(dashboardPayload?.totalMembers, members.length);
+      const totalMembers = pickNumber(dashboardPayload?.totalMembers);
       const activeEventCount = pickNumber(dashboardPayload?.activeEvents);
       const checkedIn = pickNumber(
         dashboardToday?.checkedIn,
-        todayPayload?.checkedIn,
-        todayPayload?.present,
-        todayPayload?.present_count,
       );
       const absent = pickNumber(
         dashboardToday?.absent,
-        todayPayload?.absent,
-        todayPayload?.absent_count,
       );
       const pending = pickNumber(
         dashboardToday?.pending,
-        todayPayload?.pending,
         Math.max(totalMembers - checkedIn - absent, 0),
       );
       const calculatedRate = totalMembers > 0 ? (checkedIn / totalMembers) * 100 : 0;
@@ -99,6 +112,27 @@ export default function AttendanceHome() {
 
     fetchOverview();
   }, []);
+
+  // Auto-slide carousel when more than 1 event
+  useEffect(() => {
+    if (activeEventList.length <= 1) return;
+    autoSlideRef.current = setInterval(() => {
+      setCurrentEventIndex((prev) => (prev + 1) % activeEventList.length);
+    }, 3500);
+    return () => {
+      if (autoSlideRef.current) clearInterval(autoSlideRef.current);
+    };
+  }, [activeEventList.length]);
+
+  const goPrev = () => {
+    if (autoSlideRef.current) clearInterval(autoSlideRef.current);
+    setCurrentEventIndex((prev) => (prev - 1 + activeEventList.length) % activeEventList.length);
+  };
+
+  const goNext = () => {
+    if (autoSlideRef.current) clearInterval(autoSlideRef.current);
+    setCurrentEventIndex((prev) => (prev + 1) % activeEventList.length);
+  };
 
   const quickStats = [
     {
@@ -190,40 +224,82 @@ export default function AttendanceHome() {
             </div>
 
             <Card className="rounded-[28px] border border-white/25 bg-white/12 text-white shadow-none backdrop-blur-md">
-              <CardContent className="space-y-5 p-6">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-white/15">
-                    <Camera className="h-8 w-8" />
+              <CardContent className="flex h-full flex-col p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="h-5 w-5 text-white/80" />
+                    <p className="text-sm font-medium text-white/80">Event Aktif</p>
                   </div>
-                  <div>
-                    <p className="text-sm text-white/75">Spotlight module</p>
-                    <h2 className="text-2xl font-semibold">Face Attendance</h2>
-                  </div>
+                  <span className="rounded-full bg-white/20 px-3 py-0.5 text-sm font-semibold">
+                    {activeEventList.length}
+                  </span>
                 </div>
 
-                <div className="space-y-3 rounded-3xl bg-slate-950/16 p-5">
-                  <div className="flex items-center justify-between text-sm text-white/80">
-                    <span>Check-in hari ini</span>
-                    <span>{overview.checkedIn} orang</span>
+                {activeEventList.length === 0 ? (
+                  <div className="flex flex-1 items-center justify-center rounded-3xl bg-slate-950/16 p-6 text-center">
+                    <p className="text-sm text-white/60">Belum ada event aktif saat ini.</p>
                   </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-white/15">
-                    <div
-                      className="h-full rounded-full bg-white transition-all duration-500"
-                      style={{ width: `${Math.min(100, Math.max(12, overview.attendanceRate || 12))}%` }}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm text-white/85">
-                    <div className="rounded-2xl bg-white/10 p-3">
-                      <p className="text-white/65">Pending</p>
-                      <p className="mt-1 text-xl font-semibold">{overview.pending}</p>
-                    </div>
-                    <div className="rounded-2xl bg-white/10 p-3">
-                      <p className="text-white/65">Absent</p>
-                      <p className="mt-1 text-xl font-semibold">{overview.absent}</p>
-                    </div>
-                  </div>
-                </div>
+                ) : (
+                  <div className="relative flex-1 overflow-hidden rounded-3xl bg-slate-950/16">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={currentEventIndex}
+                        initial={{ opacity: 0, x: 40 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -40 }}
+                        transition={{ duration: 0.3 }}
+                        className="p-5"
+                      >
+                        <div className="mb-1 flex items-center gap-2">
+                          <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">
+                            {EVENT_TYPE_LABELS[activeEventList[currentEventIndex].event_type] ?? activeEventList[currentEventIndex].event_type}
+                          </span>
+                        </div>
+                        <h3 className="mt-2 text-xl font-bold leading-snug">
+                          {activeEventList[currentEventIndex].event_name}
+                        </h3>
+                        {activeEventList[currentEventIndex].event_date && (
+                          <p className="mt-1.5 flex items-center gap-1.5 text-sm text-white/80">
+                            <CalendarDays className="h-3.5 w-3.5" />
+                            {new Date(activeEventList[currentEventIndex].event_date!).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                          </p>
+                        )}
+                        <p className="mt-1 text-xs text-white/55">{activeEventList[currentEventIndex].season}</p>
+                        {activeEventList[currentEventIndex].description && (
+                          <p className="mt-2 line-clamp-2 text-sm text-white/65">{activeEventList[currentEventIndex].description}</p>
+                        )}
+                      </motion.div>
+                    </AnimatePresence>
 
+                    {activeEventList.length > 1 && (
+                      <>
+                        <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-2">
+                          {activeEventList.map((_, i) => (
+                            <button
+                              key={i}
+                              onClick={() => { if (autoSlideRef.current) clearInterval(autoSlideRef.current); setCurrentEventIndex(i); }}
+                              className={`h-1.5 rounded-full transition-all duration-300 ${
+                                i === currentEventIndex ? "w-5 bg-white" : "w-1.5 bg-white/40"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <button
+                          onClick={goPrev}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/15 p-1 hover:bg-white/25"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={goNext}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/15 p-1 hover:bg-white/25"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

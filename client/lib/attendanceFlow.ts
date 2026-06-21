@@ -8,6 +8,7 @@ export interface AttendanceRegistrationProfile {
 
 export interface AttendanceCurrentUser extends AttendanceRegistrationProfile {
   userId: string;
+  memberId?: string;
 }
 
 const PENDING_REGISTRATION_KEY = "attendance.pendingRegistrationProfile";

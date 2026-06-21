@@ -1,6 +1,7 @@
 import { RequestHandler } from "express";
 import { getFaceAiUser, recordFaceAiAttendance, upsertFaceAiUser } from "../faceAiStore";
 import { runFaceAiCommand } from "../faceAiBridge";
+import { getConnection, sql } from "../db/config";
 
 interface RegistrationPayload {
   name: string;
@@ -151,9 +152,96 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
     }
 
     const profile = await getFaceAiUser(verifyResult.matchedUserId);
+    const resolvedName = profile?.name ?? verifyResult.matchedName ?? verifyResult.matchedUserId;
+
+    if (!profile?.email && !resolvedName) {
+      res.status(400).json({
+        success: false,
+        message: "Profil user untuk face attendance belum lengkap.",
+      });
+      return;
+    }
+
+    const pool = await getConnection();
+    const memberResult = await pool
+      .request()
+      .input("email", sql.NVarChar, profile?.email ?? null)
+      .input("name", sql.NVarChar, resolvedName)
+      .query(`
+        SELECT TOP 1 id, member_id, name, email
+        FROM user_member
+        WHERE
+          (@email IS NOT NULL AND LOWER(email) = LOWER(@email))
+          OR LOWER(name) = LOWER(@name)
+        ORDER BY CASE WHEN @email IS NOT NULL AND LOWER(email) = LOWER(@email) THEN 0 ELSE 1 END, id ASC
+      `);
+
+    const member = memberResult.recordset[0];
+    if (!member?.member_id) {
+      res.status(404).json({
+        success: false,
+        message: "Data member tidak ditemukan. Silakan registrasi data member terlebih dahulu.",
+      });
+      return;
+    }
+
+    const duplicateResult = await pool
+      .request()
+      .input("member_id", sql.NVarChar, member.member_id)
+      .query(`
+        SELECT TOP 1 id, attendance_date
+        FROM attendance_member
+        WHERE member_id = @member_id
+          AND CAST(attendance_date AS DATE) = CAST(GETDATE() AS DATE)
+      `);
+
+    if (duplicateResult.recordset.length > 0) {
+      res.status(409).json({
+        success: false,
+        message: "Sudah melakukan attendance hari ini",
+        data: {
+          memberId: member.member_id,
+          name: member.name,
+          alreadyAttendanceAt: duplicateResult.recordset[0].attendance_date,
+        },
+      });
+      return;
+    }
+
+    const insertAttendanceResult = await pool
+      .request()
+      .input("user_id", sql.NVarChar, verifyResult.matchedUserId)
+      .input("member_id", sql.NVarChar, member.member_id)
+      .input("name", sql.NVarChar, member.name)
+      .input("points", sql.Int, 10)
+      .query(`
+        INSERT INTO attendance_member (user_id, member_id, name, attendance_date, points)
+        OUTPUT INSERTED.*
+        VALUES (@user_id, @member_id, @name, GETDATE(), @points)
+      `);
+
+    await pool
+      .request()
+      .input("member_id", sql.NVarChar, member.member_id)
+      .input("points", sql.Int, 10)
+      .input("type", sql.NVarChar, "attendance")
+      .query(`
+        INSERT INTO point_logs (member_id, points, type, notes, created_at)
+        VALUES (@member_id, @points, @type, 'face attendance reward', GETDATE())
+      `);
+
+    const totalPointsResult = await pool
+      .request()
+      .input("member_id", sql.NVarChar, member.member_id)
+      .query(`
+        SELECT COALESCE(points, 0) AS points
+        FROM member_point
+        WHERE member_id = @member_id
+      `);
+
     const attendanceRecord = await recordFaceAiAttendance({
       userId: verifyResult.matchedUserId,
-      name: profile?.name ?? verifyResult.matchedName ?? verifyResult.matchedUserId,
+      name: resolvedName,
       confidence: verifyResult.confidence,
       capturedAt: new Date().toISOString(),
     });
@@ -163,10 +251,28 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
       data: {
         ...verifyResult,
         profile,
+        member: {
+          id: member.id,
+          memberId: member.member_id,
+          name: member.name,
+          email: member.email,
+        },
+        attendanceMember: insertAttendanceResult.recordset[0],
+        rewardedPoints: 10,
+        totalPoints: Number(totalPointsResult.recordset[0]?.points ?? 0),
         attendanceRecord,
       },
     });
   } catch (error) {
+    const sqlMessage = error instanceof Error ? error.message : "";
+    if (sqlMessage.includes("UX_attendance_member_member_day")) {
+      res.status(409).json({
+        success: false,
+        message: "Sudah melakukan attendance hari ini",
+      });
+      return;
+    }
+
     res.status(400).json({
       success: false,
       message: error instanceof Error ? error.message : "Failed to verify attendance face",

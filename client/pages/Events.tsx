@@ -26,6 +26,7 @@ interface Event {
   preacher_name?: string;
   season?: string;
   event_type: string;
+  event_date?: string;
   is_active: boolean;
   created_at: string;
 }
@@ -37,6 +38,7 @@ const defaultForm = {
   preacherId: undefined as number | undefined,
   season: "",
   eventType: "worship",
+  eventDate: "",
 };
 
 export default function Events() {
@@ -73,6 +75,7 @@ export default function Events() {
       preacherId: e.preacher_id,
       season: e.season || "",
       eventType: e.event_type,
+      eventDate: e.event_date ? e.event_date.slice(0, 10) : "",
     });
     setDialogOpen(true);
   };
@@ -89,6 +92,7 @@ export default function Events() {
           description: form.description,
           preacherId: form.preacherId,
           eventType: form.eventType,
+          eventDate: form.eventDate || null,
         });
       } else {
         await eventApi.create(form);
@@ -163,6 +167,11 @@ export default function Events() {
                 <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{e.description || "Tidak ada deskripsi"}</p>
                 <div className="space-y-1 mb-4">
                   <p className="text-xs flex items-center gap-2"><Calendar className="w-3 h-3" /> {eventTypeLabels[e.event_type] || e.event_type}</p>
+                  {e.event_date && (
+                    <p className="text-xs text-muted-foreground">
+                      Tanggal: {new Date(e.event_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                    </p>
+                  )}
                   {e.preacher_name && <p className="text-xs text-muted-foreground">Penceramah: {e.preacher_name}</p>}
                   {e.season && <p className="text-xs text-muted-foreground">Season: {e.season}</p>}
                 </div>
@@ -191,6 +200,7 @@ export default function Events() {
             <div><Label>Event Name *</Label><Input placeholder="Nama event..." value={form.eventName} onChange={(e) => setForm({...form, eventName: e.target.value})} /></div>
             <div><Label>Deskripsi</Label><Textarea rows={3} value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} /></div>
             <div><Label>Tipe Event</Label><Select value={form.eventType} onValueChange={(v) => setForm({...form, eventType: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="worship">Ibadah</SelectItem><SelectItem value="meeting">Rapat</SelectItem><SelectItem value="study">Studi</SelectItem><SelectItem value="fellowship">Persekutuan</SelectItem><SelectItem value="outreach">Outreach</SelectItem></SelectContent></Select></div>
+            <div><Label>Tanggal Event</Label><Input type="date" value={form.eventDate} onChange={(e) => setForm({...form, eventDate: e.target.value})} /></div>
             <div><Label>Season</Label><Input placeholder="Musim / Periode..." value={form.season} onChange={(e) => setForm({...form, season: e.target.value})} /></div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button><Button onClick={handleSave} disabled={saving}>{saving ? "Menyimpan..." : "Simpan"}</Button></DialogFooter>

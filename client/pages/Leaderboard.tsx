@@ -1,38 +1,19 @@
 // client/pages/LeaderBoard.tsx
 import { useState, useEffect } from "react";
 import { Crown, Medal } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { attendanceApi } from "@/services/api";
+import { memberLeaderboardApi } from "@/services/api";
 
 interface LeaderboardMember {
-  user_id: number;
-  full_name: string;
   member_id: string;
-  total_present: number;
-  total_late: number;
-  attendance_percentage: number;
+  full_name: string;
+  category: string;
   points: number;
+  updated_at: string;
+  rank: number;
 }
 
-const normalizeArray = <T,>(value: unknown): T[] => {
-  if (Array.isArray(value)) {
-    return value as T[];
-  }
-
-  if (Array.isArray((value as { items?: unknown[] } | null | undefined)?.items)) {
-    return ((value as { items?: unknown[] }).items ?? []) as T[];
-  }
-
-  if (Array.isArray((value as { rows?: unknown[] } | null | undefined)?.rows)) {
-    return ((value as { rows?: unknown[] }).rows ?? []) as T[];
-  }
-
-  return [];
-};
-
 export default function Leaderboard() {
-  const [period, setPeriod] = useState<"week" | "month">("week");
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardMember[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,15 +21,15 @@ export default function Leaderboard() {
     fetchLeaderboard();
   }, []);
 
-  useEffect(() => {
-    fetchLeaderboard();
-  }, [period]);
-
   const fetchLeaderboard = async () => {
     try {
       setLoading(true);
-      const response = await attendanceApi.getLeaderboard(undefined, period);
-      setLeaderboardData(normalizeArray<LeaderboardMember>(response.data.data));
+      const response = await memberLeaderboardApi.getLeaderboard();
+      if (response.data && response.data.success) {
+        setLeaderboardData(response.data.data);
+      } else {
+        setLeaderboardData([]);
+      }
     } catch (error) {
       console.error('Error fetching leaderboard:', error);
       setLeaderboardData([]);
@@ -57,7 +38,7 @@ export default function Leaderboard() {
     }
   };
 
-  const displayRows = leaderboardData
+  const displayRows = [...leaderboardData]
     .sort((left, right) => (right.points ?? 0) - (left.points ?? 0));
 
   const podium = [displayRows[1], displayRows[0], displayRows[2]].filter(Boolean);
@@ -93,7 +74,7 @@ export default function Leaderboard() {
         <section className="overflow-hidden rounded-[34px] bg-gradient-to-r from-[#8a3ffc] via-[#6b63ff] to-[#5da2ff] px-6 py-8 text-white shadow-[0_30px_90px_-50px_rgba(79,70,229,0.85)] md:px-10">
           <div className="flex flex-col items-center text-center">
             <h1 className="text-4xl font-bold md:text-5xl">Leaderboard</h1>
-            <p className="mt-2 text-base text-white/85 md:text-lg">Top Attendance Rankings</p>
+            <p className="mt-2 text-base text-white/85 md:text-lg">Top Member Points Rankings</p>
           </div>
         </section>
 
@@ -109,7 +90,7 @@ export default function Leaderboard() {
 
               return (
                 <Card
-                  key={`${member.user_id}-${style.rank}`}
+                  key={`${member.member_id}-${style.rank}`}
                   className={`relative overflow-hidden rounded-[28px] border p-5 ${style.card} ${style.rank === 1 ? "md:-translate-y-4" : ""}`}
                 >
                   <div className="absolute left-4 top-4 text-4xl font-black text-slate-900">#{style.rank}</div>
@@ -119,7 +100,7 @@ export default function Leaderboard() {
                   <div className="mt-14 flex flex-col items-center text-center">
                     <h2 className="text-2xl font-bold text-slate-900">{member.full_name}</h2>
                     <p className="mt-2 text-base text-slate-700">
-                      Attendance: {member.total_present} days | Points: {member.points}
+                      Kategori: {member.category} | Points: {member.points}
                     </p>
                   </div>
                 </Card>
@@ -135,19 +116,8 @@ export default function Leaderboard() {
           <Card className="rounded-[28px] border border-slate-200/80 bg-white/90 p-0 shadow-[0_25px_70px_-45px_rgba(148,163,184,0.8)]">
             <div className="flex flex-col gap-3 border-b border-slate-200/80 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6">
               <div>
-                <p className="text-sm font-medium text-slate-500">Attendance leaderboard table</p>
-                <h3 className="text-lg font-semibold text-slate-900">Rank anggota berdasarkan kehadiran</h3>
-              </div>
-              <div className="w-full md:w-44">
-                <Select value={period} onValueChange={(value) => setPeriod(value as "week" | "month")}>
-                  <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-slate-50">
-                    <SelectValue placeholder="Filter" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="week">Weekly</SelectItem>
-                    <SelectItem value="month">Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
+                <p className="text-sm font-medium text-slate-500">Leaderboard table</p>
+                <h3 className="text-lg font-semibold text-slate-900">Rank anggota berdasarkan total poin</h3>
               </div>
             </div>
 
@@ -157,16 +127,16 @@ export default function Leaderboard() {
                   <tr className="text-sm font-semibold text-slate-700">
                     <th className="px-4 py-3">Rank</th>
                     <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Attendance Count</th>
+                    <th className="px-4 py-3">Category</th>
                     <th className="px-4 py-3 text-right">Points</th>
                   </tr>
                 </thead>
                 <tbody>
                   {displayRows.map((member, index) => (
-                    <tr key={member.user_id} className="border-t border-slate-100 text-slate-700 transition-colors hover:bg-slate-50/90">
+                    <tr key={member.member_id} className="border-t border-slate-100 text-slate-700 transition-colors hover:bg-slate-50/90">
                       <td className="px-4 py-3 font-semibold">{index + 1}</td>
                       <td className="px-4 py-3 font-medium">{member.full_name}</td>
-                      <td className="px-4 py-3">{member.total_present}</td>
+                      <td className="px-4 py-3">{member.category}</td>
                       <td className="px-4 py-3 text-right font-semibold text-slate-900">{member.points}</td>
                     </tr>
                   ))}
@@ -178,4 +148,4 @@ export default function Leaderboard() {
       </div>
     </div>
   );
-}
+}

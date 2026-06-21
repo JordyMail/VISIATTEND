@@ -18,6 +18,7 @@ import { handleDemo } from "./routes/demo.js";
 import { QuestionRepository } from './db/repositories/QuestionRepository';
 import { handleGetLeaderboard } from "./routes/attendance.js";
 import { handleAwardQuestionPoints, handleGetUserDashboard, handleGetUserDashboardQuestions, handleAnswerUserDashboardQuestion } from "./routes/userDashboard.js";
+import { handleGetMemberLeaderboard } from "./routes/memberLeaderboard.js";
 import {
   handlePreviewDetection,
   handleCaptureRegistration,
@@ -3071,6 +3072,7 @@ app.get('/api/questions/stats/:userId', authenticateToken, requireSelfOrAdmin('u
   app.get("/api/user-dashboard/questions", handleGetUserDashboardQuestions);
   app.post("/api/user-dashboard/questions/submit", handleAnswerUserDashboardQuestion);
   app.post("/api/user-dashboard/question/reward", handleAwardQuestionPoints);
+  app.get("/api/member-leaderboard", handleGetMemberLeaderboard);
   app.post("/api/face-ai/preview", handlePreviewDetection);
   app.post("/api/face-ai/registration/capture", handleCaptureRegistration);
   app.post("/api/face-ai/registration/finalize", handleFinalizeRegistration);

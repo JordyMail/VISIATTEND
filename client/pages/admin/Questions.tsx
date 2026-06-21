@@ -18,7 +18,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { questionApi } from "@/services/api";
+import { questionApi, attendanceScheduleApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
@@ -42,17 +42,27 @@ interface Question {
 const QUESTION_TYPES = [
   { value: 'multiple_choice', label: 'Pilihan Ganda' },
   { value: 'true_false', label: 'Benar/Salah' },
-  { value: 'short_answer', label: 'Jawaban Singkat' },
 ];
 
-const defaultForm = {
+const defaultForm: {
+  title: string;
+  questionText: string;
+  questionType: 'multiple_choice' | 'true_false' | 'short_answer';
+  options: string[];
+  correctAnswer: string;
+  points: number;
+  timeLimitMinutes: number;
+  startDate: string;
+  endDate: string;
+  maxAttempts: number;
+} = {
   title: "",
   questionText: "",
-  questionType: "multiple_choice" as const,
+  questionType: "multiple_choice",
   options: ["", "", "", ""],
   correctAnswer: "",
   points: 10,
-  timeLimitMinutes: 5,
+  timeLimitMinutes: 15,
   startDate: "",
   endDate: "",
   maxAttempts: 1,
@@ -60,6 +70,7 @@ const defaultForm = {
 
 export default function QuestionsManagement() {
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [schedules, setSchedules] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -73,19 +84,40 @@ export default function QuestionsManagement() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await questionApi.getAll();
-      setQuestions(r.data.data);
+      const [qRes, sRes] = await Promise.all([
+        questionApi.getAll(),
+        attendanceScheduleApi.getAll(),
+      ]);
+      setQuestions(qRes.data.data);
+      setSchedules(sRes.data.data);
     } catch {
-      toast({ title: "Error", description: "Gagal memuat soal", variant: "destructive" });
+      toast({ title: "Error", description: "Gagal memuat data", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  const openCreate = () => { setEditing(null); setForm(defaultForm); setDialogOpen(true); };
+  const openCreate = () => {
+    if (schedules.length === 0) {
+      toast({
+        title: "Perhatian",
+        description: "Silakan pilih/buat jadwal attendance terlebih dahulu untuk membuat pertanyaan.",
+        variant: "destructive"
+      });
+      return;
+    }
+    setEditing(null);
+    setForm({
+      ...defaultForm,
+      startDate: schedules[0],
+      endDate: schedules[0],
+    });
+    setDialogOpen(true);
+  };
   
   const openEdit = (q: Question) => {
     setEditing(q);
+    const qStartDate = q.start_date ? q.start_date.split('T')[0] : "";
     setForm({
       title: q.title,
       questionText: q.question_text,
@@ -94,9 +126,9 @@ export default function QuestionsManagement() {
       correctAnswer: q.correct_answer,
       points: q.points,
       timeLimitMinutes: q.time_limit_minutes,
-      startDate: q.start_date ? q.start_date.split('T')[0] : "",
-      endDate: q.end_date ? q.end_date.split('T')[0] : "",
-      maxAttempts: q.max_attempts,
+      startDate: qStartDate,
+      endDate: qStartDate,
+      maxAttempts: 1,
     });
     setDialogOpen(true);
   };
@@ -107,6 +139,24 @@ const handleSave = async () => {
     return toast({ 
       title: "Validasi", 
       description: "Judul dan pertanyaan wajib diisi", 
+      variant: "destructive" 
+    });
+  }
+
+  // Validasi tanggal pelaksanaan
+  if (!form.startDate) {
+    return toast({ 
+      title: "Validasi", 
+      description: "Pilih tanggal pelaksanaan terlebih dahulu", 
+      variant: "destructive" 
+    });
+  }
+
+  // Validasi poin (maksimal 20)
+  if (form.points < 1 || form.points > 20) {
+    return toast({ 
+      title: "Validasi", 
+      description: "Poin harus bernilai antara 1 dan 20", 
       variant: "destructive" 
     });
   }
@@ -145,10 +195,10 @@ const handleSave = async () => {
           : null,
       correctAnswer: form.correctAnswer,
       points: form.points,
-      timeLimitMinutes: form.timeLimitMinutes,
+      timeLimitMinutes: Math.min(15, form.timeLimitMinutes),
       startDate: form.startDate || null,
       endDate: form.endDate || null,
-      maxAttempts: form.maxAttempts,
+      maxAttempts: 1,
     };
 
     console.log('📤 Sending payload:', JSON.stringify(payload, null, 2));
@@ -218,10 +268,16 @@ const handleSave = async () => {
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">Buat dan kelola soal untuk meningkatkan engagement member</p>
         </div>
-        <Button onClick={openCreate} className="gap-2">
+        <Button onClick={openCreate} className="gap-2" disabled={schedules.length === 0}>
           <Plus className="w-4 h-4" /> Buat Soal
         </Button>
       </div>
+
+      {schedules.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl text-sm">
+          ⚠️ <strong>Belum ada jadwal attendance.</strong> Silakan buat jadwal attendance terlebih dahulu di menu <strong>Schedule Attendance</strong> agar dapat membuat pertanyaan.
+        </div>
+      )}
 
       <Input
         placeholder="Cari soal..."
@@ -239,7 +295,7 @@ const handleSave = async () => {
           <CardContent className="py-16 text-center">
             <HelpCircle className="w-12 h-12 mx-auto text-muted-foreground opacity-30 mb-3" />
             <p className="text-muted-foreground">Belum ada soal</p>
-            <Button onClick={openCreate} className="mt-4 gap-2">
+            <Button onClick={openCreate} className="mt-4 gap-2" disabled={schedules.length === 0}>
               <Plus className="w-4 h-4" /> Buat Soal Pertama
             </Button>
           </CardContent>
@@ -270,14 +326,11 @@ const handleSave = async () => {
                 
                 <div className="space-y-1 mb-4">
                   <p className="text-xs flex items-center gap-2 text-muted-foreground">
-                    <Clock className="w-3 h-3" /> {q.time_limit_minutes} menit
-                  </p>
-                  <p className="text-xs flex items-center gap-2 text-muted-foreground">
-                    <Users className="w-3 h-3" /> Maks {q.max_attempts}x percobaan
+                    <Clock className="w-3 h-3" /> {q.time_limit_minutes} detik
                   </p>
                   {q.start_date && (
                     <p className="text-xs text-muted-foreground">
-                      {formatDate(q.start_date)} - {q.end_date ? formatDate(q.end_date) : "Selamanya"}
+                      Tanggal: {formatDate(q.start_date)}
                     </p>
                   )}
                 </div>
@@ -301,201 +354,188 @@ const handleSave = async () => {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-    <DialogHeader>
-        <DialogTitle>{editing ? "Edit Soal" : "Buat Soal Baru"}</DialogTitle>
-        <DialogDescription>
-        Soal akan muncul di dashboard member untuk meningkatkan engagement
-        </DialogDescription>
-    </DialogHeader>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Soal" : "Buat Soal Baru"}</DialogTitle>
+            <DialogDescription>
+              Soal akan muncul di dashboard member untuk meningkatkan engagement
+            </DialogDescription>
+          </DialogHeader>
 
-    <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
-            <Label className="mb-1.5 block">Judul Soal *</Label>
-            <Input
-            placeholder="Contoh: Pengetahuan Alkitab Minggu Ini"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            />
-        </div>
-
-        <div>
-            <Label className="mb-1.5 block">Tipe Soal</Label>
-            <Select 
-            value={form.questionType} 
-            onValueChange={(v) => {
-                setForm({ 
-                ...form, 
-                questionType: v as any,
-                correctAnswer: "", // Reset jawaban benar saat ganti tipe
-                options: v === 'true_false' ? ["Benar", "Salah"] : ["", "", "", ""]
-                });
-            }}
-            >
-            <SelectTrigger>
-                <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-                {QUESTION_TYPES.map((t) => (
-                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                ))}
-            </SelectContent>
-            </Select>
-        </div>
-
-        <div>
-            <Label className="mb-1.5 block">Poin</Label>
-            <Input
-            type="number"
-            min={1}
-            max={100}
-            value={form.points}
-            onChange={(e) => setForm({ ...form, points: parseInt(e.target.value) || 10 })}
-            />
-        </div>
-        </div>
-
-        <div>
-        <Label className="mb-1.5 block">Pertanyaan *</Label>
-        <Textarea
-            rows={3}
-            placeholder="Tulis pertanyaan di sini..."
-            value={form.questionText}
-            onChange={(e) => setForm({ ...form, questionText: e.target.value })}
-        />
-        </div>
-
-        {/* ===== MULTIPLE CHOICE OPTIONS ===== */}
-        {form.questionType === 'multiple_choice' && (
-        <div>
-            <Label className="mb-1.5 block">Pilihan Jawaban</Label>
-            <p className="text-xs text-muted-foreground mb-3">
-            Isi pilihan jawaban lalu klik radio button untuk menandai jawaban benar
-            </p>
-            
-            <RadioGroup 
-            value={form.correctAnswer} 
-            onValueChange={(value) => setForm({ ...form, correctAnswer: value })}
-            className="space-y-3"
-            >
-            {form.options.map((option: string, idx: number) => (
-                <div key={idx} className="flex items-center gap-3">
-                <RadioGroupItem 
-                    value={String.fromCharCode(65 + idx)} 
-                    id={`option-${idx}`}
-                    className="mt-1"
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label className="mb-1.5 block">Judul Soal *</Label>
+                <Input
+                  placeholder="Contoh: Pengetahuan Alkitab Minggu Ini"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
                 />
-                <div className="flex-1 flex items-center gap-2">
-                    <Label 
-                    htmlFor={`option-${idx}`} 
-                    className="font-bold text-primary min-w-[30px] cursor-pointer"
-                    >
-                    {String.fromCharCode(65 + idx)}.
+              </div>
+
+              <div>
+                <Label className="mb-1.5 block">Tipe Soal</Label>
+                <Select 
+                  value={form.questionType} 
+                  onValueChange={(v) => {
+                    setForm({ 
+                      ...form, 
+                      questionType: v as any,
+                      correctAnswer: "", // Reset jawaban benar saat ganti tipe
+                      options: v === 'true_false' ? ["Benar", "Salah"] : ["", "", "", ""]
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {QUESTION_TYPES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="mb-1.5 block">Poin</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={form.points}
+                  onChange={(e) => setForm({ ...form, points: Math.min(20, parseInt(e.target.value) || 10) })}
+                />
+              </div>
+
+              <div className="col-span-2">
+                <Label className="mb-1.5 block">Tanggal Pelaksanaan *</Label>
+                <Select
+                  value={form.startDate}
+                  onValueChange={(value) => setForm({ ...form, startDate: value, endDate: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih tanggal attendance" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from(new Set([...schedules, ...(form.startDate ? [form.startDate] : [])])).map((date) => (
+                      <SelectItem key={date} value={date}>
+                        {new Date(date).toLocaleDateString("id-ID", {
+                          weekday: "long",
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Hanya bisa memilih tanggal attendance yang sudah dijadwalkan di Schedule Attendance.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <Label className="mb-1.5 block">Pertanyaan *</Label>
+              <Textarea
+                rows={3}
+                placeholder="Tulis pertanyaan di sini..."
+                value={form.questionText}
+                onChange={(e) => setForm({ ...form, questionText: e.target.value })}
+              />
+            </div>
+
+            {/* ===== MULTIPLE CHOICE OPTIONS ===== */}
+            {form.questionType === 'multiple_choice' && (
+              <div>
+                <Label className="mb-1.5 block">Pilihan Jawaban</Label>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Isi pilihan jawaban lalu klik radio button untuk menandai jawaban benar
+                </p>
+                
+                <RadioGroup 
+                  value={form.correctAnswer} 
+                  onValueChange={(value) => setForm({ ...form, correctAnswer: value })}
+                  className="space-y-3"
+                >
+                  {form.options.map((option: string, idx: number) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <RadioGroupItem 
+                        value={String.fromCharCode(65 + idx)} 
+                        id={`option-${idx}`}
+                        className="mt-1"
+                      />
+                      <div className="flex-1 flex items-center gap-2">
+                        <Label 
+                          htmlFor={`option-${idx}`} 
+                          className="font-bold text-primary min-w-[30px] cursor-pointer"
+                        >
+                          {String.fromCharCode(65 + idx)}.
+                        </Label>
+                        <Input
+                          placeholder={`Jawaban ${String.fromCharCode(65 + idx)}`}
+                          value={option}
+                          onChange={(e) => {
+                            const newOptions = [...form.options];
+                            newOptions[idx] = e.target.value;
+                            setForm({ ...form, options: newOptions });
+                          }}
+                          className="flex-1"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </RadioGroup>
+                
+                <p className="text-xs text-muted-foreground mt-2">
+                  ✅ Klik bulatan di samping huruf untuk menandai sebagai jawaban benar
+                </p>
+              </div>
+            )}
+
+            {/* ===== TRUE/FALSE OPTIONS ===== */}
+            {form.questionType === 'true_false' && (
+              <div>
+                <Label className="mb-1.5 block">Jawaban Benar *</Label>
+                <RadioGroup 
+                  value={form.correctAnswer} 
+                  onValueChange={(value) => setForm({ ...form, correctAnswer: value })}
+                  className="space-y-3 mt-2"
+                >
+                  <div className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-green-50 transition-colors cursor-pointer"
+                    onClick={() => setForm({ ...form, correctAnswer: 'Benar' })}>
+                    <RadioGroupItem value="Benar" id="true-option" />
+                    <Label htmlFor="true-option" className="flex-1 cursor-pointer text-green-700 font-medium">
+                      ✅ Benar
                     </Label>
-                    <Input
-                    placeholder={`Jawaban ${String.fromCharCode(65 + idx)}`}
-                    value={option}
-                    onChange={(e) => {
-                        const newOptions = [...form.options];
-                        newOptions[idx] = e.target.value;
-                        setForm({ ...form, options: newOptions });
-                    }}
-                    className="flex-1"
-                    />
-                </div>
-                </div>
-            ))}
-            </RadioGroup>
-            
-            <p className="text-xs text-muted-foreground mt-2">
-            ✅ Klik bulatan di samping huruf untuk menandai sebagai jawaban benar
-            </p>
-        </div>
-        )}
+                  </div>
+                  
+                  <div className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-red-50 transition-colors cursor-pointer"
+                    onClick={() => setForm({ ...form, correctAnswer: 'Salah' })}>
+                    <RadioGroupItem value="Salah" id="false-option" />
+                    <Label htmlFor="false-option" className="flex-1 cursor-pointer text-red-700 font-medium">
+                      ❌ Salah
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+            )}
 
-        {/* ===== TRUE/FALSE OPTIONS ===== */}
-        {form.questionType === 'true_false' && (
-        <div>
-            <Label className="mb-1.5 block">Jawaban Benar *</Label>
-            <RadioGroup 
-            value={form.correctAnswer} 
-            onValueChange={(value) => setForm({ ...form, correctAnswer: value })}
-            className="space-y-3 mt-2"
-            >
-            <div className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-green-50 transition-colors cursor-pointer"
-                onClick={() => setForm({ ...form, correctAnswer: 'Benar' })}>
-                <RadioGroupItem value="Benar" id="true-option" />
-                <Label htmlFor="true-option" className="flex-1 cursor-pointer text-green-700 font-medium">
-                ✅ Benar
-                </Label>
+
+
+            <div>
+              <Label className="mb-1.5 block">Batas Waktu (detik)</Label>
+              <Input
+                type="number"
+                min={1}
+                max={15}
+                value={form.timeLimitMinutes}
+                onChange={(e) => setForm({ ...form, timeLimitMinutes: Math.min(15, parseInt(e.target.value) || 15) })}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Maksimal 15 detik</p>
             </div>
-            
-            <div className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-red-50 transition-colors cursor-pointer"
-                onClick={() => setForm({ ...form, correctAnswer: 'Salah' })}>
-                <RadioGroupItem value="Salah" id="false-option" />
-                <Label htmlFor="false-option" className="flex-1 cursor-pointer text-red-700 font-medium">
-                ❌ Salah
-                </Label>
-            </div>
-            </RadioGroup>
-        </div>
-        )}
-
-        {/* ===== SHORT ANSWER ===== */}
-        {form.questionType === 'short_answer' && (
-        <div>
-            <Label className="mb-1.5 block">Kata Kunci Jawaban *</Label>
-            <Input
-            placeholder="Masukkan kata kunci yang harus ada dalam jawaban"
-            value={form.correctAnswer}
-            onChange={(e) => setForm({ ...form, correctAnswer: e.target.value })}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-            Jawaban member akan dianggap benar jika mengandung kata kunci ini
-            </p>
-        </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-4">
-        <div>
-            <Label className="mb-1.5 block">Batas Waktu (menit)</Label>
-            <Input
-            type="number"
-            min={1}
-            max={60}
-            value={form.timeLimitMinutes}
-            onChange={(e) => setForm({ ...form, timeLimitMinutes: parseInt(e.target.value) || 5 })}
-            />
-        </div>
-        <div>
-            <Label className="mb-1.5 block">Maks Percobaan</Label>
-            <Input
-            type="number"
-            min={1}
-            max={10}
-            value={form.maxAttempts}
-            onChange={(e) => setForm({ ...form, maxAttempts: parseInt(e.target.value) || 1 })}
-            />
-        </div>
-        <div>
-            <Label className="mb-1.5 block">Tanggal Mulai</Label>
-            <Input
-            type="date"
-            value={form.startDate}
-            onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-            />
-        </div>
-        <div>
-            <Label className="mb-1.5 block">Tanggal Berakhir</Label>
-            <Input
-            type="date"
-            value={form.endDate}
-            onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-            />
-        </div>
-        </div>
-    </div>
+          </div>
 
     <DialogFooter>
         <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>

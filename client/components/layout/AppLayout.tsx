@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Users, Calendar, ClipboardList, BarChart3,
+  LayoutDashboard, Users, Calendar, CalendarDays, ClipboardList, BarChart3,
   Settings, LogOut, ChevronLeft, ChevronRight, Megaphone,
   QrCode, ListChecks, Trophy, ShieldCheck, Layers, FileText,
   UserCircle, CheckSquare, BookOpen, Bell, Menu, X,
@@ -19,33 +19,35 @@ type NavItem = {
 };
 
 const SUPER_ADMIN_NAV: NavItem[] = [
-  { to: "/superadmin/dashboard",     icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/superadmin/members",       icon: Users,           label: "Members" },
-  { to: "/superadmin/events",        icon: Calendar,        label: "Events" },
-  { to: "/superadmin/attendance",    icon: ClipboardList,   label: "Attendance" },
-  { to: "/superadmin/schedules",     icon: BookOpen,        label: "Schedules" },
-  { to: "/superadmin/announcements", icon: Megaphone,       label: "Announcements" },
-  { to: "/superadmin/reports",       icon: BarChart3,       label: "Reports" },
-  { to: "/superadmin/leaderboard",   icon: Trophy,          label: "Leaderboard" },
-  { to: "/superadmin/divisions",     icon: Layers,          label: "Divisions" },
-  { to: "/superadmin/audit",         icon: FileText,        label: "Audit Logs" },
-  { to: "/superadmin/system",        icon: ShieldCheck,     label: "System" },
-  { to: "/superadmin/settings",      icon: Settings,        label: "Settings" },
-  { to: "/superadmin/questions",     icon: HelpCircle,      label: "Soal" },
+  { to: "/superadmin/dashboard",           icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/superadmin/members",             icon: Users,           label: "Members" },
+  { to: "/superadmin/events",              icon: Calendar,        label: "Events" },
+  { to: "/superadmin/attendance",          icon: ClipboardList,   label: "Attendance" },
+  { to: "/superadmin/schedules",           icon: BookOpen,        label: "Schedules" },
+  { to: "/superadmin/schedule-attendance", icon: CalendarDays,    label: "Schedule Attendance" },
+  { to: "/superadmin/announcements",       icon: Megaphone,       label: "Announcements" },
+  { to: "/superadmin/reports",             icon: BarChart3,       label: "Reports" },
+  { to: "/superadmin/leaderboard",         icon: Trophy,          label: "Leaderboard" },
+  { to: "/superadmin/divisions",           icon: Layers,          label: "Divisions" },
+  { to: "/superadmin/audit",              icon: FileText,        label: "Audit Logs" },
+  { to: "/superadmin/system",              icon: ShieldCheck,     label: "System" },
+  { to: "/superadmin/settings",            icon: Settings,        label: "Settings" },
+  { to: "/superadmin/questions",           icon: HelpCircle,      label: "Soal" },
 ];
 
 const ADMIN_NAV: NavItem[] = [
-  { to: "/admin/dashboard",     icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/admin/members",       icon: Users,           label: "Members" },
-  { to: "/admin/events",        icon: Calendar,        label: "Events" },
-  { to: "/admin/attendance",    icon: ClipboardList,   label: "Attendance" },
-  { to: "/admin/schedules",     icon: BookOpen,        label: "Schedules" },
-  { to: "/admin/announcements", icon: Megaphone,       label: "Announcements" },
-  { to: "/admin/qr",            icon: QrCode,          label: "QR Manager" },
-  { to: "/admin/reports",       icon: BarChart3,       label: "Reports" },
-  { to: "/admin/leaderboard",   icon: Trophy,          label: "Leaderboard" },
-  { to: "/admin/settings",      icon: Settings,        label: "Settings" },
-  { to: "/admin/questions",     icon: HelpCircle,      label: "Soal" },
+  { to: "/admin/dashboard",            icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/admin/members",              icon: Users,           label: "Members" },
+  { to: "/admin/events",               icon: Calendar,        label: "Events" },
+  { to: "/admin/attendance",           icon: ClipboardList,   label: "Attendance" },
+  { to: "/admin/schedules",            icon: BookOpen,        label: "Schedules" },
+  { to: "/admin/schedule-attendance",  icon: CalendarDays,    label: "Schedule Attendance" },
+  { to: "/admin/announcements",        icon: Megaphone,       label: "Announcements" },
+  { to: "/admin/qr",                   icon: QrCode,          label: "QR Manager" },
+  { to: "/admin/reports",              icon: BarChart3,       label: "Reports" },
+  { to: "/admin/leaderboard",          icon: Trophy,          label: "Leaderboard" },
+  { to: "/admin/settings",             icon: Settings,        label: "Settings" },
+  { to: "/admin/questions",            icon: HelpCircle,      label: "Soal" },
 ];
 
 const ATTENDANCE_NAV: NavItem[] = [
@@ -55,16 +57,7 @@ const ATTENDANCE_NAV: NavItem[] = [
   { to: "/attendance/face-attendance", icon: CheckSquare,     label: "Face Attendance" },
 ];
 
-const USER_NAV: NavItem[] = [
-  { to: "/user/dashboard",     icon: LayoutDashboard, label: "Home" },
-  { to: "/user/checkin",       icon: CheckSquare,     label: "Check In" },
-  { to: "/user/attendance",    icon: ListChecks,      label: "My Attendance" },
-  { to: "/user/schedules",     icon: BookOpen,        label: "Schedules" },
-  { to: "/user/announcements", icon: Bell,            label: "Announcements" },
-  { to: "/user/leaderboard",   icon: Trophy,          label: "Leaderboard" },
-  { to: "/user/profile",       icon: UserCircle,      label: "Profile" },
-  { to: "/user/questions",     icon: HelpCircle,      label: "Jawab Soal" },
-];
+const USER_NAV: NavItem[] = [];
 
 const NAV_MAP: Record<AppRole, NavItem[]> = {
   super_admin: SUPER_ADMIN_NAV,
@@ -101,7 +94,11 @@ export default function AppLayout({ role }: Props) {
   const handleLogout = async () => {
     try { await authApi.logout(); } catch { /* ignore */ }
     clearSession();
-    navigate("/login");
+    if (role === "user") {
+      navigate("/attendance/home");
+    } else {
+      navigate("/login");
+    }
   };
 
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
@@ -156,7 +153,7 @@ export default function AppLayout({ role }: Props) {
 
       {/* User info + logout - FIXED: Added flex-shrink-0 */}
       <div className="border-t border-gray-700 p-3 flex-shrink-0">
-        {(!collapsed || mobile) ? (
+        {(!collapsed || mobile) && role !== "user" ? (
           <div className="flex items-center gap-3 mb-3">
             <div className={`w-8 h-8 rounded-full ${ROLE_COLOR[role]} flex items-center justify-center flex-shrink-0`}>
               <span className="text-white text-xs font-bold">

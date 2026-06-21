@@ -1,6 +1,7 @@
 // client/pages/user/CheckIn.tsx
 import { useState, useEffect, useRef } from "react";
-import { CheckCircle2, QrCode, Loader2, Calendar, Scan, Camera, StopCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { CheckCircle2, QrCode, Loader2, Calendar, CalendarDays, Scan, Camera, StopCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,12 +10,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { attendanceApi, eventApi } from "@/services/api";
+import { attendanceApi, eventApi, attendanceScheduleApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
 
 interface Event { id: number; event_code: string; event_name: string; event_type: string; }
 
 export default function UserCheckin() {
+  const navigate = useNavigate();
+  const [isAttendanceOpen, setIsAttendanceOpen] = useState<boolean | null>(null);
   const [events, setEvents]   = useState<Event[]>([]);
   const [eventId, setEventId] = useState("");
   const [qrToken, setQrToken] = useState("");
@@ -27,6 +30,9 @@ export default function UserCheckin() {
   const scannerDivRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    attendanceScheduleApi.checkToday()
+      .then((r) => setIsAttendanceOpen(r.data.isOpen))
+      .catch(() => setIsAttendanceOpen(false));
     eventApi.getAll({ isActive: true }).then((r) => setEvents(r.data.data)).catch(() => {});
     loadTodayAttendance();
     
@@ -145,6 +151,28 @@ export default function UserCheckin() {
 
   return (
     <div className="p-4 md:p-6 max-w-lg mx-auto space-y-6">
+
+      {/* ── Attendance Closed Overlay ───────────────────────────────── */}
+      {isAttendanceOpen === false && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+              <CalendarDays className="h-8 w-8 text-red-500" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Attendance Belum Dibuka</h2>
+            <p className="mt-2 text-sm text-gray-500">
+              Attendance hari ini belum dijadwalkan oleh admin. Silakan coba lagi pada tanggal yang telah ditentukan.
+            </p>
+            <button
+              onClick={() => navigate("/user/dashboard")}
+              className="mt-6 w-full rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary/90"
+            >
+              ← Back Home
+            </button>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold">Check In</h1>
         <p className="text-muted-foreground mt-1">Catat kehadiran kamu hari ini</p>

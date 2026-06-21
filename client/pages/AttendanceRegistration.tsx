@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, CheckCircle2, Save, ShieldCheck, UserPlus2, Video } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Save, ShieldCheck, UserPlus2, Video } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/use-toast";
 import { setPendingRegistrationProfile } from "@/lib/attendanceFlow";
+import { userMemberApi } from "@/services/api";
 
 type RegistrationType = "student" | "other" | "";
 
@@ -48,6 +49,7 @@ export default function AttendanceRegistration() {
   const [formState, setFormState] = useState<RegistrationFormState>(INITIAL_FORM);
   const [isSaved, setIsSaved] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const isFormComplete = useMemo(() => {
     return (
@@ -70,35 +72,69 @@ export default function AttendanceRegistration() {
     }));
   };
 
-  const handleConfirmSave = () => {
-    setPendingRegistrationProfile({
-      name: formState.name,
-      email: formState.email,
-      category: formState.category,
-      phone: formState.phone,
-      birthday: formState.birthday,
-    });
-    setIsSaved(true);
-    setIsConfirmOpen(false);
-    toast({
-      title: "Data saved",
-      description: "Data registrasi awal berhasil disimpan.",
-    });
+  const handleConfirmSave = async () => {
+    if (saving) return;
+
+    setSaving(true);
+    try {
+      await userMemberApi.create({
+        name: formState.name,
+        email: formState.email,
+        category: formState.category,
+        phone: formState.phone,
+        birthday: formState.birthday,
+      });
+
+      setPendingRegistrationProfile({
+        name: formState.name,
+        email: formState.email,
+        category: formState.category,
+        phone: formState.phone,
+        birthday: formState.birthday,
+      });
+
+      setIsSaved(true);
+      setIsConfirmOpen(false);
+      toast({
+        title: "Data saved",
+        description: "Data registrasi awal berhasil disimpan ke tabel user_member.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Save gagal",
+        description: error?.response?.data?.message || "Gagal menyimpan data registrasi.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="min-h-full bg-[radial-gradient(circle_at_top_left,_rgba(124,77,255,0.16),_transparent_18%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.16),_transparent_20%),linear-gradient(180deg,_rgba(248,250,252,0.99),_rgba(241,245,249,0.98))] p-4 md:p-8">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
         <section className="overflow-hidden rounded-[30px] bg-gradient-to-r from-[#7c4dff] via-[#5968ff] to-[#5da2ff] px-6 py-8 text-white shadow-[0_28px_90px_-48px_rgba(79,70,229,0.78)] md:px-8">
-          <div className="flex flex-col gap-3">
-            <div className="inline-flex w-fit items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-sm backdrop-blur-sm">
-              <ShieldCheck className="h-4 w-4" />
-              Start Registration
+          <div className="flex flex-col gap-4">
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-10 w-fit rounded-xl border-0 bg-white/15 px-3 text-white hover:bg-white/20"
+              onClick={() => navigate("/attendance")}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+
+            <div className="flex flex-col gap-3">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-sm backdrop-blur-sm">
+                <ShieldCheck className="h-4 w-4" />
+                Start Registration
+              </div>
+              <h1 className="text-3xl font-bold sm:text-4xl">Input data awal registrasi</h1>
+              <p className="max-w-2xl text-sm text-white/85 sm:text-base">
+                Isi semua data terlebih dahulu. Setelah data disimpan, form akan terkunci dan tombol Start Face Registration akan aktif.
+              </p>
             </div>
-            <h1 className="text-3xl font-bold sm:text-4xl">Input data awal registrasi</h1>
-            <p className="max-w-2xl text-sm text-white/85 sm:text-base">
-              Isi semua data terlebih dahulu. Setelah data disimpan, form akan terkunci dan tombol Start Face Registration akan aktif.
-            </p>
           </div>
         </section>
 
@@ -186,12 +222,12 @@ export default function AttendanceRegistration() {
               <Button
                 type="button"
                 className="h-12 justify-between rounded-2xl"
-                disabled={!isFormComplete || isSaved}
+                disabled={!isFormComplete || isSaved || saving}
                 onClick={() => setIsConfirmOpen(true)}
               >
                 <span className="flex items-center gap-2">
                   <Save className="h-4 w-4" />
-                  Save
+                  {saving ? "Saving..." : "Save"}
                 </span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
@@ -224,7 +260,9 @@ export default function AttendanceRegistration() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmSave}>Ya, Save</AlertDialogAction>
+            <AlertDialogAction onClick={handleConfirmSave} disabled={saving}>
+              {saving ? "Menyimpan..." : "Ya, Save"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

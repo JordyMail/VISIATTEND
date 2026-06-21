@@ -5,11 +5,17 @@ import {
   CheckSquare,
   Trophy,
   ChevronDown,
+  Home,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const navigation = [
+  {
+    name: "Home",
+    href: "/attendance/home",
+    icon: Home,
+  },
   {
     name: "Attendance",
     href: "/attendance",

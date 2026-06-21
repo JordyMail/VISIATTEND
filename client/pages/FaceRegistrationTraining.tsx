@@ -233,50 +233,50 @@ export default function FaceRegistrationTraining() {
   };
 
   return (
-    <div className="min-h-full bg-[radial-gradient(circle_at_top_left,_rgba(124,77,255,0.16),_transparent_18%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.16),_transparent_20%),linear-gradient(180deg,_rgba(248,250,252,0.99),_rgba(241,245,249,0.98))] p-4 md:p-8">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-        <section className="overflow-hidden rounded-[30px] bg-gradient-to-r from-[#7c4dff] via-[#5968ff] to-[#5da2ff] px-6 py-8 text-white shadow-[0_28px_90px_-48px_rgba(79,70,229,0.78)] md:px-8">
-          <div className="flex flex-col gap-3">
-            <div className="inline-flex w-fit items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-sm backdrop-blur-sm">
-              <ShieldCheck className="h-4 w-4" />
+    <div className="h-screen max-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(124,77,255,0.16),_transparent_18%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.16),_transparent_20%),linear-gradient(180deg,_rgba(248,250,252,0.99),_rgba(241,245,249,0.98))] p-4 md:p-6 overflow-hidden flex flex-col gap-4">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 flex-1 min-h-0 overflow-hidden">
+        <section className="overflow-hidden rounded-[20px] bg-gradient-to-r from-[#7c4dff] via-[#5968ff] to-[#5da2ff] px-6 py-3.5 text-white shadow-md flex-shrink-0">
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2 text-[#e3dcff] text-xs font-semibold uppercase tracking-wider">
+              <ShieldCheck className="h-3.5 w-3.5" />
               Face Registration Training
             </div>
-            <h1 className="text-3xl font-bold sm:text-4xl">Training wajah 3 kali untuk registrasi awal</h1>
-            <p className="max-w-2xl text-sm text-white/85 sm:text-base">Setelah 3 sampel valid direkam, sistem akan langsung membuat user baru dan masuk ke dashboard user.</p>
+            <h1 className="text-xl font-bold sm:text-2xl text-white">Training wajah 3 kali untuk registrasi awal</h1>
+            <p className="text-xs text-white/85">Setelah 3 sampel valid direkam, sistem akan langsung membuat user baru dan masuk ke dashboard user.</p>
           </div>
         </section>
 
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <Card className="rounded-[28px] border-white/60 bg-white/85 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-sm">
-            <CardContent className="p-6 md:p-8">
-              <div className="relative overflow-hidden rounded-[24px] bg-slate-950">
+        <div className="flex-1 grid gap-4 lg:grid-cols-[1.35fr_0.65fr] min-h-0 overflow-hidden">
+          <Card className="h-full flex flex-col min-h-0 rounded-[24px] border-white/60 bg-white/85 shadow-lg backdrop-blur-sm overflow-hidden">
+            <CardContent className="flex-1 flex flex-col p-4 md:p-6 min-h-0 overflow-hidden justify-between gap-4">
+              <div className="flex-1 min-h-0 flex items-center justify-center bg-slate-950 rounded-[20px] p-2 relative">
                 {cameraError ? (
-                  <div className="flex aspect-video items-center justify-center px-6 text-center text-sm text-white/80">
+                  <div className="flex items-center justify-center px-6 text-center text-sm text-white/80">
                     {cameraError}
                   </div>
                 ) : (
-                  <>
-                    <video ref={videoRef} autoPlay playsInline muted className="aspect-video w-full object-cover" />
+                  <div className="relative aspect-video h-full max-h-full max-w-full mx-auto rounded-[16px] overflow-hidden">
+                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                     {faceDetection && (
                       <div className="pointer-events-none absolute inset-0">
                         <div
-                          className="absolute rounded-[18px] border-[3px] border-emerald-400 shadow-[0_0_0_9999px_rgba(15,23,42,0.08)]"
+                          className="absolute rounded-[14px] border-[3px] border-emerald-400 shadow-[0_0_0_9999px_rgba(15,23,42,0.08)]"
                           style={getOverlayStyle(faceDetection, frameSize)}
                         >
-                          <div className="absolute -top-8 left-0 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-semibold text-white shadow-lg">
+                          <div className="absolute -top-7 left-0 rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-lg">
                             YuNet {(faceDetection.confidence * 100).toFixed(0)}%
                           </div>
                         </div>
                       </div>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
 
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <div className="flex flex-col gap-3 sm:flex-row flex-shrink-0">
                 <Button
                   type="button"
-                  className="h-12 rounded-2xl"
+                  className="h-12 rounded-2xl flex-1 justify-center gap-2"
                   disabled={!cameraReady || processing || !profile}
                   onClick={handleCapture}
                 >
@@ -284,40 +284,38 @@ export default function FaceRegistrationTraining() {
                   Capture Training Sample
                 </Button>
 
-                <Button type="button" variant="outline" className="h-12 rounded-2xl" onClick={() => navigate("/attendance/registration")}>Kembali ke Form</Button>
+                <Button type="button" variant="outline" className="h-12 rounded-2xl gap-2" onClick={() => navigate("/attendance/registration")}>Kembali ke Form</Button>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="rounded-[28px] border-white/60 bg-white/85 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-sm">
-            <CardContent className="space-y-5 p-6 md:p-8">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <ScanFace className="h-6 w-6" />
+          <Card className="h-full flex flex-col min-h-0 rounded-[24px] border-white/60 bg-white/85 shadow-lg backdrop-blur-sm overflow-hidden">
+            <CardContent className="flex-1 flex flex-col p-4 md:p-6 min-h-0 justify-between gap-4">
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <ScanFace className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900">Training Progress</h2>
-                  <p className="text-sm text-slate-500">Wajib 3 sampel wajah valid.</p>
+                  <h2 className="text-lg font-semibold text-slate-900 leading-tight">Training Progress</h2>
+                  <p className="text-xs text-slate-500">Wajib 3 sampel wajah valid.</p>
                 </div>
               </div>
 
-              <Progress value={(sampleCount / REQUIRED_SAMPLES) * 100} className="h-3" />
-
-              <div className="rounded-2xl bg-slate-50 p-4 text-center">
-                <p className="text-sm text-slate-500">Captured Samples</p>
-                <p className="mt-2 text-4xl font-bold text-slate-900">{sampleCount}/{REQUIRED_SAMPLES}</p>
+              <div className="space-y-2 flex-shrink-0">
+                <Progress value={(sampleCount / REQUIRED_SAMPLES) * 100} className="h-2.5" />
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+              <div className="flex-grow flex flex-col justify-center items-center rounded-2xl bg-slate-50 p-4 text-center min-h-[100px]">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Captured Samples</p>
+                <p className="mt-2 text-5xl font-extrabold text-slate-900 tracking-tight">{sampleCount}/{REQUIRED_SAMPLES}</p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm flex-shrink-0">
                 {statusText}
               </div>
 
-              <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                Kotak hijau tampil live dari preview YuNet realtime dan akan diperbarui saat kamu menggerakkan wajah.
-              </div>
-
               {sampleCount >= REQUIRED_SAMPLES && (
-                <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-sm flex-shrink-0">
                   <CheckCircle2 className="h-4 w-4" />
                   3 sampel sudah cukup. Sistem sedang menyiapkan profil user.
                 </div>

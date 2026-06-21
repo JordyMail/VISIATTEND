@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Activity,
   ArrowRight,
@@ -13,7 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { attendanceApi, dashboardApi, eventApi } from "@/services/api";
+import { attendanceApi, attendanceScheduleApi } from "@/services/api";
 
 interface DashboardOverview {
   totalMembers: number;
@@ -60,6 +60,8 @@ const extractPayload = <T,>(result: PromiseSettledResult<any>) => {
 };
 
 export default function AttendanceDashboard() {
+  const navigate = useNavigate();
+  const [isAttendanceOpen, setIsAttendanceOpen] = useState<boolean | null>(null);
   const [overview, setOverview] = useState<DashboardOverview>({
     totalMembers: 0,
     activeEvents: 0,
@@ -70,34 +72,30 @@ export default function AttendanceDashboard() {
   });
 
   useEffect(() => {
+    attendanceScheduleApi.checkToday()
+      .then((r) => setIsAttendanceOpen(r.data.isOpen))
+      .catch(() => setIsAttendanceOpen(false));
+  }, []);
+
+  useEffect(() => {
     const fetchDashboard = async () => {
-      const [eventsResult, dashboardResult, todayResult] = await Promise.allSettled([
-        eventApi.getAll({ isActive: true }),
-        dashboardApi.getStats(),
-        attendanceApi.getTodayStats(),
+      const [overviewResult] = await Promise.allSettled([
+        attendanceApi.getPublicOverview(),
       ]);
 
-      const events = normalizeArray<any>(extractPayload<any>(eventsResult));
-      const dashboardPayload = extractPayload<any>(dashboardResult) ?? {};
-      const todayPayload = extractPayload<any>(todayResult) ?? {};
+      const dashboardPayload = extractPayload<any>(overviewResult) ?? {};
       const dashboardToday = dashboardPayload?.todayAttendance ?? {};
 
       const totalMembers = pickNumber(dashboardPayload?.totalMembers);
-      const activeEvents = pickNumber(dashboardPayload?.activeEvents, events.length);
+      const activeEvents = pickNumber(dashboardPayload?.activeEvents);
       const checkedIn = pickNumber(
         dashboardToday?.checkedIn,
-        todayPayload?.checkedIn,
-        todayPayload?.present,
-        todayPayload?.present_count,
       );
       const absent = pickNumber(
         dashboardToday?.absent,
-        todayPayload?.absent,
-        todayPayload?.absent_count,
       );
       const pending = pickNumber(
         dashboardToday?.pending,
-        todayPayload?.pending,
         Math.max(totalMembers - checkedIn - absent, 0),
       );
       const attendanceRate = pickNumber(
@@ -131,6 +129,28 @@ export default function AttendanceDashboard() {
 
   return (
     <div className="min-h-full bg-[radial-gradient(circle_at_top_left,_rgba(124,77,255,0.18),_transparent_22%),radial-gradient(circle_at_bottom_right,_rgba(96,165,250,0.20),_transparent_26%),linear-gradient(180deg,_rgba(248,250,252,0.98),_rgba(241,245,249,0.98))] p-4 md:p-8">
+
+      {/* ── Attendance Closed Overlay ─────────────────────────────────── */}
+      {isAttendanceOpen === false && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+              <CalendarDays className="h-8 w-8 text-red-500" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Attendance Belum Dibuka</h2>
+            <p className="mt-2 text-sm text-gray-500">
+              Attendance hari ini belum dijadwalkan oleh admin. Silakan coba lagi pada tanggal yang telah ditentukan.
+            </p>
+            <button
+              onClick={() => navigate("/attendance/home")}
+              className="mt-6 w-full rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary/90"
+            >
+              ← Back Home
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <section className="relative overflow-hidden rounded-[32px] border border-white/60 bg-gradient-to-r from-[#7c4dff] via-[#5968ff] to-[#5da2ff] px-6 py-8 text-white shadow-[0_28px_90px_-48px_rgba(79,70,229,0.8)] md:px-8">
           <div className="absolute -left-10 top-8 h-36 w-36 rounded-full bg-white/10" />

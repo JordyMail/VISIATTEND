@@ -29,7 +29,7 @@ interface Question {
 }
 
 interface AnswerResult {
-  id: number;
+  id?: number;
   isCorrect: boolean;
   pointsEarned: number;
   message: string;
@@ -74,7 +74,7 @@ export default function AnswerQuestion() {
   const startTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     const question = questions[currentIndex];
-    setTimeLeft(question.time_limit_minutes * 60);
+    setTimeLeft(question.time_limit_minutes);
     setStartTime(Date.now());
     
     timerRef.current = setInterval(() => {
@@ -88,54 +88,54 @@ export default function AnswerQuestion() {
     }, 1000);
   };
 
-const handleSubmit = async (timeUp = false) => {
-  if (!answer.trim() && !timeUp) {
-    toast({ title: "Perhatian", description: "Masukkan jawaban terlebih dahulu" });
-    return;
-  }
-
-  if (timerRef.current) clearInterval(timerRef.current);
-
-  const timeSpent = Math.floor((Date.now() - startTime) / 1000);
-  setSubmitting(true);
-
-  try {
-    const r = await questionApi.submitAnswer(
-      questions[currentIndex].id,
-      timeUp ? "" : answer,
-      timeSpent
-    );
-    
-    console.log('Submit result:', r.data); // Debug
-    
-    setResult({
-      isCorrect: r.data.data.isCorrect,
-      pointsEarned: r.data.data.pointsEarned,
-      message: r.data.data.message || r.data.message
-    });
-    
-    if (r.data.data.isCorrect) {
-      toast({ 
-        title: "✅ Benar!", 
-        description: `Kamu mendapatkan ${r.data.data.pointsEarned} poin!` 
-      });
-    } else {
-      toast({ 
-        title: "❌ Salah", 
-        description: r.data.data.message || "Coba lagi!" 
-      });
+  const handleSubmit = async (timeUp = false) => {
+    if (!answer.trim() && !timeUp) {
+      toast({ title: "Perhatian", description: "Masukkan jawaban terlebih dahulu" });
+      return;
     }
-  } catch (e: any) {
-    console.error('Submit error:', e);
-    toast({ 
-      title: "Error", 
-      description: e.response?.data?.message || "Gagal submit jawaban",
-      variant: "destructive" 
-    });
-  } finally {
-    setSubmitting(false);
-  }
-};
+
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    const timeSpent = Math.floor((Date.now() - startTime) / 1000);
+    setSubmitting(true);
+
+    try {
+      const r = await questionApi.submitAnswer(
+        questions[currentIndex].id,
+        timeUp ? "" : answer,
+        timeSpent
+      );
+      
+      console.log('Submit result:', r.data); // Debug
+      
+      setResult({
+        isCorrect: r.data.data.isCorrect,
+        pointsEarned: r.data.data.pointsEarned,
+        message: r.data.data.message || r.data.message
+      });
+      
+      if (r.data.data.isCorrect) {
+        toast({ 
+          title: "✅ Benar!", 
+          description: `Kamu mendapatkan ${r.data.data.pointsEarned} poin!` 
+        });
+      } else {
+        toast({ 
+          title: "❌ Salah", 
+          description: r.data.data.message || "Coba lagi!" 
+        });
+      }
+    } catch (e: any) {
+      console.error('Submit error:', e);
+      toast({ 
+        title: "Error", 
+        description: e.response?.data?.message || "Gagal submit jawaban",
+        variant: "destructive" 
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const nextQuestion = () => {
     if (currentIndex < questions.length - 1) {
@@ -146,13 +146,11 @@ const handleSubmit = async (timeUp = false) => {
   };
 
   const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
+    return `${seconds} detik`;
   };
 
   const progressPercent = timeLeft > 0 
-    ? ((questions[currentIndex]?.time_limit_minutes * 60 - timeLeft) / (questions[currentIndex]?.time_limit_minutes * 60)) * 100
+    ? ((questions[currentIndex]?.time_limit_minutes - timeLeft) / (questions[currentIndex]?.time_limit_minutes)) * 100
     : 100;
 
   if (loading) {
@@ -216,9 +214,6 @@ const handleSubmit = async (timeUp = false) => {
                 <HelpCircle className="w-5 h-5 text-primary" />
                 {currentQuestion.title}
               </CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">
-                Percobaan: {currentQuestion.attempts_count}/{currentQuestion.max_attempts}
-              </p>
             </div>
           </div>
         </CardHeader>

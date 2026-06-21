@@ -34,6 +34,7 @@ import QRManager from "@/pages/admin/QRManager";
 import AdminLeaderboard from "@/pages/admin/Leaderboard";
 import AdminSettings from "@/pages/Settings";
 import QuestionsManagement from "@/pages/admin/Questions";
+import ScheduleAttendance from "@/pages/admin/ScheduleAttendance";
 
 // User pages
 import UserDashboard from "@/pages/user/Dashboard";
@@ -53,6 +54,7 @@ import AttendanceRegistration from "./pages/AttendanceRegistration";
 import FaceRegistrationTraining from "./pages/FaceRegistrationTraining";
 import FaceAttendance from "./pages/FaceAttendance";
 import AttendanceUserDashboard from "./pages/UserDashboard";
+import QuestionSistem from "./pages/QuestionSistem";
 
 // Misc
 import Unauthorized from "@/pages/Unauthorized";
@@ -107,6 +109,7 @@ export default function App() {
           <Route path="events" element={<Events />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="schedules" element={<Schedules />} />
+          <Route path="schedule-attendance" element={<ScheduleAttendance />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="reports" element={<Reports />} />
           <Route path="leaderboard" element={<AdminLeaderboard />} />
@@ -132,6 +135,7 @@ export default function App() {
           <Route path="events" element={<Events />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="schedules" element={<Schedules />} />
+          <Route path="schedule-attendance" element={<ScheduleAttendance />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="qr" element={<QRManager />} />
           <Route path="reports" element={<Reports />} />
@@ -231,6 +235,8 @@ export default function App() {
             >
               <Route index element={<AttendanceUserDashboard />} />
             </Route>
+
+            <Route path="/question-sistem" element={<QuestionSistem />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

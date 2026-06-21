@@ -1,22 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Clock3, LogOut, Medal, Trophy } from "lucide-react";
+import { ChevronRight, LogOut, Medal, Trophy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/components/ui/use-toast";
 import { clearCurrentAttendanceUser, clearPendingRegistrationProfile, getCurrentAttendanceUser } from "@/lib/attendanceFlow";
-import { attendanceApi, userDashboardApi } from "@/services/api";
+import { userDashboardApi, memberLeaderboardApi } from "@/services/api";
 import { clearSession } from "@/lib/auth";
 
 type DashboardTrendPoint = {
@@ -25,23 +15,9 @@ type DashboardTrendPoint = {
 };
 
 type LeaderboardPreviewRow = {
-  user_id: number;
+  member_id: string;
   full_name: string;
-  total_present: number;
   points: number;
-};
-
-type QuestionOption = {
-  id: string;
-  label: string;
-};
-
-type QuestionItem = {
-  id: string;
-  question: string;
-  options: QuestionOption[];
-  correctOptionId: string;
-  points?: number;
 };
 
 const QUESTION_TIME_LIMIT = 15;
@@ -107,12 +83,6 @@ const getInitials = (name: string) =>
 export default function UserDashboard() {
   const navigate = useNavigate();
   const currentUser = getCurrentAttendanceUser();
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const [questionOpen, setQuestionOpen] = useState(false);
-  const [selectedOption, setSelectedOption] = useState("");
-  const [activeQuestion, setActiveQuestion] = useState<QuestionItem | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState(QUESTION_TIME_LIMIT);
-  const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [points, setPoints] = useState(0);
   const [trend, setTrend] = useState<DashboardTrendPoint[]>(createFallbackTrend(0));
@@ -122,15 +92,10 @@ export default function UserDashboard() {
   const [dbQuestions, setDbQuestions] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  const unansweredQuestions = dbQuestions.filter((q: any) => !q.answered);
-  const questionsCount = unansweredQuestions.length;
-  const questionButtonLabel = loadingData
-    ? "Loading Questions..."
-    : quizCompleted
+  const questionButtonLabel = quizCompleted
     ? "Question Completed"
-    : `Start Question (${QUESTION_TIME_LIMIT}s)`;
+    : "Start Question";
   const trendPath = useMemo(() => buildTrendPath(trend), [trend]);
-  const rulesText = `Terdapat ${questionsCount} pertanyaan untuk dijawab. Jika berhasil menjawab dengan benar, Anda akan mendapatkan poin sesuai bobot masing-masing soal. Pertanyaan berkaitan dengan Bible Study.`;
 
   const handleLogout = () => {
     clearCurrentAttendanceUser();
@@ -159,7 +124,7 @@ export default function UserDashboard() {
         name: currentUser.name,
       });
 
-      const leaderboardPromise = attendanceApi.getLeaderboard(undefined, "week");
+      const leaderboardPromise = memberLeaderboardApi.getLeaderboard();
 
       try {
         const [profileResponse, questionsResponse, leaderboardResponse] = await Promise.all([
@@ -226,217 +191,8 @@ export default function UserDashboard() {
     };
   }, [currentUser]);
 
-  useEffect(() => {
-    if (!questionOpen) {
-      return;
-    }
-
-    if (secondsLeft <= 0) {
-      const autoSubmitTimeout = async () => {
-        if (!activeQuestion || !currentUser) return;
-        setSubmittingAnswer(true);
-        try {
-          const response = await userDashboardApi.submitQuestionAnswer({
-            email: currentUser.email,
-            name: currentUser.name,
-            questionId: Number(activeQuestion.id),
-            answer: "Timeout",
-            timeSpentSeconds: QUESTION_TIME_LIMIT,
-          });
-
-          toast({
-            title: "Waktu habis",
-            description: "Waktu 15 detik sudah habis. Soal ini dianggap salah.",
-            variant: "destructive",
-          });
-
-          const updatedQuestions = dbQuestions.map((q: any) => {
-            if (q.id === activeQuestion.id) {
-              return { ...q, answered: true };
-            }
-            return q;
-          });
-          setDbQuestions(updatedQuestions);
-
-          const unanswered = updatedQuestions.filter((q: any) => !q.answered);
-
-          if (unanswered.length > 0) {
-            const nextQ = unanswered[0];
-            let parsedOptions: any[] = [];
-            if (nextQ.question_type === 'multiple_choice') {
-              try {
-                const optArr = typeof nextQ.options === 'string' ? JSON.parse(nextQ.options) : nextQ.options;
-                parsedOptions = (Array.isArray(optArr) ? optArr : []).map((text: string, idx: number) => ({
-                  id: String.fromCharCode(65 + idx),
-                  label: text
-                }));
-              } catch (e) {
-                console.error(e);
-              }
-            } else if (nextQ.question_type === 'true_false') {
-              parsedOptions = [
-                { id: 'Benar', label: 'Benar' },
-                { id: 'Salah', label: 'Salah' }
-              ];
-            }
-
-            setActiveQuestion({
-              id: nextQ.id,
-              question: nextQ.question_text,
-              options: parsedOptions,
-              correctOptionId: nextQ.correct_answer,
-              points: nextQ.points
-            } as any);
-            setSelectedOption("");
-            setSecondsLeft(QUESTION_TIME_LIMIT);
-          } else {
-            setQuestionOpen(false);
-            setQuizCompleted(true);
-          }
-        } catch (error) {
-          setQuestionOpen(false);
-          setQuizCompleted(true);
-        } finally {
-          setSubmittingAnswer(false);
-        }
-      };
-      autoSubmitTimeout();
-      return;
-    }
-
-    const timerId = window.setTimeout(() => {
-      setSecondsLeft((value) => value - 1);
-    }, 1000);
-
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [questionOpen, secondsLeft, activeQuestion, currentUser, dbQuestions]);
-
-  const startQuestionFlow = () => {
-    const unanswered = dbQuestions.filter((q: any) => !q.answered);
-    if (unanswered.length === 0) return;
-    
-    const firstQ = unanswered[0];
-    
-    let parsedOptions: any[] = [];
-    if (firstQ.question_type === 'multiple_choice') {
-      try {
-        const optArr = typeof firstQ.options === 'string' ? JSON.parse(firstQ.options) : firstQ.options;
-        parsedOptions = (Array.isArray(optArr) ? optArr : []).map((text: string, idx: number) => ({
-          id: String.fromCharCode(65 + idx),
-          label: text
-        }));
-      } catch (e) {
-        console.error("Failed to parse options:", e);
-      }
-    } else if (firstQ.question_type === 'true_false') {
-      parsedOptions = [
-        { id: 'Benar', label: 'Benar' },
-        { id: 'Salah', label: 'Salah' }
-      ];
-    }
-
-    setActiveQuestion({
-      id: firstQ.id,
-      question: firstQ.question_text,
-      options: parsedOptions,
-      correctOptionId: firstQ.correct_answer,
-      points: firstQ.points
-    } as any);
-
-    setSelectedOption("");
-    setSecondsLeft(QUESTION_TIME_LIMIT);
-    setRulesOpen(false);
-    setQuestionOpen(true);
-  };
-
-  const handleSubmitAnswer = async () => {
-    if (!activeQuestion || !selectedOption || !currentUser) {
-      return;
-    }
-
-    setSubmittingAnswer(true);
-
-    try {
-      const response = await userDashboardApi.submitQuestionAnswer({
-        email: currentUser.email,
-        name: currentUser.name,
-        questionId: Number(activeQuestion.id),
-        answer: selectedOption,
-        timeSpentSeconds: QUESTION_TIME_LIMIT - secondsLeft,
-      });
-
-      const result = response.data.data;
-      const nextPoints = Number(result.updatedPoints);
-      setPoints(nextPoints);
-      setTrend(Array.isArray(result.trend) ? result.trend : createFallbackTrend(nextPoints));
-
-      if (result.isCorrect) {
-        toast({
-          title: "Jawaban benar",
-          description: result.message || `Anda mendapatkan ${result.pointsEarned} poin!`,
-        });
-      } else {
-        toast({
-          title: "Jawaban salah",
-          description: result.message || "Belum ada poin yang ditambahkan.",
-          variant: "destructive",
-        });
-      }
-
-      const updatedQuestions = dbQuestions.map((q: any) => {
-        if (q.id === activeQuestion.id) {
-          return { ...q, answered: true };
-        }
-        return q;
-      });
-      setDbQuestions(updatedQuestions);
-
-      const unanswered = updatedQuestions.filter((q: any) => !q.answered);
-
-      if (unanswered.length > 0) {
-        const nextQ = unanswered[0];
-        let parsedOptions: any[] = [];
-        if (nextQ.question_type === 'multiple_choice') {
-          try {
-            const optArr = typeof nextQ.options === 'string' ? JSON.parse(nextQ.options) : nextQ.options;
-            parsedOptions = (Array.isArray(optArr) ? optArr : []).map((text: string, idx: number) => ({
-              id: String.fromCharCode(65 + idx),
-              label: text
-            }));
-          } catch (e) {
-            console.error(e);
-          }
-        } else if (nextQ.question_type === 'true_false') {
-          parsedOptions = [
-            { id: 'Benar', label: 'Benar' },
-            { id: 'Salah', label: 'Salah' }
-          ];
-        }
-
-        setActiveQuestion({
-          id: nextQ.id,
-          question: nextQ.question_text,
-          options: parsedOptions,
-          correctOptionId: nextQ.correct_answer,
-          points: nextQ.points
-        } as any);
-        setSelectedOption("");
-        setSecondsLeft(QUESTION_TIME_LIMIT);
-      } else {
-        setQuestionOpen(false);
-        setQuizCompleted(true);
-      }
-    } catch (error: any) {
-      toast({
-        title: "Submit gagal",
-        description: error.response?.data?.message || "Poin user belum bisa diperbarui.",
-        variant: "destructive",
-      });
-    } finally {
-      setSubmittingAnswer(false);
-    }
+  const handleStartQuestion = () => {
+    navigate("/question-sistem");
   };
 
   return (
@@ -466,14 +222,14 @@ export default function UserDashboard() {
             <Card className="rounded-[30px] border-white/70 bg-white/80 shadow-[0_26px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-sm">
               <CardContent className="p-6 md:p-8">
                 <div className="rounded-[24px] bg-gradient-to-r from-[#9333ea] via-[#6d5efc] to-[#58a5ff] p-4 shadow-[0_20px_60px_-40px_rgba(88,80,255,0.8)]">
-                  <Button
-                    className="h-16 w-full justify-center rounded-[20px] bg-transparent text-2xl font-bold text-white shadow-none hover:bg-white/5"
-                    onClick={() => setRulesOpen(true)}
-                    disabled={loadingData || quizCompleted}
-                  >
-                    {questionButtonLabel}
-                  </Button>
-                </div>
+                <Button
+                  className="h-16 w-full justify-center rounded-[20px] bg-transparent text-2xl font-bold text-white shadow-none hover:bg-white/5"
+                  onClick={handleStartQuestion}
+                  disabled={quizCompleted}
+                >
+                  {questionButtonLabel}
+                </Button>
+              </div>
               </CardContent>
             </Card>
 
@@ -482,7 +238,7 @@ export default function UserDashboard() {
                 <h2 className="text-center text-4xl font-medium text-slate-900">Leaderboard</h2>
                 <div className="mt-6 rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_16px_45px_-35px_rgba(15,23,42,0.4)]">
                   {leaderboardPreview.length > 0 ? leaderboardPreview.map((member) => (
-                    <div key={member.user_id} className="flex items-center justify-between gap-4">
+                    <div key={member.member_id} className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 text-violet-600">
                           <Trophy className="h-5 w-5" />
@@ -556,84 +312,6 @@ export default function UserDashboard() {
             </CardContent>
           </Card>
         </div>
-
-        <Dialog open={rulesOpen} onOpenChange={setRulesOpen}>
-          <DialogContent className="rounded-[28px] border-white/70 bg-white p-0 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.35)] sm:max-w-xl">
-            <div className="rounded-t-[28px] bg-gradient-to-r from-[#8b3ffc] via-[#6b63ff] to-[#5da2ff] px-6 py-5 text-white">
-              <DialogHeader>
-                <DialogTitle className="text-2xl">Rules Question</DialogTitle>
-                <DialogDescription className="text-white/85">
-                  Baca rules dulu sebelum mulai menjawab.
-                </DialogDescription>
-              </DialogHeader>
-            </div>
-
-            <div className="space-y-5 px-6 py-6 text-slate-700">
-              <p className="text-base leading-7">
-                {rulesText}
-              </p>
-
-              <DialogFooter className="gap-3 sm:justify-end">
-                <Button type="button" variant="outline" className="rounded-2xl" onClick={() => setRulesOpen(false)}>
-                  Tidak
-                </Button>
-                <Button type="button" className="rounded-2xl bg-gradient-to-r from-[#9333ea] to-[#5da2ff] text-white" onClick={startQuestionFlow}>
-                  Mulai
-                </Button>
-              </DialogFooter>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={questionOpen} onOpenChange={setQuestionOpen}>
-          <DialogContent className="rounded-[28px] border-white/70 bg-white p-0 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.35)] sm:max-w-2xl">
-            <div className="rounded-t-[28px] bg-gradient-to-r from-[#9333ea] to-[#5da2ff] px-6 py-5 text-white">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-2xl">
-                  <Clock3 className="h-5 w-5" />
-                  Bible Study Question
-                </DialogTitle>
-                <DialogDescription className="text-white/85">
-                  Sisa waktu {secondsLeft} detik. Jawaban benar mendapat +{activeQuestion?.points || 10} poin.
-                </DialogDescription>
-              </DialogHeader>
-            </div>
-
-            <div className="space-y-6 px-6 py-6">
-              <div className="rounded-[22px] bg-slate-50 p-5 text-lg font-semibold leading-8 text-slate-900">
-                {activeQuestion?.question}
-              </div>
-
-              <RadioGroup value={selectedOption} onValueChange={setSelectedOption} className="space-y-3">
-                {activeQuestion?.options.map((option) => (
-                  <label
-                    key={option.id}
-                    className="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 transition-colors hover:border-violet-300 hover:bg-violet-50/40"
-                  >
-                    <RadioGroupItem value={option.id} id={`question-${option.id}`} />
-                    <Label htmlFor={`question-${option.id}`} className="cursor-pointer text-base text-slate-700">
-                      {option.label}
-                    </Label>
-                  </label>
-                ))}
-              </RadioGroup>
-
-              <DialogFooter className="gap-3 sm:justify-end">
-                <Button type="button" variant="outline" className="rounded-2xl" onClick={() => setQuestionOpen(false)}>
-                  Tutup
-                </Button>
-                <Button
-                  type="button"
-                  className="rounded-2xl bg-gradient-to-r from-[#9333ea] to-[#5da2ff] text-white"
-                  onClick={handleSubmitAnswer}
-                  disabled={!selectedOption || submittingAnswer}
-                >
-                  {submittingAnswer ? "Memproses..." : "Submit Answer"}
-                </Button>
-              </DialogFooter>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );

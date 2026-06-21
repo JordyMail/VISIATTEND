@@ -20,5 +20,27 @@
     "createdAt": "2026-05-28T13:14:09.007Z",
     "updatedAt": "2026-05-28T13:14:09.007Z",
     "registrationSessionId": "119b6dad3dcf4f5b91a7bd8f0fc097e9"
+  },
+  {
+    "userId": "SILFAN-392562",
+    "name": "silfan",
+    "email": "silmendzy@gmail.com",
+    "category": "student",
+    "phone": "08525494934",
+    "birthday": "2006-02-01",
+    "createdAt": "2026-06-20T13:16:33.019Z",
+    "updatedAt": "2026-06-20T13:16:33.019Z",
+    "registrationSessionId": "285129b9613346c89d909565eb91f3a3"
+  },
+  {
+    "userId": "JAKE-981668",
+    "name": "jake",
+    "email": "cococ@gmail.com",
+    "category": "student",
+    "phone": "089283454321`",
+    "birthday": "2001-02-21",
+    "createdAt": "2026-06-21T06:06:22.093Z",
+    "updatedAt": "2026-06-21T06:06:22.093Z",
+    "registrationSessionId": "0620e6f04d2c42aab992bec243991032"
   }
 ]

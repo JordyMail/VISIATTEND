@@ -1,4 +1,4 @@
-﻿import axios from "axios";
+import axios from "axios";
 
 const BASE = "/api";
 
@@ -132,6 +132,7 @@ export const attendanceApi = {
   }) => api.get("/attendance/my", { params: filters }),
   getMyStats: () => api.get("/attendance/my/stats"),
   getTodayStats: () => api.get("/attendance/stats/today"),
+  getPublicOverview: () => api.get("/attendance/public-overview"),
   getTrend: (days: number, eventId?: number) =>
     api.get("/attendance/trend", {
       params: { days, ...(eventId ? { eventId } : {}) },
@@ -266,6 +267,31 @@ export const userDashboardApi = {
     api.get("/user-dashboard/profile", { params }),
   awardQuestionPoints: (data: { email?: string; name?: string; reward: number }) =>
     api.post("/user-dashboard/question/reward", data),
+  getQuestions: (params: { email?: string; name?: string }) =>
+    api.get("/user-dashboard/questions", { params }),
+  submitQuestionAnswer: (data: { email?: string; name?: string; questionId: number; answer: string; timeSpentSeconds?: number }) =>
+    api.post("/user-dashboard/questions/submit", data),
+};
+
+export const attendanceScheduleApi = {
+  getAll: () => api.get("/attendance-schedule"),
+  checkToday: () => api.get("/attendance-schedule/today"),
+  addDate: (date: string) => api.post("/attendance-schedule", { date }),
+  removeDate: (date: string) => api.delete(`/attendance-schedule/${date}`),
+};
+
+export const userMemberApi = {
+  create: (data: {
+    name: string;
+    email: string;
+    category: string;
+    phone: string;
+    birthday: string;
+  }) => api.post("/user-members", data),
+};
+
+export const memberLeaderboardApi = {
+  getLeaderboard: () => api.get("/member-leaderboard"),
 };
 
 export default api;
