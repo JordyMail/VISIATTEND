@@ -38,6 +38,7 @@ const ACTION_COLOR: Record<string, string> = {
 
 export default function Settings() {
   const sessionUser = getSessionUser();
+  const isSuperAdmin = sessionUser?.role === 'super_admin';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState({
@@ -239,16 +240,18 @@ export default function Settings() {
       </Card>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid grid-cols-3 w-full max-w-sm">
+        <TabsList className={`grid ${isSuperAdmin ? 'grid-cols-3' : 'grid-cols-2'} w-full max-w-sm`}>
           <TabsTrigger value="profile" className="gap-1.5">
             <User className="w-3.5 h-3.5" /> Profil
           </TabsTrigger>
           <TabsTrigger value="password" className="gap-1.5">
             <Lock className="w-3.5 h-3.5" /> Password
           </TabsTrigger>
-          <TabsTrigger value="activity" className="gap-1.5">
-            <Activity className="w-3.5 h-3.5" /> Aktivitas
-          </TabsTrigger>
+          {isSuperAdmin && (
+            <TabsTrigger value="activity" className="gap-1.5">
+              <Activity className="w-3.5 h-3.5" /> Aktivitas
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Profile tab */}
