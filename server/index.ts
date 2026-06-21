@@ -2526,30 +2526,46 @@ app.post(
     }
   );
 
-  app.get(
-    "/api/settings/activity-logs",
-    authenticateToken,
-    requireSuperAdmin,
-    async (req, res) => {
-      try {
-        const { limit = 50, offset = 0 } = req.query;
-        const pool = await getConnection();
-        const r = await pool
-          .request()
-          .input("lim", sql.Int, Number(limit))
-          .input("off", sql.Int, Number(offset))
-          .query(
-            `SELECT al.*,u.full_name as user_name FROM activity_logs al
-             LEFT JOIN users u ON al.user_id=u.id
-             ORDER BY al.created_at DESC OFFSET @off ROWS FETCH NEXT @lim ROWS ONLY`
-          );
-        res.json({ success: true, data: r.recordset });
-      } catch {
-        res.status(500).json({ success: false, message: "DB error" });
+ app.get(
+  "/api/settings/activity-logs",
+  authenticateToken,
+  requireAnyRole,  // ✅ Semua role bisa akses
+  async (req: any, res) => {
+    try {
+      const { limit = 50, offset = 0 } = req.query;
+      const pool = await getConnection();
+      
+      let query = `
+        SELECT al.*, u.full_name as user_name 
+        FROM activity_logs al
+        LEFT JOIN users u ON al.user_id = u.id
+      `;
+      
+      // Jika bukan super_admin, hanya tampilkan log miliknya sendiri
+      if (req.user.role !== 'super_admin') {
+        query += ` WHERE al.user_id = @userId`;
       }
+      
+      query += ` ORDER BY al.created_at DESC OFFSET @off ROWS FETCH NEXT @lim ROWS ONLY`;
+      
+      const request = pool
+        .request()
+        .input("lim", sql.Int, Number(limit))
+        .input("off", sql.Int, Number(offset));
+      
+      if (req.user.role !== 'super_admin') {
+        request.input("userId", sql.Int, req.user.id);
+      }
+      
+      const r = await request.query(query);
+      
+      res.json({ success: true, data: r.recordset });
+    } catch (error: any) {
+      console.error('[ACTIVITY LOGS ERROR]', error);
+      res.status(500).json({ success: false, message: "DB error" });
     }
-  );
-
+  }
+);
 
   // ============================================
 // QUESTIONS API
