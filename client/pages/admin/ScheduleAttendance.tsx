@@ -1,4 +1,4 @@
-﻿// client/pages/admin/ScheduleAttendance.tsx
+// client/pages/admin/ScheduleAttendance.tsx
 import { useState, useEffect } from "react";
 import { DayPicker } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,13 +13,9 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const calendarClassNames = {
   months: "flex flex-col",
-  month_caption: "flex justify-center items-center h-9 relative mb-1",
+  month: "flex flex-col",
+  month_caption: "flex justify-center items-center h-9 mb-1",
   caption_label: "text-sm font-medium",
-  nav: "absolute inset-x-0 top-0 flex items-center justify-between px-1 h-9",
-  button_previous:
-    "h-7 w-7 flex items-center justify-center rounded-md border border-input bg-background opacity-50 hover:opacity-100 transition-opacity",
-  button_next:
-    "h-7 w-7 flex items-center justify-center rounded-md border border-input bg-background opacity-50 hover:opacity-100 transition-opacity",
   month_grid: "w-full border-collapse",
   weekdays: "flex",
   weekday: "text-muted-foreground w-9 h-9 flex items-center justify-center font-normal text-[0.8rem]",
@@ -161,19 +157,46 @@ export default function ScheduleAttendance() {
                 onSelect={handleDayClick}
                 month={month}
                 onMonthChange={setMonth}
-                disabled={saving}
+                fromYear={new Date().getFullYear()}
+                toYear={new Date().getFullYear() + 5}
+                hideNavigation
                 classNames={calendarClassNames}
                 modifiers={{ scheduled: scheduledDates }}
                 modifiersClassNames={{
                   scheduled: "!bg-primary !text-primary-foreground rounded-full font-semibold hover:!bg-primary/90",
                 }}
                 components={{
-                  Chevron: (props) =>
-                    props.orientation === "left" ? (
-                      <ChevronLeft className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    ),
+                  MonthCaption: ({ calendarMonth }) => (
+                    <div className="flex items-center justify-center gap-2 h-9 mb-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setMonth(
+                            (prev) =>
+                              new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                          )
+                        }
+                        className="h-7 w-7 flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent transition-colors"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <span className="text-sm font-medium min-w-[110px] text-center">
+                        {format(calendarMonth.date, "MMMM yyyy", { locale: id })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setMonth(
+                            (prev) =>
+                              new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                          )
+                        }
+                        className="h-7 w-7 flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent transition-colors"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ),
                 }}
               />
             )}

@@ -6,10 +6,14 @@ import {
   Settings, LogOut, ChevronLeft, ChevronRight, Megaphone,
   QrCode, ListChecks, Trophy, ShieldCheck, Layers, FileText,
   UserCircle, CheckSquare, BookOpen, Bell, Menu, X,
-  HelpCircle,
+  HelpCircle, Camera,
 } from "lucide-react";
-import { getSession, clearSession } from "@/lib/auth";
-import { authApi } from "@/services/api"; 
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { getSession, clearSession, setSession } from "@/lib/auth";
+import { authApi } from "@/services/api";
 import type { AppRole } from "@/lib/auth";
 
 type NavItem = {
@@ -90,6 +94,27 @@ export default function AppLayout({ role }: Props) {
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
+
+  const handleAttendanceModeConfirm = async () => {
+    try { await authApi.logout(); } catch { /* ignore */ }
+    clearSession();
+    // Set a temporary attendance session so RouteGuard allows /attendance/home
+    setSession(
+      {
+        id: 0,
+        email: "attendance@visiattend.local",
+        full_name: "Attendance Operator",
+        role: "attendance",
+        permissions: [],
+      },
+      {
+        accessToken: `attendance-${Date.now()}`,
+        refreshToken: `attendance-refresh-${Date.now()}`,
+      }
+    );
+    navigate("/attendance/home");
+  };
 
   const handleLogout = async () => {
     try { await authApi.logout(); } catch { /* ignore */ }
@@ -149,6 +174,17 @@ export default function AppLayout({ role }: Props) {
             {(!collapsed || mobile) && <span className="truncate">{item.label}</span>}
           </NavLink>
         ))}
+
+        {/* Attendance Mode — only for admin and super_admin */}
+        {(role === "admin" || role === "super_admin") && (
+          <button
+            onClick={() => setAttendanceDialogOpen(true)}
+            className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors text-emerald-400 hover:bg-emerald-600 hover:text-white"
+          >
+            <Camera className="w-5 h-5 flex-shrink-0" />
+            {(!collapsed || mobile) && <span className="truncate">Attendance Mode</span>}
+          </button>
+        )}
       </nav>
 
       {/* User info + logout - FIXED: Added flex-shrink-0 */}
@@ -178,45 +214,71 @@ export default function AppLayout({ role }: Props) {
   );
 
   return (
-    // FIXED: Main container uses h-screen and flex
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex flex-shrink-0">
-        <Sidebar />
-      </div>
+    <>
+      {/* Attendance Mode Confirmation Dialog */}
+      <AlertDialog open={attendanceDialogOpen} onOpenChange={setAttendanceDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Camera className="w-5 h-5 text-emerald-600" />
+              Masuk ke Mode Attendance?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Anda akan keluar dari akun <strong>{role === "super_admin" ? "Super Admin" : "Admin"}</strong> dan masuk ke halaman Attendance Home. Apakah anda yakin?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleAttendanceModeConfirm}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              Ya, Masuk Attendance Mode
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-      {/* Mobile sidebar overlay */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 flex md:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
-          <div className="relative z-10">
-            <Sidebar mobile />
-          </div>
+      {/* Main layout */}
+      <div className="flex h-screen overflow-hidden bg-background">
+        {/* Desktop sidebar */}
+        <div className="hidden md:flex flex-shrink-0">
+          <Sidebar />
         </div>
-      )}
 
-      {/* Main content - FIXED: flex-1 and overflow-y-auto */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile topbar - FIXED: flex-shrink-0 */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b bg-background flex-shrink-0">
-          <button onClick={() => setMobileOpen(true)} className="p-1 rounded hover:bg-muted">
-            <Menu className="w-5 h-5" />
-          </button>
-          <span className="font-bold text-sm">VISIATTEND</span>
-          <div className={`w-7 h-7 rounded-full ${ROLE_COLOR[role]} flex items-center justify-center`}>
-            <span className="text-white text-xs font-bold">
-              {user?.full_name?.charAt(0)?.toUpperCase() || "?"}
-            </span>
+        {/* Mobile sidebar overlay */}
+        {mobileOpen && (
+          <div className="fixed inset-0 z-50 flex md:hidden">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
+            <div className="relative z-10">
+              <Sidebar mobile />
+            </div>
           </div>
+        )}
+
+        {/* Main content */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Mobile topbar */}
+          <div className="md:hidden flex items-center justify-between px-4 py-3 border-b bg-background flex-shrink-0">
+            <button onClick={() => setMobileOpen(true)} className="p-1 rounded hover:bg-muted">
+              <Menu className="w-5 h-5" />
+            </button>
+            <span className="font-bold text-sm">VISIATTEND</span>
+            <div className={`w-7 h-7 rounded-full ${ROLE_COLOR[role]} flex items-center justify-center`}>
+              <span className="text-white text-xs font-bold">
+                {user?.full_name?.charAt(0)?.toUpperCase() || "?"}
+              </span>
+            </div>
+          </div>
+
+          {/* Page content */}
+          <main className="flex-1 overflow-y-auto">
+            <div className="min-h-full">
+              <Outlet />
+            </div>
+          </main>
         </div>
-
-        {/* Page content - FIXED: flex-1 and overflow-y-auto for scrolling */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="min-h-full">
-            <Outlet />
-          </div>
-        </main>
       </div>
-    </div>
+    </>
   );
 }

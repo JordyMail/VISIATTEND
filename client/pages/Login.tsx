@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Camera, Eye, EyeOff, LogIn, Mail, Lock, Shield } from "lucide-react";
+import { Eye, EyeOff, LogIn, Mail, Lock, Shield } from "lucide-react";
 import { setSession, clearSession, getSessionUser } from "@/lib/auth";
 import { authApi } from "@/services/api";
 
@@ -77,23 +77,6 @@ export default function Login() {
     }
   };
 
-  const handleAttendanceHomeAccess = () => {
-    setSession(
-      {
-        id: 999,
-        email: "attendance@visiattend.local",
-        full_name: "Attendance Operator",
-        role: "attendance",
-        permissions: [],
-      },
-      {
-        accessToken: `attendance-demo-${Date.now()}`,
-        refreshToken: `attendance-demo-refresh-${Date.now()}`,
-      }
-    );
-
-    navigate("/attendance/home");
-  };
 
   const handleTwoFactorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,14 +244,6 @@ export default function Login() {
                 >
                   Create New Account
                 </Link>
-                <button
-                  type="button"
-                  onClick={handleAttendanceHomeAccess}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 transition-all duration-300 hover:scale-[1.02] hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.98]"
-                >
-                  <Camera className="h-4 w-4" />
-                  Attendance Home
-                </button>
               </div>
             </form>
           ) : (
