@@ -228,23 +228,6 @@ export default function Login() {
                   </div>
                 )}
               </button>
-
-              <div className="text-center space-y-3 pt-2">
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-200" />
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="px-2 bg-white/80 text-gray-500">New to VISIATTEND?</span>
-                  </div>
-                </div>
-                <Link
-                  to="/register"
-                  className="inline-flex items-center justify-center w-full px-4 py-2.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  Create New Account
-                </Link>
-              </div>
             </form>
           ) : (
             <form onSubmit={handleTwoFactorSubmit} className="space-y-6">

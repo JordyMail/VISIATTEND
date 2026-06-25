@@ -362,12 +362,42 @@ export function createServer() {
         .request()
         .input("uid", sql.Int, u.recordset[0].id)
         .input("code", sql.NVarChar, code)
-        .input("exp", sql.DateTime, new Date(Date.now() + 3_600_000))
         .query(
-          "INSERT INTO password_resets (user_id,reset_code,expires_at,created_at) VALUES (@uid,@code,@exp,GETDATE())"
+          "INSERT INTO password_resets (user_id,reset_code,expires_at,created_at) VALUES (@uid,@code,DATEADD(hour, 1, GETDATE()),GETDATE())"
         );
 
       console.log(`[RESET CODE] ${email} → ${code}`);
+
+      // Send reset email with verification code
+      try {
+        await mailer.sendMail({
+          from: `"VISIATTEND System" <${process.env.MAIL_USER || "visianttend.system@gmail.com"}>`,
+          to: String(email).trim(),
+          subject: "Verifikasi Reset Password — VISIATTEND",
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+              <div style="background:linear-gradient(135deg,#7c4dff,#5da2ff);padding:32px 28px;text-align:center">
+                <h1 style="color:#fff;margin:0;font-size:24px">VISIATTEND</h1>
+                <p style="color:rgba(255,255,255,0.85);margin:6px 0 0">Verifikasi Reset Password</p>
+              </div>
+              <div style="padding:28px">
+                <p style="color:#374151">Halo <strong>${u.recordset[0].full_name}</strong>,</p>
+                <p style="color:#374151">Kami menerima permintaan untuk mereset password akun VISIATTEND Anda. Silakan gunakan kode verifikasi di bawah ini untuk melanjutkan:</p>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin:20px 0;text-align:center;letter-spacing:4px;font-size:28px;font-weight:bold;color:#7c4dff;font-family:monospace">
+                  ${code}
+                </div>
+                <p style="color:#374151">Kode ini akan kedaluwarsa dalam waktu 1 jam. Jika Anda tidak melakukan permintaan ini, abaikan email ini dan password Anda akan tetap aman.</p>
+              </div>
+              <div style="background:#f1f5f9;padding:16px 28px;text-align:center">
+                <p style="color:#9ca3af;font-size:12px;margin:0">&copy; 2026 VISIATTEND System. Jangan bagikan kode ini kepada siapa pun.</p>
+              </div>
+            </div>
+          `,
+        });
+      } catch (mailErr) {
+        console.error("[RESET CODE] Email send failed:", mailErr);
+      }
+
       res.json({ success: true, message: "Reset code sent to your email" });
     } catch (e: any) {
       res.status(500).json({ success: false, message: "Server error" });
