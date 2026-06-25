@@ -9,5 +9,16 @@
     "createdAt": "2026-06-21T06:06:22.093Z",
     "updatedAt": "2026-06-21T06:06:22.093Z",
     "registrationSessionId": "0620e6f04d2c42aab992bec243991032"
+  },
+  {
+    "userId": "SILFAN-929725",
+    "name": "silfan",
+    "email": "silmendzy@gmail.com",
+    "category": "student",
+    "phone": "08223814745",
+    "birthday": "2001-02-04",
+    "createdAt": "2026-06-23T14:12:10.932Z",
+    "updatedAt": "2026-06-23T14:12:10.932Z",
+    "registrationSessionId": "1b66fcbe00274308a9ea42c9db494b57"
   }
 ]

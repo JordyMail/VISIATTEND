@@ -96,8 +96,8 @@ export default function AttendanceRegistration() {
       setIsSaved(true);
       setIsConfirmOpen(false);
       toast({
-        title: "Data saved",
-        description: "Data registrasi awal berhasil disimpan ke tabel user_member.",
+        title: "✅ Akun berhasil dibuat!",
+        description: `Password login telah dikirim ke ${formState.email}. Silakan cek inbox (atau folder spam).`,
       });
     } catch (error: any) {
       toast({
@@ -132,7 +132,8 @@ export default function AttendanceRegistration() {
               </div>
               <h1 className="text-3xl font-bold sm:text-4xl">Input data awal registrasi</h1>
               <p className="max-w-2xl text-sm text-white/85 sm:text-base">
-                Isi semua data terlebih dahulu. Setelah data disimpan, form akan terkunci dan tombol Start Face Registration akan aktif.
+                Isi semua data terlebih dahulu. Setelah data disimpan, akun akan otomatis dibuat dan
+                <strong> password dikirim ke email kamu</strong>. Lalu lanjutkan ke Face Registration.
               </p>
             </div>
           </div>

@@ -25,6 +25,16 @@ import {
   handleFinalizeRegistration,
   handleVerifyAttendance,
 } from "./routes/faceAi.js";
+import nodemailer from "nodemailer";
+
+// ─── Email transporter ────────────────────────────────────────────────────────
+const mailer = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.MAIL_USER || "visiattend.system@gmail.com",
+    pass: process.env.MAIL_PASS || "",
+  },
+});
 
 // ─── Activity logger ──────────────────────────────────────────────────────────
 async function log(
@@ -229,13 +239,13 @@ export function createServer() {
           .status(400)
           .json({ success: false, message: "Email already registered" });
 
-      const countR = await pool
+      const maxR = await pool
         .request()
-        .query("SELECT COUNT(*) as c FROM users");
-      const memberId = `USR${String(countR.recordset[0].c + 1).padStart(
-        4,
-        "0"
-      )}`;
+        .query(
+          "SELECT MAX(TRY_CAST(SUBSTRING(member_id, 4, LEN(member_id) - 3) AS INT)) as maxVal FROM users WHERE member_id LIKE 'USR%'"
+        );
+      const nextNum = (maxR.recordset[0].maxVal ?? 0) + 1;
+      const memberId = `USR${String(nextNum).padStart(4, "0")}`;
 
       const hash = await bcrypt.hash(password, 12);
       await pool
@@ -574,12 +584,15 @@ export function createServer() {
               .status(400)
               .json({ success: false, message: "Member ID already exists" });
         } else {
-          const countR = await pool
+          const prefix = targetRole === "admin" ? "ADM" : "USR";
+          const maxR = await pool
             .request()
-            .query("SELECT COUNT(*) as c FROM users");
-          finalMemberId = `${targetRole === "admin" ? "ADM" : "USR"}${String(
-            countR.recordset[0].c + 1
-          ).padStart(4, "0")}`;
+            .input("prefixLike", sql.NVarChar, prefix + "%")
+            .query(
+              "SELECT MAX(TRY_CAST(SUBSTRING(member_id, 4, LEN(member_id) - 3) AS INT)) as maxVal FROM users WHERE member_id LIKE @prefixLike"
+            );
+          const nextNum = (maxR.recordset[0].maxVal ?? 0) + 1;
+          finalMemberId = `${prefix}${String(nextNum).padStart(4, "0")}`;
         }
 
         const hash = await bcrypt.hash(password, 12);
@@ -965,22 +978,113 @@ export function createServer() {
       }
 
       const pool = await getConnection();
-      const result = await pool
-        .request()
-        .input("name", sql.NVarChar, String(name).trim())
-        .input("email", sql.NVarChar, String(email).trim())
-        .input("category", sql.NVarChar, String(category).trim())
-        .input("phone", sql.NVarChar, String(phone).trim())
-        .input("birthday", sql.Date, new Date(String(birthday)))
-        .query(`
-          INSERT INTO user_member (name, email, category, phone, birthday)
-          VALUES (@name, @email, @category, @phone, @birthday);
 
-          SELECT * FROM user_member WHERE id = SCOPE_IDENTITY();
+      // ── 1. Check if email already exists in users table ──────────────────
+      const emailCheck = await pool
+        .request()
+        .input("emailCheck", sql.NVarChar, String(email).trim().toLowerCase())
+        .query("SELECT id FROM users WHERE email = @emailCheck");
+      if (emailCheck.recordset.length) {
+        return res.status(400).json({ success: false, message: "Email sudah terdaftar" });
+      }
+
+      // ── 2. Generate member_id (USR + max numeric suffix + 1) ─────────────
+      const maxR = await pool.request().query(`
+        SELECT MAX(TRY_CAST(SUBSTRING(member_id, 4, LEN(member_id) - 3) AS INT)) as maxVal
+        FROM users
+        WHERE member_id LIKE 'USR%'
+      `);
+      const nextNum = (maxR.recordset[0].maxVal ?? 0) + 1;
+      const memberId = `USR${String(nextNum).padStart(4, "0")}`;
+
+      // ── 3. Generate random plain-text password ───────────────────────────
+      const plainPassword = crypto.randomBytes(5).toString("hex"); // e.g. "a3f9b2c1d4"
+      const passwordHash = await bcrypt.hash(plainPassword, 12);
+
+      // ── 4. Insert into user_member ───────────────────────────────────────
+      await pool
+        .request()
+        .input("umName",     sql.NVarChar, String(name).trim())
+        .input("umEmail",    sql.NVarChar, String(email).trim().toLowerCase())
+        .input("umCategory", sql.NVarChar, String(category).trim())
+        .input("umPhone",    sql.NVarChar, String(phone).trim())
+        .input("umBirthday", sql.Date,     new Date(String(birthday)))
+        .input("umMemberId", sql.NVarChar, memberId)
+        .query(`
+          INSERT INTO user_member (name, email, category, phone, birthday, member_id)
+          VALUES (@umName, @umEmail, @umCategory, @umPhone, @umBirthday, @umMemberId);
         `);
 
-      res.status(201).json({ success: true, data: result.recordset[0] });
-    } catch {
+      // Fetch the inserted row AFTER the trigger has run (trigger may update member_id)
+      const umFetch = await pool
+        .request()
+        .input("fetchEmail", sql.NVarChar, String(email).trim().toLowerCase())
+        .query(`SELECT * FROM user_member WHERE email = @fetchEmail`);
+
+      const newMember = umFetch.recordset[0];
+
+      // ── 5. Insert into users (joined via member_id) ──────────────────────
+      await pool
+        .request()
+        .input("uName",     sql.NVarChar, String(name).trim())
+        .input("uMemberId", sql.NVarChar, memberId)
+        .input("uEmail",    sql.NVarChar, String(email).trim().toLowerCase())
+        .input("uHash",     sql.NVarChar, passwordHash)
+        .input("uPhone",    sql.NVarChar, String(phone).trim())
+        .query(`
+          INSERT INTO users
+            (full_name, member_id, email, password_hash, role, phone_number, is_active, email_verified, created_at)
+          VALUES
+            (@uName, @uMemberId, @uEmail, @uHash, 'user', @uPhone, 1, 0, GETDATE());
+        `);
+
+      // ── 6. Send welcome email with credentials ───────────────────────────
+      try {
+        await mailer.sendMail({
+          from: `"VISIATTEND System" <${process.env.MAIL_USER || "visiattend.system@gmail.com"}>`,
+          to: String(email).trim(),
+          subject: "Selamat datang di VISIATTEND — Akun Anda telah dibuat",
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+              <div style="background:linear-gradient(135deg,#7c4dff,#5da2ff);padding:32px 28px;text-align:center">
+                <h1 style="color:#fff;margin:0;font-size:24px">VISIATTEND</h1>
+                <p style="color:rgba(255,255,255,0.85);margin:6px 0 0">Akun Anda telah berhasil didaftarkan</p>
+              </div>
+              <div style="padding:28px">
+                <p style="color:#374151">Halo <strong>${String(name).trim()}</strong>,</p>
+                <p style="color:#374151">Berikut adalah informasi login Anda untuk mengakses sistem VISIATTEND:</p>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px;margin:20px 0">
+                  <table style="width:100%;border-collapse:collapse">
+                    <tr><td style="color:#6b7280;padding:4px 0;width:100px">Member ID</td><td style="color:#111827;font-weight:600">${memberId}</td></tr>
+                    <tr><td style="color:#6b7280;padding:4px 0">Email</td><td style="color:#111827;font-weight:600">${String(email).trim().toLowerCase()}</td></tr>
+                    <tr><td style="color:#6b7280;padding:4px 0">Password</td><td style="color:#111827;font-weight:600;font-family:monospace;font-size:16px">${plainPassword}</td></tr>
+                  </table>
+                </div>
+                <p style="color:#374151">Silakan login di halaman <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" style="color:#7c4dff">Login VISIATTEND</a> menggunakan email dan password di atas.</p>
+                <p style="color:#9ca3af;font-size:12px;margin-top:24px">Demi keamanan, disarankan untuk mengganti password setelah login pertama kali.</p>
+              </div>
+              <div style="background:#f1f5f9;padding:16px 28px;text-align:center">
+                <p style="color:#9ca3af;font-size:12px;margin:0">&copy; 2026 VISIATTEND System. Jangan bagikan email ini kepada orang lain.</p>
+              </div>
+            </div>
+          `,
+        });
+      } catch (mailErr) {
+        console.error("[USER-MEMBER] Email send failed:", mailErr);
+        // Don't fail the request — account is created, email is best-effort
+      }
+
+      res.status(201).json({
+        success: true,
+        data: newMember,
+        message: "Akun berhasil dibuat. Cek email untuk mendapatkan password login.",
+      });
+    } catch (err: any) {
+      console.error("[USER-MEMBER]", err);
+      // Handle duplicate email in user_member as well
+      if (err?.message?.includes("UNIQUE") || err?.number === 2627 || err?.number === 2601) {
+        return res.status(400).json({ success: false, message: "Email sudah terdaftar" });
+      }
       res.status(500).json({ success: false, message: "DB error" });
     }
   });
