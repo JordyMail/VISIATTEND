@@ -14,6 +14,7 @@ const dbConfig: sql.config = {
         encrypt: false,
         trustServerCertificate: true,
         enableArithAbort: true,
+        useUTC: false,
     },
 };
 

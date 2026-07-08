@@ -15,6 +15,7 @@ import {
 import { getSession, clearSession, setSession } from "@/lib/auth";
 import { authApi } from "@/services/api";
 import type { AppRole } from "@/lib/auth";
+import { clearCurrentAttendanceUser, clearPendingRegistrationProfile } from "@/lib/attendanceFlow";
 
 type NavItem = {
   to: string;
@@ -117,11 +118,13 @@ export default function AppLayout({ role }: Props) {
   };
 
   const handleLogout = async () => {
-    try { await authApi.logout(); } catch { /* ignore */ }
-    clearSession();
     if (role === "user") {
+      clearCurrentAttendanceUser();
+      clearPendingRegistrationProfile();
       navigate("/attendance/home");
     } else {
+      try { await authApi.logout(); } catch { /* ignore */ }
+      clearSession();
       navigate("/login");
     }
   };

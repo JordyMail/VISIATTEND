@@ -178,11 +178,9 @@ export default function App() {
             <Route
               path="/leaderboard"
               element={
-                <RouteGuard requiredRoles={["super_admin", "admin", "user", "attendance"]}>
-                  <Layout hideHeader>
-                    <Leaderboard />
-                  </Layout>
-                </RouteGuard>
+                <Layout hideHeader>
+                  <Leaderboard />
+                </Layout>
               }
             />
             <Route

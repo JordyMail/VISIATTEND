@@ -15,6 +15,7 @@ export const handleGetMemberLeaderboard: RequestHandler = async (_req, res) => {
       SELECT
         mp.member_id,
         um.name        AS full_name,
+        um.email,
         um.category,
         mp.points,
         mp.updated_at,

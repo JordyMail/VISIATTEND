@@ -1,8 +1,10 @@
 // client/pages/LeaderBoard.tsx
 import { useState, useEffect } from "react";
-import { Crown, Medal } from "lucide-react";
+import { Crown, Medal, ArrowLeft } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { memberLeaderboardApi } from "@/services/api";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
 interface LeaderboardMember {
   member_id: string;
@@ -41,24 +43,27 @@ export default function Leaderboard() {
   const displayRows = [...leaderboardData]
     .sort((left, right) => (right.points ?? 0) - (left.points ?? 0));
 
-  const podium = [displayRows[1], displayRows[0], displayRows[2]].filter(Boolean);
-  const podiumStyles = [
-    {
-      rank: 2,
-      card: "border-slate-200/90 bg-white/90 shadow-[0_20px_50px_-35px_rgba(71,85,105,0.55)]",
-      medal: "bg-slate-100 text-slate-500",
-    },
-    {
-      rank: 1,
+  const podiumStyles = {
+    1: {
       card: "border-amber-300/90 bg-gradient-to-br from-amber-50 to-white shadow-[0_25px_60px_-30px_rgba(245,158,11,0.7)]",
       medal: "bg-amber-100 text-amber-600",
     },
-    {
-      rank: 3,
+    2: {
+      card: "border-slate-200/90 bg-white/90 shadow-[0_20px_50px_-35px_rgba(71,85,105,0.55)]",
+      medal: "bg-slate-100 text-slate-500",
+    },
+    3: {
       card: "border-orange-200/90 bg-white/90 shadow-[0_20px_50px_-35px_rgba(180,83,9,0.45)]",
       medal: "bg-orange-100 text-orange-600",
     },
-  ];
+  };
+
+  const topThree = displayRows.slice(0, 3);
+  const podiumData: { member: LeaderboardMember; rank: 1 | 2 | 3; style: typeof podiumStyles[1 | 2 | 3] }[] = [];
+  
+  if (topThree[1]) podiumData.push({ member: topThree[1], rank: 2, style: podiumStyles[2] });
+  if (topThree[0]) podiumData.push({ member: topThree[0], rank: 1, style: podiumStyles[1] });
+  if (topThree[2]) podiumData.push({ member: topThree[2], rank: 3, style: podiumStyles[3] });
 
   if (loading && leaderboardData.length === 0) {
     return (
@@ -71,8 +76,15 @@ export default function Leaderboard() {
   return (
     <div className="min-h-full bg-[radial-gradient(circle_at_top_left,_rgba(124,77,255,0.18),_transparent_18%),radial-gradient(circle_at_bottom_right,_rgba(96,165,250,0.18),_transparent_22%),linear-gradient(180deg,_rgba(248,250,252,0.99),_rgba(241,245,249,0.98))] p-4 md:p-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-        <section className="overflow-hidden rounded-[34px] bg-gradient-to-r from-[#8a3ffc] via-[#6b63ff] to-[#5da2ff] px-6 py-8 text-white shadow-[0_30px_90px_-50px_rgba(79,70,229,0.85)] md:px-10">
-          <div className="flex flex-col items-center text-center">
+        <section className="overflow-hidden rounded-[34px] bg-gradient-to-r from-[#8a3ffc] via-[#6b63ff] to-[#5da2ff] px-6 py-8 text-white shadow-[0_30px_90px_-50px_rgba(79,70,229,0.85)] md:px-10 relative">
+          <Link
+            to="/attendance/home"
+            className="absolute top-4 left-4 flex items-center gap-2 text-white/80 hover:text-white transition-all bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full backdrop-blur-sm"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm font-medium">Kembali ke Home</span>
+          </Link>
+          <div className="flex flex-col items-center text-center mt-4">
             <h1 className="text-4xl font-bold md:text-5xl">Leaderboard</h1>
             <p className="mt-2 text-base text-white/85 md:text-lg">Top Member Points Rankings</p>
           </div>
@@ -85,15 +97,13 @@ export default function Leaderboard() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-3 md:items-end">
-            {podium.map((member, index) => {
-              const style = podiumStyles[index];
-
+            {podiumData.map(({ member, style, rank }) => {
               return (
                 <Card
-                  key={`${member.member_id}-${style.rank}`}
-                  className={`relative overflow-hidden rounded-[28px] border p-5 ${style.card} ${style.rank === 1 ? "md:-translate-y-4" : ""}`}
+                  key={`${member.member_id}-${rank}`}
+                  className={`relative overflow-hidden rounded-[28px] border p-5 ${style.card} ${rank === 1 ? "md:-translate-y-4" : ""}`}
                 >
-                  <div className="absolute left-4 top-4 text-4xl font-black text-slate-900">#{style.rank}</div>
+                  <div className="absolute left-4 top-4 text-4xl font-black text-slate-900">#{rank}</div>
                   <div className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full ${style.medal}`}>
                     <Medal className="h-5 w-5" />
                   </div>
@@ -106,7 +116,7 @@ export default function Leaderboard() {
                 </Card>
               );
             })}
-            {!loading && podium.length === 0 && (
+            {!loading && podiumData.length === 0 && (
               <Card className="md:col-span-3 rounded-[28px] border border-dashed border-slate-300 bg-slate-50/90 p-8 text-center text-slate-500">
                 Belum ada data leaderboard dari database user.
               </Card>

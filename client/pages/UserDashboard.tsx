@@ -8,6 +8,16 @@ import { toast } from "@/components/ui/use-toast";
 import { clearCurrentAttendanceUser, clearPendingRegistrationProfile, getCurrentAttendanceUser } from "@/lib/attendanceFlow";
 import { userDashboardApi, memberLeaderboardApi } from "@/services/api";
 import { clearSession } from "@/lib/auth";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type DashboardTrendPoint = {
   label: string;
@@ -17,7 +27,9 @@ type DashboardTrendPoint = {
 type LeaderboardPreviewRow = {
   member_id: string;
   full_name: string;
+  email?: string;
   points: number;
+  rank?: number;
 };
 
 const QUESTION_TIME_LIMIT = 15;
@@ -91,6 +103,7 @@ export default function UserDashboard() {
   const [attendanceDate, setAttendanceDate] = useState<string | null>(null);
   const [dbQuestions, setDbQuestions] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [isConfirmViewAllOpen, setIsConfirmViewAllOpen] = useState(false);
 
   const questionButtonLabel = quizCompleted
     ? "Question Completed"
@@ -100,8 +113,13 @@ export default function UserDashboard() {
   const handleLogout = () => {
     clearCurrentAttendanceUser();
     clearPendingRegistrationProfile();
-    clearSession();
     navigate("/attendance/home");
+  };
+
+  const handleConfirmViewAll = () => {
+    clearCurrentAttendanceUser();
+    clearPendingRegistrationProfile();
+    navigate("/leaderboard");
   };
 
   useEffect(() => {
@@ -142,10 +160,12 @@ export default function UserDashboard() {
 
         // Process profile/points
         const profileData = profileResponse.data?.data;
+        let currentPoints = 0;
         if (profileData?.matched) {
           setDisplayName(profileData.profile?.fullName ?? currentUser.name);
           setAttendanceDate(profileData.attendanceDate);
           const nextPoints = Number(profileData.points ?? 0);
+          currentPoints = nextPoints;
           setPoints(nextPoints);
           setTrend(
             Array.isArray(profileData.trend)
@@ -166,7 +186,23 @@ export default function UserDashboard() {
 
         // Process Leaderboard
         const previewRows = Array.isArray(leaderboardResponse.data?.data) ? leaderboardResponse.data.data : [];
-        setLeaderboardPreview(previewRows.slice(0, 1));
+        const myRow = previewRows.find(
+          (row: any) => row.email?.toLowerCase() === currentUser.email.toLowerCase()
+        );
+
+        if (myRow) {
+          setLeaderboardPreview([myRow]);
+        } else {
+          setLeaderboardPreview([
+            {
+              member_id: currentUser.memberId || "CURRENT",
+              full_name: currentUser.name,
+              email: currentUser.email,
+              points: currentPoints,
+              rank: undefined,
+            },
+          ]);
+        }
       } catch (error) {
         console.error("Failed to load dashboard data:", error);
         if (active) {
@@ -204,16 +240,6 @@ export default function UserDashboard() {
               <h1 className="text-4xl font-bold md:text-5xl">User Dashboard</h1>
               <p className="mt-2 text-xl text-white/90">Welcome, {displayName}</p>
             </div>
-
-            <Button
-              type="button"
-              variant="secondary"
-              className="h-12 rounded-2xl border-white/30 bg-white/15 px-5 text-white backdrop-blur-sm hover:bg-white/20"
-              onClick={handleLogout}
-            >
-              <LogOut className="h-4 w-4" />
-              Log Out
-            </Button>
           </div>
         </section>
 
@@ -240,8 +266,8 @@ export default function UserDashboard() {
                   {leaderboardPreview.length > 0 ? leaderboardPreview.map((member) => (
                     <div key={member.member_id} className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 text-violet-600">
-                          <Trophy className="h-5 w-5" />
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-100 text-violet-700 font-bold text-lg">
+                          {member.rank !== undefined ? `#${member.rank}` : "-"}
                         </div>
                         <Avatar className="h-14 w-14 border-2 border-slate-100">
                           <AvatarFallback className="bg-slate-200 text-slate-700">{getInitials(member.full_name)}</AvatarFallback>
@@ -252,7 +278,7 @@ export default function UserDashboard() {
                         </div>
                       </div>
 
-                      <Button className="h-12 rounded-2xl bg-gradient-to-r from-[#9333ea] to-[#5da2ff] px-6 text-base text-white shadow-[0_14px_40px_-25px_rgba(99,102,241,0.8)] hover:opacity-95" onClick={() => navigate("/leaderboard")}>
+                      <Button className="h-12 rounded-2xl bg-gradient-to-r from-[#9333ea] to-[#5da2ff] px-6 text-base text-white shadow-[0_14px_40px_-25px_rgba(99,102,241,0.8)] hover:opacity-95" onClick={() => setIsConfirmViewAllOpen(true)}>
                         View All
                       </Button>
                     </div>
@@ -313,6 +339,23 @@ export default function UserDashboard() {
           </Card>
         </div>
       </div>
+
+      <AlertDialog open={isConfirmViewAllOpen} onOpenChange={setIsConfirmViewAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Lihat Leaderboard?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah anda yakin untuk melihat leaderboard? Karena anda akan logout.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmViewAll}>
+              Ya, Lihat
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
