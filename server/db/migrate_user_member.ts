@@ -99,6 +99,7 @@ async function migrateUserMember() {
         id INT IDENTITY(1,1) PRIMARY KEY,
         member_id NVARCHAR(20) NOT NULL,
         points INT NOT NULL,
+        type NVARCHAR(50) NOT NULL,
         notes NVARCHAR(255) NULL,
         created_at DATETIME DEFAULT GETDATE()
       );
@@ -114,6 +115,16 @@ async function migrateUserMember() {
         WHERE TABLE_NAME = 'point_logs' AND COLUMN_NAME = 'member_id'
       )
         EXEC sp_rename 'point_logs.user_id', 'member_id', 'COLUMN';
+
+      IF NOT EXISTS (
+        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = 'point_logs' AND COLUMN_NAME = 'type'
+      )
+      BEGIN
+        ALTER TABLE point_logs ADD type NVARCHAR(50) NULL;
+        EXEC('UPDATE point_logs SET type = ''attendance'' WHERE type IS NULL');
+        ALTER TABLE point_logs ALTER COLUMN type NVARCHAR(50) NOT NULL;
+      END
 
       IF NOT EXISTS (
         SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
