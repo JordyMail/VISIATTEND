@@ -27,6 +27,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { to: "/superadmin/dashboard",           icon: LayoutDashboard, label: "Dashboard" },
   { to: "/superadmin/members",             icon: Users,           label: "Members" },
   { to: "/superadmin/events",              icon: Calendar,        label: "Events" },
+  { to: "/superadmin/regular-events",      icon: Calendar,        label: "Regular Event" },
   { to: "/superadmin/attendance",          icon: ClipboardList,   label: "Attendance" },
 
   { to: "/superadmin/announcements",       icon: Megaphone,       label: "Announcements" },

@@ -172,6 +172,13 @@ export const divisionApi = {
   update: (id: number, data: any) => api.put(`/divisions/${id}`, data),
 };
 
+export const regularEventApi = {
+  getAll: () => api.get("/regular-events"),
+  create: (data: { eventName: string }) => api.post("/regular-events", data),
+  update: (id: number, data: { eventName: string }) => api.put(`/regular-events/${id}`, data),
+  delete: (id: number) => api.delete(`/regular-events/${id}`),
+};
+
 export const dashboardApi = {
   getStats: () => api.get("/dashboard/stats"),
   getRecentActivities: (limit?: number) =>

@@ -25,6 +25,12 @@ import {
   handleFinalizeRegistration,
   handleVerifyAttendance,
 } from "./routes/faceAi.js";
+import {
+  handleGetRegularEvents,
+  handleCreateRegularEvent,
+  handleUpdateRegularEvent,
+  handleDeleteRegularEvent,
+} from "./routes/regularEvent.js";
 import nodemailer from "nodemailer";
 
 // ─── Email transporter ────────────────────────────────────────────────────────
@@ -2228,6 +2234,38 @@ app.post(
         res.status(500).json({ success: false, message: "DB error" });
       }
     }
+  );
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // REGULAR EVENTS
+  // ════════════════════════════════════════════════════════════════════════════
+
+  app.get(
+    "/api/regular-events",
+    authenticateToken,
+    requireSuperAdmin,
+    handleGetRegularEvents
+  );
+
+  app.post(
+    "/api/regular-events",
+    authenticateToken,
+    requireSuperAdmin,
+    handleCreateRegularEvent
+  );
+
+  app.put(
+    "/api/regular-events/:id",
+    authenticateToken,
+    requireSuperAdmin,
+    handleUpdateRegularEvent
+  );
+
+  app.delete(
+    "/api/regular-events/:id",
+    authenticateToken,
+    requireSuperAdmin,
+    handleDeleteRegularEvent
   );
 
   // ════════════════════════════════════════════════════════════════════════════

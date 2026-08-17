@@ -21,6 +21,7 @@ import SuperAdminDashboard from "@/pages/superadmin/Dashboard";
 import SystemSettings from "@/pages/superadmin/SystemSettings";
 import DivisionsPage from "@/pages/superadmin/Divisions";
 import AuditLogs from "@/pages/superadmin/AuditLogs";
+import RegularEventsPage from "@/pages/superadmin/RegularEvents";
 
 // Admin pages
 import AdminDashboard from "@/pages/admin/Dashboard";
@@ -105,6 +106,7 @@ export default function App() {
           <Route path="dashboard" element={<SuperAdminDashboard />} />
           <Route path="members" element={<Members />} />
           <Route path="events" element={<Events />} />
+          <Route path="regular-events" element={<RegularEventsPage />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="reports" element={<Reports />} />
