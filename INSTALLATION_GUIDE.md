@@ -172,12 +172,15 @@ pnpm db:setup
 
 This command will run:
 1. `db:migrate` — Creates base tables.
-2. `db:migrate:v2` — Applies v2 updates.
-3. `db:migrate:user_member` — Configures user/member structures.
+2. `db:migrate:v2` — Applies v2 updates (new columns, divisions, etc.).
+3. `db:migrate:user_member` — Configures user/member structures (point logs, member points, attendance member).
 4. `db:migrate:attendance_schedule` — Migrates attendance schemas.
 5. `db:migrate:event_date` — Configures event calendar schedules.
-6. `db:migrate:questions` — Creates interactive question and response tables.
-7. `db:seed` — Inserts data including the default admin account and template events.
+6. `db:migrate:event_schedule` — Restructures events into event_schedule.
+7. `db:migrate:attendance_event_code` — Adds event_code to attendance records.
+8. `db:migrate:attendance_summary` — Creates automated attendance totals table and sync triggers.
+9. `db:migrate:questions` — Creates interactive question and response tables.
+10. `db:seed` — Inserts data including the default admin account and template events.
 
 > [!NOTE]
 > If you need to run migration scripts manually one-by-one:
@@ -187,6 +190,9 @@ This command will run:
 > pnpm db:migrate:user_member
 > pnpm db:migrate:attendance_schedule
 > pnpm db:migrate:event_date
+> pnpm db:migrate:event_schedule
+> pnpm db:migrate:attendance_event_code
+> pnpm db:migrate:attendance_summary
 > pnpm db:migrate:questions
 > pnpm db:seed
 > ```
