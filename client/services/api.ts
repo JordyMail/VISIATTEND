@@ -95,17 +95,11 @@ export const userApi = {
 };
 
 export const eventApi = {
-  getAll: (filters?: { isActive?: boolean; eventType?: string }) =>
-    api.get("/events", { params: filters }),
+  getAll: () => api.get("/events"),
   getById: (id: number) => api.get(`/events/${id}`),
   create: (data: any) => api.post("/events", data),
   update: (id: number, data: any) => api.put(`/events/${id}`, data),
   delete: (id: number) => api.delete(`/events/${id}`),
-  getEnrolledMembers: (id: number) => api.get(`/events/${id}/members`),
-  enrollMember: (eventId: number, userId: number) =>
-    api.post(`/events/${eventId}/enroll`, { userId }),
-  unenrollMember: (eventId: number, userId: number) =>
-    api.delete(`/events/${eventId}/enroll/${userId}`),
 };
 
 export const attendanceApi = {
@@ -186,9 +180,9 @@ export const dashboardApi = {
 
 export const reportsApi = {
   generate: (data: {
-    reportType: string;
-    eventId?: number | string;
     period: string;
+    startDate?: string;
+    endDate?: string;
     format: string;
   }) => api.post("/reports/generate", data),
   getList: () => api.get("/reports"),
@@ -258,7 +252,16 @@ export const faceAiApi = {
     sessionId: string;
     profile: { name: string; email: string; category: string; phone: string; birthday: string };
   }) => api.post("/face-ai/registration/finalize", data),
-  verifyAttendance: (data: { imageBase64: string; threshold?: number }) =>
+  verifyAttendance: (data: {
+    imageBase64: string;
+    threshold?: number;
+    activeLiveness?: {
+      passed: boolean;
+      challenge: "blink" | "turn_left" | "turn_right" | "smile";
+      durationMs: number;
+      metrics?: Record<string, number>;
+    };
+  }) =>
     api.post("/face-ai/attendance/verify", data),
 };
 

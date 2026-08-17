@@ -1,5 +1,5 @@
 // client/pages/Reports.tsx
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Download, FileText, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,50 +12,82 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { reportsApi, eventApi } from "@/services/api";
+import { Input } from "@/components/ui/input";
+import { reportsApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { format as formatDate } from "date-fns";
+import { id as idLocale } from "date-fns/locale";
+
+type PeriodOption =
+  | "this_week" | "last_week" | "this_month" | "last_month"
+  | "this_year" | "all_time" | "custom";
+
+interface ReportRow {
+  member_id: string;
+  name: string;
+  check_in: string;
+  status: string;
+}
+
+interface ReportGroup {
+  eventCode: string | null;
+  eventName: string;
+  dateEvent: string | null;
+  rows: ReportRow[];
+}
 
 interface ReportRecord {
   id: string;
-  name: string;
-  type: string;
-  eventCode: string;
   period: string;
+  startDate: string | null;
+  endDate: string | null;
   format: string;
   createdAt: string;
-  size: string;
-  rows: any[];
+  groups: ReportGroup[];
+  count: number;
 }
 
-interface Event {
-  id: number;
-  event_code: string;
-  event_name: string;
-}
+const PERIOD_LABELS: Record<PeriodOption, string> = {
+  this_week: "This Week",
+  last_week: "Last Week",
+  this_month: "This Month",
+  last_month: "Last Month",
+  this_year: "This Year",
+  all_time: "All Time",
+  custom: "Custom Range",
+};
 
 export default function Reports() {
-  const [reportType, setReportType] = useState("attendance-summary");
-  const [selectedEvent, setSelectedEvent] = useState<string>("all");
-  const [period, setPeriod] = useState("month");
+  const [period, setPeriod] = useState<PeriodOption>("this_month");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
   const [format, setFormat] = useState("csv");
-  const [events, setEvents] = useState<Event[]>([]);
   const [generatedReports, setGeneratedReports] = useState<ReportRecord[]>([]);
   const [generating, setGenerating] = useState(false);
 
-  useEffect(() => {
-    eventApi
-      .getAll({ isActive: true })
-      .then((res) => setEvents(res.data.data))
-      .catch(() => {});
-  }, []);
+  // ─── Flatten grouped rows for CSV export ───────────────────────────────────
+  const flattenRows = (groups: ReportGroup[]) =>
+    groups.flatMap((g) =>
+      g.rows.map((r) => ({
+        event_name: g.eventName,
+        event_date: g.dateEvent
+          ? formatDate(new Date(g.dateEvent), "yyyy-MM-dd")
+          : "-",
+        member_id: r.member_id,
+        name: r.name,
+        status: r.status,
+        check_in: r.check_in,
+      }))
+    );
 
   // ─── CSV export ────────────────────────────────────────────────────────────
-  const exportCSV = (rows: any[], filename: string) => {
+  const exportCSV = (groups: ReportGroup[], filename: string) => {
+    const rows = flattenRows(groups);
     if (!rows.length) return;
     const headers = Object.keys(rows[0]);
     const csv = [
       headers.join(","),
-      ...rows.map((r) =>
+      ...rows.map((r: any) =>
         headers
           .map((h) => {
             const val = r[h] ?? "";
@@ -75,46 +107,57 @@ export default function Reports() {
     URL.revokeObjectURL(url);
   };
 
-  // ─── PDF export via print ──────────────────────────────────────────────────
+  // ─── PDF export via print (event as subheading) ────────────────────────────
   const exportPDF = (report: ReportRecord) => {
-    const { rows } = report;
-    if (!rows.length) {
+    if (!report.groups.length) {
       toast({ title: "No data", description: "Nothing to export.", variant: "destructive" });
       return;
     }
 
-    const headers = Object.keys(rows[0]);
-    const tableRows = rows
-      .map(
-        (r) =>
-          `<tr>${headers
-            .map((h) => `<td style="padding:6px 10px;border:1px solid #ddd;">${r[h] ?? "-"}</td>`)
-            .join("")}</tr>`
-      )
-      .join("");
+    const sections = report.groups
+      .map((g) => {
+        const dateLabel = g.dateEvent
+          ? formatDate(new Date(g.dateEvent), "d MMMM yyyy", { locale: idLocale })
+          : "";
+        const tableRows = g.rows
+          .map(
+            (r) =>
+              `<tr><td>${r.member_id}</td><td>${r.name}</td><td>${r.status}</td><td>${r.check_in}</td></tr>`
+          )
+          .join("");
+        return `
+          <h2>${g.eventName}</h2>
+          <p class="event-date">${dateLabel}</p>
+          <table>
+            <thead><tr><th>Member ID</th><th>Name</th><th>Attendance</th><th>Check-in</th></tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        `;
+      })
+      .join("<br/>");
 
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>${report.name}</title>
+        <title>Attendance Report</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
-          h1 { font-size: 18px; margin-bottom: 4px; }
-          p  { font-size: 12px; color: #666; margin-bottom: 16px; }
-          table { border-collapse: collapse; width: 100%; font-size: 12px; }
-          th { background: #1d4ed8; color: white; padding: 8px 10px; border: 1px solid #1d4ed8; text-align: left; }
+          h1 { font-size: 20px; margin-bottom: 4px; }
+          h2 { font-size: 15px; margin: 18px 0 2px; color: #1d4ed8; }
+          .event-date { font-size: 12px; color: #666; margin-bottom: 8px; font-style: italic; }
+          p.meta { font-size: 12px; color: #666; margin-bottom: 16px; }
+          table { border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 8px; }
+          th { background: #1d4ed8; color: white; padding: 6px 10px; border: 1px solid #1d4ed8; text-align: left; }
+          td { padding: 6px 10px; border: 1px solid #ddd; }
           tr:nth-child(even) { background: #f0f4ff; }
           @media print { button { display: none; } }
         </style>
       </head>
       <body>
-        <h1>${report.name}</h1>
-        <p>Generated: ${new Date(report.createdAt).toLocaleString("id-ID")} | Period: ${report.period} | Records: ${rows.length}</p>
-        <table>
-          <thead><tr>${headers.map((h) => `<th>${h.replace(/_/g, " ").toUpperCase()}</th>`).join("")}</tr></thead>
-          <tbody>${tableRows}</tbody>
-        </table>
+        <h1>Attendance Report</h1>
+        <p class="meta">Generated: ${new Date(report.createdAt).toLocaleString("id-ID")} | Period: ${PERIOD_LABELS[report.period as PeriodOption] || report.period} | Records: ${report.count}</p>
+        ${sections}
       </body>
       </html>
     `;
@@ -133,44 +176,41 @@ export default function Reports() {
 
   // ─── Generate report ───────────────────────────────────────────────────────
   const handleGenerateReport = async () => {
+    if (period === "custom" && (!customStart || !customEnd)) {
+      toast({ title: "Validasi", description: "Pilih tanggal mulai dan akhir", variant: "destructive" });
+      return;
+    }
     setGenerating(true);
     try {
-      const eventInfo = events.find((e) => e.id.toString() === selectedEvent);
-      const eventLabel = eventInfo ? eventInfo.event_code : "All Events";
-
       const res = await reportsApi.generate({
-        reportType,
-        eventId: selectedEvent !== "all" ? parseInt(selectedEvent) : undefined,
         period,
+        startDate: period === "custom" ? customStart : undefined,
+        endDate: period === "custom" ? customEnd : undefined,
         format,
       });
 
       const { data } = res.data;
-      const rowCount = data.rows?.length ?? 0;
-      const approxSize = `${((JSON.stringify(data.rows).length) / 1024).toFixed(1)} KB`;
 
       const newReport: ReportRecord = {
         id: data.id,
-        name: `${reportType.replace(/-/g, " ")} — ${eventLabel} — ${period}`,
-        type: reportType,
-        eventCode: eventLabel,
-        period,
+        period: data.period,
+        startDate: data.startDate,
+        endDate: data.endDate,
         format: format.toUpperCase(),
         createdAt: data.generatedAt,
-        size: approxSize,
-        rows: data.rows,
+        groups: data.groups,
+        count: data.count,
       };
 
       setGeneratedReports((prev) => [newReport, ...prev]);
 
       toast({
         title: "Report generated",
-        description: `${rowCount} records found. Click Download to export.`,
+        description: `${data.count} records found across ${data.groups.length} event(s).`,
       });
 
-      // Auto-download
       if (format === "csv") {
-        exportCSV(data.rows, `${newReport.name.replace(/\s/g, "_")}.csv`);
+        exportCSV(newReport.groups, `Attendance_Report_${period}.csv`);
       } else if (format === "pdf") {
         exportPDF(newReport);
       }
@@ -186,14 +226,14 @@ export default function Reports() {
   };
 
   const handleDownload = (report: ReportRecord) => {
-    if (!report.rows?.length) {
+    if (!report.count) {
       toast({ title: "No data", description: "This report has no data rows.", variant: "destructive" });
       return;
     }
     if (report.format === "PDF") {
       exportPDF(report);
     } else {
-      exportCSV(report.rows, `${report.name.replace(/\s/g, "_")}.csv`);
+      exportCSV(report.groups, `Attendance_Report_${report.period}.csv`);
     }
   };
 
@@ -213,54 +253,37 @@ export default function Reports() {
       {/* Generator */}
       <Card className="p-6">
         <h2 className="text-xl font-semibold mb-6">Generate New Report</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div>
-            <Label className="mb-2 block text-sm font-medium">Report Type</Label>
-            <Select value={reportType} onValueChange={setReportType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="attendance-summary">Attendance Summary</SelectItem>
-                <SelectItem value="lateness-report">Lateness Report</SelectItem>
-                <SelectItem value="student-performance">Member Performance</SelectItem>
-                <SelectItem value="absence-analysis">Absence Analysis</SelectItem>
-                <SelectItem value="class-statistics">Event Statistics</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label className="mb-2 block text-sm font-medium">Event</Label>
-            <Select value={selectedEvent} onValueChange={setSelectedEvent}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Events</SelectItem>
-                {events.map((evt) => (
-                  <SelectItem key={evt.id} value={evt.id.toString()}>
-                    {evt.event_code} — {evt.event_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <div>
             <Label className="mb-2 block text-sm font-medium">Period</Label>
-            <Select value={period} onValueChange={setPeriod}>
+            <Select value={period} onValueChange={(v) => setPeriod(v as PeriodOption)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="week">This Week</SelectItem>
-                <SelectItem value="month">This Month</SelectItem>
-                <SelectItem value="semester">Semester (6 months)</SelectItem>
-                <SelectItem value="year">Full Year</SelectItem>
+                <SelectItem value="this_week">This Week</SelectItem>
+                <SelectItem value="last_week">Last Week</SelectItem>
+                <SelectItem value="this_month">This Month</SelectItem>
+                <SelectItem value="last_month">Last Month</SelectItem>
+                <SelectItem value="this_year">This Year</SelectItem>
+                <SelectItem value="all_time">All Time</SelectItem>
+                <SelectItem value="custom">Custom Range</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {period === "custom" && (
+            <>
+              <div>
+                <Label className="mb-2 block text-sm font-medium">Tanggal Mulai</Label>
+                <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+              </div>
+              <div>
+                <Label className="mb-2 block text-sm font-medium">Tanggal Akhir</Label>
+                <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+              </div>
+            </>
+          )}
 
           <div>
             <Label className="mb-2 block text-sm font-medium">Format</Label>
@@ -298,34 +321,41 @@ export default function Reports() {
         {generatedReports.length > 0 ? (
           <div className="space-y-3">
             {generatedReports.map((report) => (
-              <Card
-                key={report.id}
-                className="p-4 hover:shadow-md transition-shadow"
-              >
+              <Card key={report.id} className="p-4 hover:shadow-md transition-shadow">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div className="flex items-start gap-4 flex-1">
                     <div className="p-3 bg-muted rounded-lg">
                       <FileText className="w-6 h-6 text-primary" />
                     </div>
                     <div className="flex-1">
-                      <p className="font-semibold capitalize">{report.name}</p>
+                      <p className="font-semibold">
+                        Attendance Report — {PERIOD_LABELS[report.period as PeriodOption] || report.period}
+                      </p>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        <Badge variant="outline" className="text-xs">
-                          {report.type.replace(/-/g, " ")}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {report.format}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {report.rows.length} rows
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {report.size}
-                        </span>
+                        <Badge variant="outline" className="text-xs">{report.format}</Badge>
+                        <span className="text-xs text-muted-foreground">{report.groups.length} event(s)</span>
+                        <span className="text-xs text-muted-foreground">{report.count} records</span>
                         <span className="text-xs text-muted-foreground">
                           {new Date(report.createdAt).toLocaleString("id-ID")}
                         </span>
                       </div>
+
+                      {/* Event subheading preview */}
+                      {report.groups.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {report.groups.map((g) => (
+                            <div key={g.eventCode || g.eventName} className="border-l-2 border-primary/40 pl-3">
+                              <p className="text-sm font-medium">{g.eventName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {g.dateEvent
+                                  ? formatDate(new Date(g.dateEvent), "d MMMM yyyy", { locale: idLocale })
+                                  : "-"}
+                                {" • "}{g.rows.length} attendance
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -334,7 +364,7 @@ export default function Reports() {
                       variant="outline"
                       className="gap-2 flex-1 md:flex-none"
                       onClick={() => handleDownload(report)}
-                      disabled={!report.rows.length}
+                      disabled={!report.count}
                     >
                       <Download className="w-4 h-4" />
                       Download
@@ -357,30 +387,12 @@ export default function Reports() {
             <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-3 opacity-50" />
             <p className="text-muted-foreground">No reports generated yet</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Configure options above and click Generate Report
+              Pilih period lalu klik Generate Report
             </p>
           </Card>
         )}
       </div>
-
-      {/* Templates info */}
-      <Card className="p-6 bg-muted/50">
-        <h3 className="font-semibold mb-3">Report Templates</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-          {[
-            ["Attendance Summary", "Complete attendance log for selected period and event"],
-            ["Lateness Report", "All records where members arrived late"],
-            ["Member Performance", "Per-member attendance percentage and totals"],
-            ["Absence Analysis", "Absent, excused, and sick breakdown per member"],
-            ["Event Statistics", "Same as Attendance Summary with all columns"],
-          ].map(([title, desc]) => (
-            <div key={title}>
-              <p className="font-medium mb-1">{title}</p>
-              <p className="text-muted-foreground">{desc}</p>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }
+

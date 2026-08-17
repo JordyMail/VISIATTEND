@@ -127,6 +127,20 @@ export const handleFinalizeRegistration: RequestHandler = async (req, res) => {
 
 export const handleVerifyAttendance: RequestHandler = async (req, res) => {
   try {
+    const activeLiveness = req.body.activeLiveness;
+    const activePassed = Boolean(activeLiveness?.passed);
+    if (!activePassed) {
+      res.status(403).json({
+        success: false,
+        message: "Active liveness challenge belum berhasil. Selesaikan challenge (blink / turn head / smile) sebelum attendance.",
+        data: {
+          code: "ACTIVE_LIVENESS_REQUIRED",
+          activeLiveness: activeLiveness ?? null,
+        },
+      });
+      return;
+    }
+
     const verifyResult = await runFaceAiCommand<{
       matched: boolean;
       matchedUserId?: string;
@@ -135,9 +149,11 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
       code: string;
       threshold: number;
       faceDetection?: unknown;
+      liveness?: { score: number; method: string; dryRun: boolean };
     }>("verify", {
       imageBase64: req.body.imageBase64,
       threshold: req.body.threshold ?? 0.45,
+      activeLiveness,
     });
 
     if (!verifyResult.matched || !verifyResult.matchedUserId) {
@@ -215,9 +231,32 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
       .input("name", sql.NVarChar, member.name)
       .input("points", sql.Int, 10)
       .query(`
-        INSERT INTO attendance_member (user_id, member_id, name, attendance_date, points)
-        OUTPUT INSERTED.*
-        VALUES (@user_id, @member_id, @name, GETDATE(), @points)
+        DECLARE @InsertedAttendance TABLE (
+          id INT,
+          user_id NVARCHAR(100),
+          member_id NVARCHAR(20),
+          name NVARCHAR(150),
+          attendance_date DATETIME,
+          points INT,
+          created_at DATETIME
+        );
+
+        DECLARE @TodayEventCode NVARCHAR(20);
+        SELECT TOP 1 @TodayEventCode = event_code FROM event_schedule WHERE date_event = CAST(GETDATE() AS DATE);
+
+        INSERT INTO attendance_member (user_id, member_id, name, attendance_date, points, event_code)
+        OUTPUT 
+          INSERTED.id, 
+          INSERTED.user_id, 
+          INSERTED.member_id, 
+          INSERTED.name, 
+          INSERTED.attendance_date, 
+          INSERTED.points, 
+          INSERTED.created_at
+        INTO @InsertedAttendance
+        VALUES (@user_id, @member_id, @name, GETDATE(), @points, @TodayEventCode);
+
+        SELECT * FROM @InsertedAttendance;
       `);
 
     await pool

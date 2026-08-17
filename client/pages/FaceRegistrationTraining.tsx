@@ -262,11 +262,7 @@ export default function FaceRegistrationTraining() {
                         <div
                           className="absolute rounded-[14px] border-[3px] border-emerald-400 shadow-[0_0_0_9999px_rgba(15,23,42,0.08)]"
                           style={getOverlayStyle(faceDetection, frameSize)}
-                        >
-                          <div className="absolute -top-7 left-0 rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-lg">
-                            YuNet {(faceDetection.confidence * 100).toFixed(0)}%
-                          </div>
-                        </div>
+                        />
                       </div>
                     )}
                   </div>

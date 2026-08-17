@@ -928,18 +928,18 @@ export function createServer() {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // ATTENDANCE SCHEDULE
+  // ATTENDANCE SCHEDULE  (backed by event_schedule)
   // ════════════════════════════════════════════════════════════════════════════
 
-  // GET all scheduled dates
+  // GET all event dates (used by attendance flow to know valid attendance days)
   app.get("/api/attendance-schedule", authenticateToken, requireAnyRole, async (_req, res) => {
     try {
       const pool = await getConnection();
       const r = await pool.request().query(
-        `SELECT schedule_date FROM attendance_schedules ORDER BY schedule_date ASC`
+        `SELECT date_event FROM event_schedule ORDER BY date_event ASC`
       );
       const dates: string[] = r.recordset.map((row: any) => {
-        const d = new Date(row.schedule_date);
+        const d = new Date(row.date_event);
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       });
       res.json({ success: true, data: dates });
@@ -948,7 +948,7 @@ export function createServer() {
     }
   });
 
-  // GET check if today is scheduled (public for attendance landing flow)
+  // GET check if today has an event (public — used by attendance landing flow)
   app.get("/api/attendance-schedule/today", async (_req, res) => {
     try {
       const pool = await getConnection();
@@ -956,40 +956,8 @@ export function createServer() {
       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
       const r = await pool.request()
         .input("d", sql.Date, new Date(todayStr))
-        .query(`SELECT COUNT(*) as cnt FROM attendance_schedules WHERE schedule_date=@d`);
+        .query(`SELECT COUNT(*) as cnt FROM event_schedule WHERE date_event=@d`);
       res.json({ success: true, isOpen: r.recordset[0].cnt > 0 });
-    } catch {
-      res.status(500).json({ success: false, message: "DB error" });
-    }
-  });
-
-  // POST add a date
-  app.post("/api/attendance-schedule", authenticateToken, requireAdmin, async (req: any, res) => {
-    try {
-      const { date } = req.body;
-      if (!date) return res.status(400).json({ success: false, message: "date required" });
-      const pool = await getConnection();
-      await pool.request()
-        .input("d", sql.Date, new Date(date))
-        .input("uid", sql.Int, req.user.id)
-        .query(`
-          IF NOT EXISTS (SELECT 1 FROM attendance_schedules WHERE schedule_date=@d)
-            INSERT INTO attendance_schedules (schedule_date, created_by) VALUES (@d, @uid)
-        `);
-      res.json({ success: true });
-    } catch {
-      res.status(500).json({ success: false, message: "DB error" });
-    }
-  });
-
-  // DELETE remove a date
-  app.delete("/api/attendance-schedule/:date", authenticateToken, requireAdmin, async (req, res) => {
-    try {
-      const pool = await getConnection();
-      await pool.request()
-        .input("d", sql.Date, new Date(req.params.date))
-        .query(`DELETE FROM attendance_schedules WHERE schedule_date=@d`);
-      res.json({ success: true });
     } catch {
       res.status(500).json({ success: false, message: "DB error" });
     }
@@ -1120,288 +1088,108 @@ export function createServer() {
   });
 
   // ════════════════════════════════════════════════════════════════════════════
-  // EVENTS
+  // EVENTS  (table: event_schedule)
   // ════════════════════════════════════════════════════════════════════════════
 
-  app.get(
-    "/api/events",
-    async (req, res) => {
-      try {
-        const { isActive, eventType } = req.query;
-        const pool = await getConnection();
-        const rq = pool.request();
-        const parts = ["1=1"];
-        if (isActive !== undefined) {
-          rq.input("ia", sql.Bit, isActive === "true" ? 1 : 0);
-          parts.push("e.is_active=@ia");
-        }
-        if (eventType && eventType !== "all") {
-          rq.input("et", sql.NVarChar, eventType);
-          parts.push("e.event_type=@et");
-        }
-        const r = await rq.query(
-          `SELECT e.*,u.full_name as preacher_name
-           FROM events e LEFT JOIN users u ON e.preacher_id=u.id
-           WHERE ${parts.join(" AND ")} ORDER BY e.created_at DESC`
+  // GET /api/events
+  app.get("/api/events", async (_req, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request().query(
+        `SELECT * FROM event_schedule ORDER BY date_event DESC`
+      );
+      res.json({ success: true, data: r.recordset });
+    } catch {
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // GET /api/events/:id
+  app.get("/api/events/:id", authenticateToken, requireAnyRole, async (req, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request()
+        .input("id", sql.Int, req.params.id)
+        .query("SELECT * FROM event_schedule WHERE id=@id");
+      if (!r.recordset.length)
+        return res.status(404).json({ success: false, message: "Event not found" });
+      res.json({ success: true, data: r.recordset[0] });
+    } catch {
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // POST /api/events
+  app.post("/api/events", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { eventCode, eventName, description, eventDate } = req.body;
+      if (!eventName || !eventDate)
+        return res.status(400).json({ success: false, message: "eventName and eventDate required" });
+      const pool = await getConnection();
+
+      // Auto-generate code if not provided: EVT-YYYYMMDD (derived from the event date)
+      const dateDigits = String(eventDate).replace(/-/g, "");
+      let code = eventCode ? String(eventCode).toUpperCase() : `EVT-${dateDigits}`;
+
+      // Unique date check
+      const dateCheck = await pool.request()
+        .input("de", sql.Date, new Date(eventDate))
+        .query("SELECT id FROM event_schedule WHERE date_event=@de");
+      if (dateCheck.recordset.length)
+        return res.status(400).json({ success: false, message: "Tanggal ini sudah memiliki event" });
+
+      const r = await pool.request()
+        .input("ec", sql.NVarChar, code)
+        .input("en", sql.NVarChar, eventName)
+        .input("d",  sql.NVarChar, description || null)
+        .input("de", sql.Date,     new Date(eventDate))
+        .query(
+          `INSERT INTO event_schedule (event_code, event_name, description, date_event, created_at, updated_at)
+           OUTPUT INSERTED.*
+           VALUES (@ec, @en, @d, @de, GETDATE(), GETDATE())`
         );
-        res.json({ success: true, data: r.recordset });
-      } catch {
-        res.status(500).json({ success: false, message: "DB error" });
-      }
+      await log(pool, req.user.id, "CREATE_EVENT", "event", r.recordset[0].id, `Created event: ${eventName}`, req.ip);
+      res.status(201).json({ success: true, data: r.recordset[0] });
+    } catch (e: any) {
+      console.error("[CREATE EVENT]", e);
+      res.status(500).json({ success: false, message: e.message || "DB error" });
     }
-  );
+  });
 
-  app.get(
-    "/api/events/:id",
-    authenticateToken,
-    requireAnyRole,
-    async (req, res) => {
-      try {
-        const pool = await getConnection();
-        const r = await pool
-          .request()
-          .input("id", sql.Int, req.params.id)
-          .query(
-            "SELECT e.*,u.full_name as preacher_name FROM events e LEFT JOIN users u ON e.preacher_id=u.id WHERE e.id=@id"
-          );
-        if (!r.recordset.length)
-          return res
-            .status(404)
-            .json({ success: false, message: "Event not found" });
-        res.json({ success: true, data: r.recordset[0] });
-      } catch {
-        res.status(500).json({ success: false, message: "DB error" });
-      }
+  // PUT /api/events/:id
+  app.put("/api/events/:id", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { eventName, description } = req.body;
+      const pool = await getConnection();
+      const rq = pool.request().input("id", sql.Int, req.params.id);
+      const sets = ["updated_at=GETDATE()"];
+      if (eventName !== undefined) { rq.input("en", sql.NVarChar, eventName); sets.push("event_name=@en"); }
+      if (description !== undefined) { rq.input("d", sql.NVarChar, description || null); sets.push("description=@d"); }
+      if (sets.length === 1)
+        return res.status(400).json({ success: false, message: "No fields to update" });
+      await rq.query(`UPDATE event_schedule SET ${sets.join(",")} WHERE id=@id`);
+      await log(pool, req.user.id, "UPDATE_EVENT", "event", parseInt(req.params.id), `Updated event ${req.params.id}`, req.ip);
+      res.json({ success: true, message: "Event updated" });
+    } catch {
+      res.status(500).json({ success: false, message: "DB error" });
     }
-  );
+  });
 
-  app.post(
-    "/api/events",
-    authenticateToken,
-    requireAdmin,
-    async (req: any, res) => {
-      try {
-        const { eventCode, eventName, description, preacherId, season, eventType, eventDate } =
-          req.body;
-        if (!eventCode || !eventName || !eventType)
-          return res.status(400).json({
-            success: false,
-            message: "eventCode, eventName, eventType required",
-          });
-        const pool = await getConnection();
-        const dup = await pool
-          .request()
-          .input("ec", sql.NVarChar, eventCode.toUpperCase())
-          .query("SELECT id FROM events WHERE event_code=@ec");
-        if (dup.recordset.length)
-          return res
-            .status(400)
-            .json({ success: false, message: "Event code already used" });
-
-        const r = await pool
-          .request()
-          .input("ec", sql.NVarChar, eventCode.toUpperCase())
-          .input("en", sql.NVarChar, eventName)
-          .input("d", sql.NVarChar, description || null)
-          .input("pid", sql.Int, preacherId || null)
-          .input("s", sql.NVarChar, season || null)
-          .input("et", sql.NVarChar, eventType)
-          .input("ed", sql.Date, eventDate ? new Date(eventDate) : null)
-          .query(
-            `INSERT INTO events (event_code,event_name,description,preacher_id,season,event_type,event_date,is_active,created_at)
-             OUTPUT INSERTED.*
-             VALUES (@ec,@en,@d,@pid,@s,@et,@ed,1,GETDATE())`
-          );
-        await log(
-          pool,
-          req.user.id,
-          "CREATE_EVENT",
-          "event",
-          r.recordset[0].id,
-          `Created event: ${eventName}`,
-          req.ip
-        );
-        res.status(201).json({ success: true, data: r.recordset[0] });
-      } catch (e: any) {
-        console.error("[CREATE EVENT]", e);
-        res.status(500).json({ success: false, message: "DB error" });
-      }
+  // DELETE /api/events/:id
+  app.delete("/api/events/:id", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request()
+        .input("id", sql.Int, req.params.id)
+        .query("DELETE FROM event_schedule WHERE id=@id");
+      if (!r.rowsAffected[0])
+        return res.status(404).json({ success: false, message: "Event not found" });
+      await log(pool, req.user.id, "DELETE_EVENT", "event", parseInt(req.params.id), `Deleted event ${req.params.id}`, req.ip);
+      res.json({ success: true, message: "Event deleted" });
+    } catch {
+      res.status(500).json({ success: false, message: "DB error" });
     }
-  );
-
-  app.put(
-    "/api/events/:id",
-    authenticateToken,
-    requireAdmin,
-    async (req: any, res) => {
-      try {
-        const { eventName, description, preacherId, eventType, isActive, eventDate } =
-          req.body;
-        const pool = await getConnection();
-        const rq = pool.request().input("id", sql.Int, req.params.id);
-        const sets = ["updated_at=GETDATE()"];
-        if (eventName !== undefined) {
-          rq.input("en", sql.NVarChar, eventName);
-          sets.push("event_name=@en");
-        }
-        if (description !== undefined) {
-          rq.input("d", sql.NVarChar, description || null);
-          sets.push("description=@d");
-        }
-        if (preacherId !== undefined) {
-          rq.input("pid", sql.Int, preacherId || null);
-          sets.push("preacher_id=@pid");
-        }
-        if (eventType !== undefined) {
-          rq.input("et", sql.NVarChar, eventType);
-          sets.push("event_type=@et");
-        }
-        if (isActive !== undefined) {
-          rq.input("ia", sql.Bit, isActive ? 1 : 0);
-          sets.push("is_active=@ia");
-        }
-        if (eventDate !== undefined) {
-          rq.input("ed", sql.Date, eventDate ? new Date(eventDate) : null);
-          sets.push("event_date=@ed");
-        }
-        await rq.query(
-          `UPDATE events SET ${sets.join(",")} WHERE id=@id`
-        );
-        await log(
-          pool,
-          req.user.id,
-          "UPDATE_EVENT",
-          "event",
-          parseInt(req.params.id),
-          `Updated event ${req.params.id}`,
-          req.ip
-        );
-        res.json({ success: true, message: "Event updated" });
-      } catch {
-        res.status(500).json({ success: false, message: "DB error" });
-      }
-    }
-  );
-
-  app.delete(
-    "/api/events/:id",
-    authenticateToken,
-    requireSuperAdmin,
-    async (req: any, res) => {
-      try {
-        const pool = await getConnection();
-        const r = await pool
-          .request()
-          .input("id", sql.Int, req.params.id)
-          .query("DELETE FROM events WHERE id=@id");
-        if (!r.rowsAffected[0])
-          return res
-            .status(404)
-            .json({ success: false, message: "Event not found" });
-        await log(
-          pool,
-          req.user.id,
-          "DELETE_EVENT",
-          "event",
-          parseInt(req.params.id),
-          `Deleted event ${req.params.id}`,
-          req.ip
-        );
-        res.json({ success: true, message: "Event deleted" });
-      } catch {
-        res.status(500).json({ success: false, message: "DB error" });
-      }
-    }
-  );
-
-  app.get(
-    "/api/events/:id/members",
-    authenticateToken,
-    requireAdmin,
-    async (req, res) => {
-      try {
-        const pool = await getConnection();
-        const r = await pool
-          .request()
-          .input("eid", sql.Int, req.params.id)
-          .query(
-            `SELECT u.id,u.full_name,u.member_id,u.email,u.jabatan,u.division,u.phone_number
-             FROM users u JOIN event_enrollments ee ON u.id=ee.user_id
-             WHERE ee.event_id=@eid AND ee.is_active=1 ORDER BY u.full_name`
-          );
-        res.json({ success: true, data: r.recordset });
-      } catch {
-        res.status(500).json({ success: false, message: "DB error" });
-      }
-    }
-  );
-
-  app.post(
-    "/api/events/:id/enroll",
-    authenticateToken,
-    requireAdmin,
-    async (req: any, res) => {
-      try {
-        const { userId } = req.body;
-        if (!userId)
-          return res
-            .status(400)
-            .json({ success: false, message: "userId required" });
-        const pool = await getConnection();
-        const dup = await pool
-          .request()
-          .input("eid", sql.Int, req.params.id)
-          .input("uid", sql.Int, userId)
-          .query(
-            "SELECT id FROM event_enrollments WHERE event_id=@eid AND user_id=@uid"
-          );
-        if (dup.recordset.length)
-          return res
-            .status(400)
-            .json({ success: false, message: "Already enrolled" });
-        await pool
-          .request()
-          .input("eid", sql.Int, req.params.id)
-          .input("uid", sql.Int, userId)
-          .query(
-            "INSERT INTO event_enrollments (event_id,user_id,enrolled_at,is_active) VALUES (@eid,@uid,GETDATE(),1)"
-          );
-        await log(
-          pool,
-          req.user.id,
-          "ENROLL_USER",
-          "enrollment",
-          null,
-          `Enrolled user ${userId} in event ${req.params.id}`,
-          req.ip
-        );
-        res.json({ success: true, message: "Enrolled successfully" });
-      } catch {
-        res.status(500).json({ success: false, message: "DB error" });
-      }
-    }
-  );
-
-  app.delete(
-    "/api/events/:id/enroll/:userId",
-    authenticateToken,
-    requireAdmin,
-    async (req: any, res) => {
-      try {
-        const pool = await getConnection();
-        await pool
-          .request()
-          .input("eid", sql.Int, req.params.id)
-          .input("uid", sql.Int, req.params.userId)
-          .query(
-            "UPDATE event_enrollments SET is_active=0 WHERE event_id=@eid AND user_id=@uid"
-          );
-        res.json({ success: true, message: "Unenrolled" });
-      } catch {
-        res.status(500).json({ success: false, message: "DB error" });
-      }
-    }
-  );
+  });
 
   // ════════════════════════════════════════════════════════════════════════════
   // ATTENDANCE  — CRITICAL: specific routes MUST come BEFORE /:id
@@ -1457,7 +1245,7 @@ export function createServer() {
 
         const [memberCountResult, eventCountResult, attendanceCountResult] = await Promise.all([
           pool.request().query("SELECT COUNT(*) as c FROM user_member"),
-          pool.request().query("SELECT COUNT(*) as c FROM events WHERE is_active=1"),
+          pool.request().query("SELECT COUNT(*) as c FROM event_schedule"),
           pool.request()
             .input("d", sql.Date, today)
             .query("SELECT COUNT(*) as c FROM attendance_member WHERE CAST(attendance_date AS DATE)=@d"),
@@ -1607,8 +1395,8 @@ app.get(
           parts.push("a.status=@s");
         }
         const r = await rq.query(
-          `SELECT a.*,e.event_name,e.event_code,e.event_type
-           FROM attendance a JOIN events e ON a.event_id=e.id
+          `SELECT a.*,e.event_name,e.event_code
+           FROM attendance a JOIN event_schedule e ON a.event_id=e.id
            WHERE ${parts.join(" AND ")} ORDER BY a.attendance_date DESC`
         );
         res.json({ success: true, data: r.recordset });
@@ -1635,39 +1423,100 @@ app.get(
     async (req: any, res) => {
       try {
         const pool = await getConnection();
-        const [statsR, streakR] = await Promise.all([
-          pool
-            .request()
-            .input("uid", sql.Int, req.user.id)
-            .query(
-              `SELECT COUNT(*) as total,
-                COUNT(CASE WHEN status='present' THEN 1 END) as present,
-                COUNT(CASE WHEN status='late'    THEN 1 END) as late,
-                COUNT(CASE WHEN status='absent'  THEN 1 END) as absent,
-                COUNT(CASE WHEN status='excused' THEN 1 END) as excused,
-                COUNT(CASE WHEN status='sick'    THEN 1 END) as sick,
-                CAST(ROUND(CAST(COUNT(CASE WHEN status IN('present','late') THEN 1 END) AS FLOAT)/
-                  NULLIF(COUNT(*),0)*100,2) AS DECIMAL(5,2)) as attendance_percentage
-               FROM attendance WHERE user_id=@uid`
-            ),
-          pool
-            .request()
-            .input("uid", sql.Int, req.user.id)
-            .query(
-              `SELECT TOP 60 status FROM attendance
-               WHERE user_id=@uid ORDER BY attendance_date DESC`
-            ),
-        ]);
-        let streak = 0;
-        for (const row of streakR.recordset) {
-          if (["present", "late"].includes(row.status)) streak++;
-          else break;
+        
+        // 1. Resolve member_id from users
+        const memberRes = await pool
+          .request()
+          .input("uid", sql.Int, req.user.id)
+          .query(`SELECT member_id FROM users WHERE id = @uid`);
+        
+        if (!memberRes.recordset.length || !memberRes.recordset[0].member_id) {
+          res.json({
+            success: true,
+            data: { total: 0, present: 0, points: 0, attendance_percentage: 0, streak: 0 }
+          });
+          return;
         }
+        const memberId = memberRes.recordset[0].member_id;
+
+        // 2. Fetch total_hadir, points, and total active schedules in parallel
+        const [summaryRes, pointRes, totalSchedulesRes] = await Promise.all([
+          pool.request()
+            .input("member_id", sql.NVarChar, memberId)
+            .query(`SELECT COALESCE(total_hadir, 0) AS total_hadir FROM attendance_summary WHERE member_id = @member_id`),
+          pool.request()
+            .input("member_id", sql.NVarChar, memberId)
+            .query(`SELECT COALESCE(points, 0) AS points FROM member_point WHERE member_id = @member_id`),
+          pool.request()
+            .query(`SELECT COUNT(*) AS total_schedules FROM event_schedule WHERE date_event <= CAST(GETDATE() AS DATE)`)
+        ]);
+
+        const totalHadir = summaryRes.recordset[0]?.total_hadir ?? 0;
+        const points = pointRes.recordset[0]?.points ?? 0;
+        const totalSchedules = totalSchedulesRes.recordset[0]?.total_schedules ?? 0;
+
+        let attendancePercentage = 0;
+        if (totalSchedules > 0) {
+          attendancePercentage = Number(((totalHadir / totalSchedules) * 100).toFixed(2));
+        } else if (totalHadir > 0) {
+          attendancePercentage = 100;
+        }
+
+        // 3. Dynamic streak calculation based on attendance schedules and member check-ins
+        const schedulesR = await pool.request().query(`
+          SELECT DISTINCT date_event 
+          FROM event_schedule 
+          WHERE date_event <= CAST(GETDATE() AS DATE) 
+          ORDER BY date_event DESC
+        `);
+
+        const memberAttendanceR = await pool.request()
+          .input("member_id", sql.NVarChar, memberId)
+          .query(`
+            SELECT DISTINCT attendance_day 
+            FROM attendance_member 
+            WHERE member_id = @member_id
+          `);
+
+        const getUTCDateString = (dateObj: Date) => {
+          const year = dateObj.getUTCFullYear();
+          const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(dateObj.getUTCDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
+
+        const attendanceDays = new Set(
+          memberAttendanceR.recordset.map((r: any) => getUTCDateString(new Date(r.attendance_day)))
+        );
+
+        let streak = 0;
+        for (let i = 0; i < schedulesR.recordset.length; i++) {
+          const schedDate = getUTCDateString(new Date(schedulesR.recordset[i].date_event));
+          
+          if (attendanceDays.has(schedDate)) {
+            streak++;
+          } else {
+            // If it's today's schedule and they haven't checked in yet, don't break the streak immediately
+            const todayStr = getUTCDateString(new Date());
+            if (schedDate === todayStr) {
+              continue;
+            }
+            break;
+          }
+        }
+
         res.json({
           success: true,
-          data: { ...statsR.recordset[0], streak },
+          data: {
+            total: totalHadir,
+            present: totalHadir,
+            points: points,
+            attendance_percentage: attendancePercentage,
+            streak: streak
+          },
         });
-      } catch {
+      } catch (e: any) {
+        console.error("[STATS_ERROR]", e);
         res.status(500).json({ success: false, message: "DB error" });
       }
     }
@@ -1868,7 +1717,7 @@ app.post(
         const r = await rq.query(
           `SELECT a.*,u.full_name as user_name,u.member_id,u.jabatan,u.division,
                   e.event_name,e.event_code
-           FROM attendance a JOIN users u ON a.user_id=u.id JOIN events e ON a.event_id=e.id
+           FROM attendance a JOIN users u ON a.user_id=u.id JOIN event_schedule e ON a.event_id=e.id
            WHERE ${parts.join(" AND ")} ORDER BY a.attendance_date DESC,a.check_in_time DESC`
         );
         res.json({ success: true, data: r.recordset });
@@ -1892,7 +1741,7 @@ app.post(
           .input("id", sql.Int, req.params.id)
           .query(
             `SELECT a.*,u.full_name as user_name,e.event_name,e.event_code
-             FROM attendance a JOIN users u ON a.user_id=u.id JOIN events e ON a.event_id=e.id
+             FROM attendance a JOIN users u ON a.user_id=u.id JOIN event_schedule e ON a.event_id=e.id
              WHERE a.id=@id`
           );
         if (!r.recordset.length)
@@ -2158,7 +2007,7 @@ app.post(
           parts.push("s.scheduled_date>=CAST(GETDATE() AS DATE)");
         const r = await rq.query(
           `SELECT s.*,e.event_name,e.event_code,e.event_type
-           FROM schedules s JOIN events e ON s.event_id=e.id
+           FROM schedules s JOIN event_schedule e ON s.event_id=e.id
            WHERE ${parts.join(" AND ")} ORDER BY s.scheduled_date ASC`
         );
         res.json({ success: true, data: r.recordset });
@@ -2492,7 +2341,7 @@ app.post(
           pool
             .request()
             .query(
-              "SELECT COUNT(*) as c FROM events WHERE is_active=1"
+              "SELECT COUNT(*) as c FROM event_schedule"
             ),
           pool
             .request()
@@ -2554,8 +2403,73 @@ app.post(
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // REPORTS
+  // REPORTS  (source: attendance_member joined with event_schedule via event_code)
   // ════════════════════════════════════════════════════════════════════════════
+
+  // Pure calendar-date helpers computed in WIB (UTC+7), independent of server timezone
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const toISO = (y: number, m: number, d: number) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+  const wibTodayISO = () => {
+    const wib = new Date(Date.now() + 7 * 3600 * 1000);
+    return toISO(wib.getUTCFullYear(), wib.getUTCMonth(), wib.getUTCDate());
+  };
+  const addDaysISO = (iso: string, days: number) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + days));
+    return toISO(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate());
+  };
+  const addMonthsISO = (iso: string, months: number) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    const total = (m - 1) + months;
+    const newY = y + Math.floor(total / 12);
+    const newM = ((total % 12) + 12) % 12;
+    return toISO(newY, newM, d);
+  };
+  const dowMondayFirst = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    const jsDow = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=Sun..6=Sat
+    return (jsDow + 6) % 7; // 0=Mon..6=Sun
+  };
+  const startOfWeekISO = (iso: string) => addDaysISO(iso, -dowMondayFirst(iso));
+  const endOfWeekISO = (iso: string) => addDaysISO(startOfWeekISO(iso), 6);
+  const startOfMonthISO = (iso: string) => { const [y, m] = iso.split("-").map(Number); return toISO(y, m - 1, 1); };
+  const endOfMonthISO = (iso: string) => {
+    const [y, m] = iso.split("-").map(Number);
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return toISO(y, m - 1, lastDay);
+  };
+  const startOfYearISO = (iso: string) => { const [y] = iso.split("-").map(Number); return toISO(y, 0, 1); };
+  const endOfYearISO = (iso: string) => { const [y] = iso.split("-").map(Number); return toISO(y, 11, 31); };
+
+  const resolveReportRange = (
+    period: string,
+    startDate?: string,
+    endDate?: string
+  ): { start: string; end: string } | null => {
+    const today = wibTodayISO();
+    switch (period) {
+      case "this_week":
+        return { start: startOfWeekISO(today), end: endOfWeekISO(today) };
+      case "last_week": {
+        const anchor = addDaysISO(today, -7);
+        return { start: startOfWeekISO(anchor), end: endOfWeekISO(anchor) };
+      }
+      case "this_month":
+        return { start: startOfMonthISO(today), end: endOfMonthISO(today) };
+      case "last_month": {
+        const anchor = addMonthsISO(today, -1);
+        return { start: startOfMonthISO(anchor), end: endOfMonthISO(anchor) };
+      }
+      case "this_year":
+        return { start: startOfYearISO(today), end: endOfYearISO(today) };
+      case "custom":
+        if (!startDate || !endDate) return null;
+        return { start: startDate, end: endDate };
+      case "all_time":
+      default:
+        return null;
+    }
+  };
 
   app.post(
     "/api/reports/generate",
@@ -2563,82 +2477,73 @@ app.post(
     requireAdmin,
     async (req: any, res) => {
       try {
-        const { reportType, eventId, period, format } = req.body;
+        const { period = "all_time", startDate, endDate, format } = req.body;
         const pool = await getConnection();
-        const days =
-          ({ week: 7, month: 30, semester: 180, year: 365 } as any)[period] ||
-          30;
-        const rq = pool.request().input("days", sql.Int, days);
-        let ef = "";
-        if (eventId && eventId !== "all") {
-          rq.input("eid", sql.Int, Number(eventId));
-          ef = " AND a.event_id=@eid";
+        const range = resolveReportRange(period, startDate, endDate);
+
+        const rq = pool.request();
+        let dateFilter = "1=1";
+        if (range) {
+          rq.input("sd", sql.Date, new Date(range.start));
+          rq.input("ed", sql.Date, new Date(range.end));
+          dateFilter = "am.attendance_day BETWEEN @sd AND @ed";
         }
 
-        const queries: Record<string, string> = {
-          "lateness-report": `
-            SELECT u.full_name,u.member_id,u.jabatan,u.division,e.event_code,e.event_name,
-              CONVERT(NVARCHAR(10),a.attendance_date,23) as date,
-              CONVERT(NVARCHAR(5),a.check_in_time,108) as check_in,a.status,a.notes
-            FROM attendance a JOIN users u ON a.user_id=u.id JOIN events e ON a.event_id=e.id
-            WHERE a.status='late' AND a.attendance_date>=DATEADD(DAY,-@days,GETDATE()) ${ef}
-            ORDER BY a.attendance_date DESC`,
-          "student-performance": `
-            SELECT u.full_name,u.member_id,u.jabatan,u.division,
-              COUNT(*) as total_sessions,
-              COUNT(CASE WHEN a.status IN('present','late') THEN 1 END) as attended,
-              COUNT(CASE WHEN a.status='late' THEN 1 END) as late,
-              COUNT(CASE WHEN a.status='absent' THEN 1 END) as absent,
-              COUNT(CASE WHEN a.status='excused' THEN 1 END) as excused,
-              COUNT(CASE WHEN a.status='sick' THEN 1 END) as sick,
-              CAST(ROUND(CAST(COUNT(CASE WHEN a.status IN('present','late') THEN 1 END) AS FLOAT)/
-                NULLIF(COUNT(*),0)*100,1) AS DECIMAL(5,1)) as attendance_pct
-            FROM attendance a JOIN users u ON a.user_id=u.id
-            WHERE a.attendance_date>=DATEADD(DAY,-@days,GETDATE()) ${ef}
-            GROUP BY u.id,u.full_name,u.member_id,u.jabatan,u.division
-            ORDER BY attendance_pct DESC`,
-          "absence-analysis": `
-            SELECT u.full_name,u.member_id,u.jabatan,u.division,e.event_code,
-              COUNT(CASE WHEN a.status='absent' THEN 1 END) as absent,
-              COUNT(CASE WHEN a.status='excused' THEN 1 END) as excused,
-              COUNT(CASE WHEN a.status='sick' THEN 1 END) as sick,
-              COUNT(*) as total
-            FROM attendance a JOIN users u ON a.user_id=u.id JOIN events e ON a.event_id=e.id
-            WHERE a.attendance_date>=DATEADD(DAY,-@days,GETDATE()) ${ef}
-            GROUP BY u.id,u.full_name,u.member_id,u.jabatan,u.division,e.event_code
-            ORDER BY absent DESC`,
-        };
+        const result = await rq.query(`
+          SELECT am.id, am.member_id, am.name, am.attendance_day,
+                 CONVERT(NVARCHAR(5), am.attendance_date, 108) as check_in,
+                 am.event_code, es.event_name, es.date_event
+          FROM attendance_member am
+          LEFT JOIN event_schedule es ON am.event_code = es.event_code
+          WHERE ${dateFilter}
+          ORDER BY es.date_event DESC, am.attendance_date ASC
+        `);
 
-        const defaultQ = `
-          SELECT u.full_name,u.member_id,u.jabatan,u.division,e.event_code,e.event_name,
-            CONVERT(NVARCHAR(10),a.attendance_date,23) as date,
-            CONVERT(NVARCHAR(5),a.check_in_time,108) as check_in,
-            CONVERT(NVARCHAR(5),a.check_out_time,108) as check_out,
-            a.status,a.device_info,a.notes
-          FROM attendance a JOIN users u ON a.user_id=u.id JOIN events e ON a.event_id=e.id
-          WHERE a.attendance_date>=DATEADD(DAY,-@days,GETDATE()) ${ef}
-          ORDER BY a.attendance_date DESC,u.full_name`;
+        // Group attendance rows by event so the event becomes a report subheading
+        const groupsMap = new Map<string, { eventCode: string | null; eventName: string; dateEvent: string | null; rows: any[] }>();
+        for (const row of result.recordset) {
+          const key = row.event_code || "no-event";
+          if (!groupsMap.has(key)) {
+            groupsMap.set(key, {
+              eventCode: row.event_code || null,
+              eventName: row.event_name || "Tanpa Event",
+              dateEvent: row.date_event || null,
+              rows: [],
+            });
+          }
+          groupsMap.get(key)!.rows.push({
+            member_id: row.member_id,
+            name: row.name,
+            check_in: row.check_in || "-",
+            status: "Present",
+          });
+        }
+        const groups = Array.from(groupsMap.values()).sort((a, b) => {
+          if (!a.dateEvent) return 1;
+          if (!b.dateEvent) return -1;
+          return new Date(b.dateEvent).getTime() - new Date(a.dateEvent).getTime();
+        });
 
-        const result = await rq.query(queries[reportType] || defaultQ);
         await log(
           pool,
           req.user.id,
           "GENERATE_REPORT",
           "report",
           null,
-          `Generated ${reportType} (${period}, ${format})`,
+          `Generated attendance report (${period})`,
           req.ip
         );
         res.json({
           success: true,
           data: {
             id: `RPT_${Date.now()}`,
-            reportType,
             period,
+            startDate: range?.start ?? null,
+            endDate: range?.end ?? null,
             format,
-            rows: result.recordset,
-            generatedAt: new Date().toISOString(),
+            groups,
             count: result.recordset.length,
+            generatedAt: new Date().toISOString(),
           },
         });
       } catch (e: any) {

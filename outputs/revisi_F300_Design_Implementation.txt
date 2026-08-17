@@ -1,0 +1,229 @@
+================================================================================
+  VISIATTEND — REVISI DOKUMEN F300
+  VISIATTEND_Design_Implementation.docx
+  Semua teks di bawah siap copy-paste ke dokumen Word.
+================================================================================
+
+
+════════════════════════════════════════════════════════════════════════════════
+  PERBAIKAN 1 — SECTION 1.7.1: FaceDetector Class
+  (Ubah kalimat pertama deskripsi __init__)
+════════════════════════════════════════════════════════════════════════════════
+
+TEKS LAMA:
+  Loads YuNet ONNX model via cv2.FaceDetectorYN_create(). Sets score_threshold=0.8,
+  nms_threshold=0.3.
+
+GANTI DENGAN:
+  Loads the YuNet model file (.onnx format) via OpenCV's built-in
+  cv2.FaceDetectorYN_create() interface — no separate ONNX Runtime library
+  required. Sets score_threshold=0.8, nms_threshold=0.3.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  PERBAIKAN 2 — SECTION 1.7.2: ArcFaceEmbedder Class
+  (Ubah kalimat pertama deskripsi class)
+════════════════════════════════════════════════════════════════════════════════
+
+TEKS LAMA:
+  Wraps the ArcFace ONNX model (w600k_r50.onnx) to extract normalized
+  512-dimensional face embeddings.
+
+GANTI DENGAN:
+  Wraps the ArcFace model (w600k_r50.onnx) loaded via OpenCV's DNN module
+  (cv2.dnn.readNetFromONNX) to extract normalized 512-dimensional face
+  embeddings. No TensorFlow, PyTorch, or ONNX Runtime is required — inference
+  runs entirely through OpenCV DNN on CPU.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  PERBAIKAN 3 — SECTION 1.7.3: Bridge Commands — baris verify
+  (Tambahkan note di bawah baris verify di tabel)
+════════════════════════════════════════════════════════════════════════════════
+
+TABEL SAAT INI (baris verify):
+  verify | Detects face → embeds → iterates all registered users, finds best
+           cosine similarity. Returns { matched, matchedUserId, matchedName,
+           confidence, code }. Threshold default = 0.45.
+
+GANTI DENGAN:
+  verify | Before the bridge is called, the Express backend (faceAi.ts) checks
+           activeLiveness.passed from the request body. If false, HTTP 403 is
+           returned immediately and the bridge is never invoked.
+           When called, the bridge: detects face → embeds via ArcFace →
+           iterates all registered users → finds best cosine similarity.
+           The activeLiveness object is forwarded in the payload and recorded
+           in the verification audit log.
+           Returns { matched, matchedUserId, matchedName, confidence, code,
+           liveness: { score, method: "active_frontend" } }.
+           Threshold default = 0.45.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  PERBAIKAN 4 — SECTION 2.2.3: Tabel attendance — kolom liveness_verified
+  (Ubah kolom Description)
+════════════════════════════════════════════════════════════════════════════════
+
+TEKS LAMA:
+  liveness_verified | BIT | YES | Liveness detection result (anti-spoofing).
+                                  Default 0.
+
+GANTI DENGAN:
+  liveness_verified | BIT | YES | Active Liveness challenge result. Set to 1
+                                  when the user successfully completes the
+                                  interactive challenge (blink / head-turn /
+                                  smile) via MediaPipe Face Mesh before face
+                                  recognition proceeds. Default 0.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  PERBAIKAN 5 — TAMBAH SECTION BARU: 1.9 Active Liveness Detection Module
+  (Letakkan setelah Section 1.8 Frontend Functions, sebelum Section 2 Database)
+════════════════════════════════════════════════════════════════════════════════
+
+--- TEKS BARU (copy-paste seluruh bagian ini sebagai section baru) ---
+
+1.9 Active Liveness Detection Module
+
+Active Liveness Detection is the anti-spoofing gate in VISIATTEND that prevents
+attendance fraud using photos or video replay. It is implemented entirely on the
+browser side using MediaPipe Face Mesh, with a server-side enforcement gate in the
+Express backend.
+
+📁 Frontend: client/pages/FaceAttendance.tsx
+📁 Backend gate: server/routes/faceAi.ts → handleVerifyAttendance
+
+Pipeline:
+
+  MediaPipe Face Mesh (browser)
+      ↓  tracks 468 facial landmarks in real-time
+  Random Challenge Selection
+      ↓  one of: blink | turn_left | turn_right | smile
+  Baseline Calibration (8 frames)
+      ↓  establishes EAR, yaw, and smile baseline per session
+  Challenge Detection Loop
+      ↓  compares live metrics against baseline each frame
+  Challenge Passed → activeLiveness payload sent to backend
+      ↓  { passed: true, challenge, durationMs, metrics }
+  Backend Gate (faceAi.ts)
+      ↓  HTTP 403 if passed ≠ true → attendance blocked
+  Python Bridge (backend_bridge.py → verify)
+      ↓  face recognition runs only after liveness is confirmed
+  Attendance Recorded
+
+1.9.1 Challenge Types and Detection Method
+
+Challenge     | Metric Used         | Threshold
+--------------|---------------------|--------------------------------------
+blink         | EAR drop            | earDrop > 0.22 from baseline
+              | (Eye Aspect Ratio)  | EAR = (leftEyeOpen/leftEyeWidth +
+              |                     |        rightEyeOpen/rightEyeWidth) / 2
+turn_left     | Yaw angle delta     | yawDelta < -0.12 from baseline
+              |                     | yaw = (noseTip.x - eyeMidX) / interEye
+turn_right    | Yaw angle delta     | yawDelta > +0.12 from baseline
+smile         | Smile rise ratio    | smileRise > 0.20 from baseline
+              |                     | smile = mouthWidth / max(mouthOpen, ε)
+
+All metrics are normalized relative to the user's own 8-frame baseline, making
+the detection robust to different face sizes, distances, and camera angles.
+
+1.9.2 Session Flow
+
+1. Camera initializes, MediaPipe Face Mesh model loads in the browser.
+2. A challenge is picked at random from the 4 types.
+3. The first 8 frames are used to calibrate the user's personal baseline
+   (earSum, yawSum, smileSum averaged over 8 frames).
+4. From frame 9 onwards, live metrics are compared against the baseline every
+   animation frame.
+5. The challenge times out after 9 seconds (CHALLENGE_TIMEOUT_MS = 9000).
+   On timeout, the session resets and the user must retry.
+6. When a challenge is detected as passed:
+   - A still frame is captured from the video feed.
+   - activeLiveness = { passed: true, challenge, durationMs, metrics } is
+     assembled.
+   - The frontend calls POST /api/face-ai/verify with imageBase64 + activeLiveness.
+7. The backend (faceAi.ts) checks activeLiveness.passed synchronously before
+   invoking the Python bridge. Any request without passed: true is rejected
+   with HTTP 403 and code: "ACTIVE_LIVENESS_REQUIRED".
+8. If liveness passed, the backend forwards imageBase64 + activeLiveness to
+   backend_bridge.py verify command.
+9. The bridge runs face recognition and returns the match result.
+10. On a successful match, the attendance record is written to the database
+    with liveness_verified = 1.
+
+1.9.3 Key Constants (FaceAttendance.tsx)
+
+Constant               | Value  | Purpose
+-----------------------|--------|----------------------------------------
+CHALLENGE_TIMEOUT_MS   | 9000   | Maximum time (ms) to complete a challenge
+BASELINE_FRAMES        | 8      | Frames used to calibrate personal baseline
+EAR_BLINK_THRESHOLD    | 0.22   | Minimum earDrop ratio to register a blink
+YAW_TURN_THRESHOLD     | 0.12   | Minimum yaw delta to register a head-turn
+SMILE_RISE_THRESHOLD   | 0.20   | Minimum smileRise ratio to register a smile
+CHALLENGES (array)     | 4 types| ["blink","turn_left","turn_right","smile"]
+
+1.9.4 Why Active Liveness?
+
+Passive liveness approaches (texture analysis, frequency-domain features) are
+sensitive to camera quality, JPEG compression, and lighting conditions. Active
+Liveness requires the physical user to perform a live, randomized gesture in
+real time — a task that cannot be replicated by a static photo or a pre-recorded
+video replay. This approach:
+
+  - Does not require a separate anti-spoof AI model.
+  - Is not affected by JPEG compression artifacts.
+  - Provides a user-visible, interactive security cue.
+  - Is resilient to photo-on-screen and video-replay attacks.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  PERBAIKAN 6 — Implementation Summary (bagian paling bawah dokumen)
+  (Ganti kalimat ringkasan di paragraf ✅)
+════════════════════════════════════════════════════════════════════════════════
+
+TEKS LAMA:
+  VISIATTEND implements a complete three-tier architecture:
+  (1) React TypeScript frontend with session-based auth and role-guarded routes,
+  (2) Express/TypeScript backend with RBAC middleware, 11+ API modules, and a
+      centralized audit logger,
+  (3) Python AI bridge with YuNet face detection, ArcFace embedding, and
+      cosine-similarity matching,
+  all backed by a normalized MSSQL database with 11 tables, strategic indexes,
+  and a version-controlled two-stage migration system.
+
+GANTI DENGAN:
+  VISIATTEND implements a complete three-tier architecture:
+  (1) React TypeScript frontend with session-based auth, role-guarded routes,
+      and an Active Liveness Detection system (MediaPipe Face Mesh — interactive
+      blink / head-turn / smile challenge) as the anti-spoofing gate,
+  (2) Express/TypeScript backend with RBAC middleware, Active Liveness
+      enforcement gate, 11+ API modules, and a centralized audit logger,
+  (3) Python AI bridge with YuNet face detection (via OpenCV DNN) and ArcFace
+      embedding (via OpenCV DNN), with cosine-similarity identity matching,
+  all backed by a normalized MSSQL database with 11 tables, strategic indexes,
+  and a version-controlled two-stage migration system.
+
+
+================================================================================
+  RINGKASAN PERUBAHAN
+================================================================================
+
+No | Lokasi                              | Perubahan
+---|-------------------------------------|---------------------------------------
+1  | Section 1.7.1 — __init__ desc       | Ganti "ONNX model" → "model file via
+   |                                     | OpenCV FaceDetectorYN, no ONNX Runtime"
+2  | Section 1.7.2 — class description   | Ganti "ArcFace ONNX model" → "loaded
+   |                                     | via cv2.dnn.readNetFromONNX, no ONNX
+   |                                     | Runtime"
+3  | Section 1.7.3 — verify command      | Tambahkan backend gate di baris verify:
+   |                                     | HTTP 403 jika activeLiveness.passed ≠
+   |                                     | true, bridge tidak dipanggil
+4  | Section 2.2.3 — liveness_verified   | Ubah deskripsi kolom: Active Liveness
+   |                                     | challenge result, bukan "anti-spoofing"
+5  | SECTION BARU 1.9                    | Tambah seluruh section Active Liveness
+   |                                     | Detection Module (pipeline, challenge
+   |                                     | types, thresholds, session flow,
+   |                                     | constants, rationale)
+6  | Implementation Summary (bawah)      | Update ringkasan: sebut Active Liveness
+   |                                     | dan OpenCV DNN (bukan "ONNX")
+================================================================================

@@ -4,15 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
-  CheckCircle2, Clock, XCircle, Flame, TrendingUp, CalendarDays, Bell,
+  CheckCircle2, Clock, XCircle, Flame, TrendingUp, CalendarDays, Bell, Award,
 } from "lucide-react";
 import { attendanceApi, scheduleApi, announcementApi } from "@/services/api";
 import { getSessionUser } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
 
 interface Stats {
-  total: number; present: number; late: number; absent: number;
-  excused: number; sick: number; attendance_percentage: number; streak: number;
+  total: number; present: number; points: number;
+  attendance_percentage: number; streak: number;
 }
 
 interface Schedule {
@@ -87,7 +87,7 @@ export default function UserDashboard() {
       </div>
 
       {/* Stats cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card className="border-l-4 border-l-green-500">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -97,22 +97,13 @@ export default function UserDashboard() {
             <p className="text-2xl font-bold text-green-600">{stats?.present ?? 0}</p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-yellow-500">
+        <Card className="border-l-4 border-l-blue-500">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <Clock className="w-4 h-4 text-yellow-500" />
-              <p className="text-xs text-muted-foreground">Terlambat</p>
+              <Award className="w-4 h-4 text-blue-500" />
+              <p className="text-xs text-muted-foreground">Point</p>
             </div>
-            <p className="text-2xl font-bold text-yellow-600">{stats?.late ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-red-500">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <XCircle className="w-4 h-4 text-red-500" />
-              <p className="text-xs text-muted-foreground">Absen</p>
-            </div>
-            <p className="text-2xl font-bold text-red-600">{stats?.absent ?? 0}</p>
+            <p className="text-2xl font-bold text-blue-600">{stats?.points ?? 0}</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-orange-500">

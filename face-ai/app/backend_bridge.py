@@ -20,6 +20,7 @@ from store import EmbeddingStore
 
 REQUIRED_TRAINING_SAMPLES = 3
 PENDING_DIR = STORAGE_DIR / "pending_registrations"
+VERIFICATION_AUDIT_LOG_PATH = STORAGE_DIR / "verification_audit.jsonl"
 
 
 @dataclass
@@ -260,13 +261,37 @@ def command_finalize_registration(payload: dict[str, Any]) -> None:
     )
 
 
+def write_verification_audit(record: dict[str, Any]) -> None:
+    VERIFICATION_AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with VERIFICATION_AUDIT_LOG_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    print("[VERIFY_AUDIT] " + json.dumps(record, ensure_ascii=False))
+
+
 def command_verify(payload: dict[str, Any]) -> None:
+    attempt_id = uuid4().hex
+    timestamp = now_iso()
+    active_liveness = payload.get("activeLiveness") if isinstance(payload.get("activeLiveness"), dict) else None
+
     image_base64 = payload.get("imageBase64")
     if not image_base64:
+        write_verification_audit(
+            {
+                "attemptId": attempt_id,
+                "timestamp": timestamp,
+                "modelMode": "recognition_only",
+                "livenessScore": None,
+                "faceRecognitionRan": False,
+                "outcome": "FAIL_INPUT",
+                "reason": "imageBase64 is required",
+                "activeLiveness": active_liveness,
+            }
+        )
         fail("imageBase64 is required")
 
     image = decode_image(image_base64)
     primary_face, frame = detect_primary_face(image)
+
     embedder = create_embedder()
     embedding_result = embedder.embed(frame, primary_face.landmarks)
     query_vector = embedding_result.vector
@@ -277,6 +302,18 @@ def command_verify(payload: dict[str, Any]) -> None:
 
     candidate_ids = [target_user_id] if target_user_id else store.list_user_ids()
     if not candidate_ids:
+        write_verification_audit(
+            {
+                "attemptId": attempt_id,
+                "timestamp": timestamp,
+                "modelMode": "recognition_only",
+                "livenessScore": 1.0 if active_liveness and active_liveness.get("passed") else 0.0,
+                "faceRecognitionRan": False,
+                "outcome": "FAIL_RECOGNITION",
+                "reason": "No registered face profiles found",
+                "activeLiveness": active_liveness,
+            }
+        )
         fail("No registered face profiles found", {"code": "FACE_NOT_REGISTERED"})
 
     best_payload = None
@@ -293,6 +330,30 @@ def command_verify(payload: dict[str, Any]) -> None:
                 best_payload = user_payload
 
     matched = best_payload is not None and best_score >= threshold
+    recognition_summary = {
+        "bestScore": round(float(best_score), 6),
+        "threshold": threshold,
+        "matchedUserId": best_payload.get("user_id") if best_payload else None,
+    }
+
+    write_verification_audit(
+        {
+            "attemptId": attempt_id,
+            "timestamp": timestamp,
+            "modelMode": "recognition_only",
+            "livenessScore": 1.0 if active_liveness and active_liveness.get("passed") else 0.0,
+            "faceRecognitionRan": True,
+            "outcome": "PASS" if matched else "FAIL_RECOGNITION",
+            "reason": (
+                f"Active liveness passed and cosine score {best_score:.4f} >= threshold {threshold:.4f}"
+                if matched
+                else f"Best cosine score {best_score:.4f} below threshold {threshold:.4f}"
+            ),
+            "activeLiveness": active_liveness,
+            "recognition": recognition_summary,
+        }
+    )
+
     ok(
         {
             "matched": matched,
@@ -302,6 +363,12 @@ def command_verify(payload: dict[str, Any]) -> None:
             "code": "FACE_MATCH" if matched else "FACE_NOT_MATCH",
             "threshold": threshold,
             "faceDetection": build_face_detection(primary_face),
+            "liveness": {
+                "score": 1.0 if active_liveness and active_liveness.get("passed") else 0.0,
+                "method": "active_frontend",
+                "dryRun": False,
+                "details": active_liveness if active_liveness else {},
+            },
         }
     )
 

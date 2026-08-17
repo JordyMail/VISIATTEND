@@ -1,0 +1,273 @@
+================================================================================
+  VISIATTEND — REVISI PROPOSAL F100
+  Semua teks di bawah siap copy-paste ke dokumen Word proposal.
+================================================================================
+
+
+════════════════════════════════════════════════════════════════════════════════
+  BAGIAN D.1 — TABLE 2: MANPOWER DETAILS AND RESPONSIBILITIES (GANTI SELURUH)
+════════════════════════════════════════════════════════════════════════════════
+
+Table 2. Manpower Details and Responsibilities
+
+No. | Name                   | Job Description
+----|------------------------|----------------------------------------------------
+ 1  | Jordy Kastello Mail    | Data Management, Web Dashboard (Admin), and
+    |                        | Active Liveness Detection: Responsible for
+    |                        | designing and managing the database schema and
+    |                        | attendance records, building the server-side API
+    |                        | using Node.js/Express (TypeScript), developing
+    |                        | the admin dashboard for data visualization and
+    |                        | attendance reporting, and implementing the full
+    |                        | Active Liveness Detection system — including
+    |                        | the interactive challenge flow (blink, head-turn,
+    |                        | smile) powered by MediaPipe Face Mesh on the
+    |                        | frontend, and the server-side gate that blocks
+    |                        | attendance unless the challenge is successfully
+    |                        | completed.
+----|------------------------|----------------------------------------------------
+ 2  | Silfan Desra Mendrofa  | AI Face Recognition and User Web (Attendance
+    |                        | Interface): Responsible for developing and
+    |                        | optimizing the AI-based face recognition pipeline
+    |                        | using YuNet for face detection and ArcFace for
+    |                        | face embedding and identity matching via cosine
+    |                        | similarity. Also responsible for building the
+    |                        | user-facing web interface for the attendance
+    |                        | process, including real-time feedback display
+    |                        | and user attendance history pages.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  BAGIAN D.2 — TABLE 3: DEVELOPMENT TOOLS (GANTI SELURUH)
+════════════════════════════════════════════════════════════════════════════════
+
+Table 3. Development Tools Used in the VISIATTEND System
+
+No  | Tool / Technology             | Function / Description
+----|-------------------------------|--------------------------------------------
+ 1  | Python 3.10                   | Main programming language for the AI
+    |                               | pipeline: face detection and face embedding
+    |                               | extraction via CLI-based registration and
+    |                               | verification utilities.
+----|-------------------------------|--------------------------------------------
+ 2  | OpenCV (opencv-contrib-python)| Used for real-time camera input, image
+    |                               | preprocessing, face alignment, and running
+    |                               | deep learning models through its built-in DNN
+    |                               | module (cv2.dnn).
+----|-------------------------------|--------------------------------------------
+ 3  | YuNet                         | Lightweight neural network model for face
+    |                               | detection, loaded via OpenCV's built-in
+    |                               | FaceDetectorYN interface. Detects facial
+    |                               | regions and five-point landmarks from camera
+    |                               | frames with low computational overhead.
+----|-------------------------------|--------------------------------------------
+ 4  | ArcFace (InsightFace)         | Deep learning face recognition model
+    |                               | (w600k_r50) that generates 512-dimensional
+    |                               | face embedding vectors for identity
+    |                               | verification via cosine similarity. Loaded and
+    |                               | executed through OpenCV's DNN module
+    |                               | (cv2.dnn.readNetFromONNX).
+----|-------------------------------|--------------------------------------------
+ 5  | OpenCV DNN Module             | OpenCV's built-in deep learning inference
+    |                               | engine used to run both the YuNet and ArcFace
+    |                               | models on CPU. Eliminates the need for
+    |                               | TensorFlow, PyTorch, or a separate inference
+    |                               | framework installation.
+----|-------------------------------|--------------------------------------------
+ 6  | Node.js + Express             | Backend API server (TypeScript) handling
+    |   (TypeScript)                | attendance requests, user authentication,
+    |                               | database operations, and communication with
+    |                               | the Python AI service.
+----|-------------------------------|--------------------------------------------
+ 7  | React 18 + TypeScript + Vite  | Frontend framework used to build the admin
+    |                               | dashboard and user attendance interface as a
+    |                               | Single Page Application (SPA).
+----|-------------------------------|--------------------------------------------
+ 8  | TailwindCSS + Radix UI        | Utility-first CSS framework and accessible
+    |                               | component library used to build the visual
+    |                               | dashboard, leaderboard, and attendance
+    |                               | statistics UI.
+----|-------------------------------|--------------------------------------------
+ 9  | Microsoft SQL Server (MSSQL)  | Relational database used to store user
+    |                               | accounts, attendance records, face embedding
+    |                               | vectors, and activity logs.
+----|-------------------------------|--------------------------------------------
+10  | JSON Web Token (JWT)          | Used for stateless authentication and
+    |                               | role-based access control across admin, user,
+    |                               | and superadmin roles.
+----|-------------------------------|--------------------------------------------
+11  | MediaPipe Face Mesh           | Core engine for Active Liveness Detection on
+    |                               | the browser side. Tracks 468 facial landmarks
+    |                               | in real-time to detect interactive challenges
+    |                               | (blink via EAR, head-turn via yaw angle, smile
+    |                               | via mouth ratio). Attendance cannot proceed
+    |                               | until a randomly selected challenge is
+    |                               | completed within the time limit.
+----|-------------------------------|--------------------------------------------
+12  | Camera / Webcam               | Input device for capturing real-time facial
+    |                               | images during attendance verification and
+    |                               | registration.
+----|-------------------------------|--------------------------------------------
+13  | Tablet                        | Final deployment device used to run the
+    |                               | system, display the dashboard, and capture
+    |                               | face input.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  BAGIAN C — SOLUTION SELECTION: TAMBAHKAN 2 PARAGRAF INI
+  (Letakkan setelah paragraf "liveness detection" di bagian Solution Selection)
+════════════════════════════════════════════════════════════════════════════════
+
+--- PARAGRAF 1: PRIVACY ---
+
+To address the privacy constraint outlined in Aspect 1, VISIATTEND does not store
+raw facial photographs at any point in the system. During registration, facial
+images are processed immediately on the server to extract a 512-dimensional
+numerical embedding vector using the ArcFace model. Only this encrypted embedding
+vector is persisted in the database. Since the original face photograph cannot be
+reconstructed from an embedding vector alone, this approach satisfies the principle
+of privacy by design and significantly reduces legal risk under personal data
+protection regulations.
+
+--- PARAGRAF 2: GAMIFICATION ---
+
+In terms of gamification, VISIATTEND implements a point-based leaderboard system
+where users accumulate points based on three attendance metrics: total attendance
+count, punctuality (on-time check-in before the session deadline), and attendance
+consistency streaks (consecutive sessions attended without absence). The leaderboard
+is visible to all users within the same group or class, displaying rankings by
+accumulated points. To address ethical concerns, absences tied to approved leave are
+excluded from penalty calculation, ensuring the leaderboard promotes positive
+engagement rather than punitive comparison.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  BAGIAN D.5 — TABLE 5: PROJECT DEVELOPMENT TIMELINE (GANTI SELURUH)
+════════════════════════════════════════════════════════════════════════════════
+
+Table 5. Project Development Timeline
+
+Weeks  | Activity                                        | Start Date | End Date   | Duration
+-------|------------------------------------------------|------------|------------|----------
+  1    | - Looking for research problems                 | 21-12-2025 | 27-12-2025 |  7 days
+       | - Looking for prospective clients               |            |            |
+       | - Discuss with advisor                          |            |            |
+-------|------------------------------------------------|------------|------------|----------
+  2    | - Looking for prospective clients               | 28-12-2025 | 03-01-2026 |  7 days
+       | - Discuss with advisor about prospective        |            |            |
+       |   projects                                      |            |            |
+-------|------------------------------------------------|------------|------------|----------
+  3    | - Submit complexity, strengths, and weaknesses  | 04-01-2026 | 10-01-2026 |  7 days
+       |   of each project idea                          |            |            |
+       | - Looking for prospective clients               |            |            |
+       | - Discuss with advisor                          |            |            |
+-------|------------------------------------------------|------------|------------|----------
+  4    | - Consultation with advisor                     | 11-01-2026 | 17-01-2026 |  7 days
+       | - Determine project title                       |            |            |
+       | - Looking for client                            |            |            |
+       | - Complete F100 document                        |            |            |
+-------|------------------------------------------------|------------|------------|----------
+  5    | - Confirm final client                          | 18-01-2026 | 24-01-2026 |  7 days
+       | - Discuss with advisor                          |            |            |
+       | - Finalize F100 document                        |            |            |
+       | - Purchase and test equipment                   |            |            |
+       | - Documentation of each process                 |            |            |
+-------|------------------------------------------------|------------|------------|----------
+  6    | - Start F200 document                           | 25-01-2026 | 31-01-2026 |  7 days
+       | - Discuss with advisor                          |            |            |
+       | - System design (architecture & workflow)       |            |            |
+       | - Deep dive into face recognition & liveness    |            |            |
+       |   detection                                     |            |            |
+       | - Documentation                                 |            |            |
+-------|------------------------------------------------|------------|------------|----------
+ 7–8   | - Consultation with advisor                     | 01-02-2026 | 14-02-2026 | 14 days
+       | - Development of face recognition module        |            |            |
+       | - Development of backend API                    |            |            |
+       | - Documentation                                 |            |            |
+       | - Continue F200 document                        |            |            |
+-------|------------------------------------------------|------------|------------|----------
+ 9–10  | - Discuss with advisor                          | 15-02-2026 | 28-02-2026 | 14 days
+       | - Finalize F200 document                        |            |            |
+       | - Start F300 document                           |            |            |
+       | - Develop dashboard & leaderboard               |            |            |
+       | - Documentation                                 |            |            |
+-------|------------------------------------------------|------------|------------|----------
+11–12  | - Discuss with advisor                          | 01-03-2026 | 14-03-2026 | 14 days
+       | - Develop F300 document                         |            |            |
+       | - Integrate face recognition with backend       |            |            |
+       | - Documentation                                 |            |            |
+-------|------------------------------------------------|------------|------------|----------
+ 13    | - Consultation with advisor                     | 15-03-2026 | 21-03-2026 |  7 days
+       | - Complete F300 document                        |            |            |
+       | - Further system integration                    |            |            |
+       | - Documentation                                 |            |            |
+-------|------------------------------------------------|------------|------------|----------
+ 14    | - Discuss with advisor                          | 22-03-2026 | 28-03-2026 |  7 days
+       | - Finalize F300 document                        |            |            |
+       | - Improve system performance                    |            |            |
+       | - Documentation                                 |            |            |
+-------|------------------------------------------------|------------|------------|----------
+15–19  | - Consultation with advisor                     | 29-03-2026 | 02-05-2026 | 35 days
+       | - Start F400 document                           |            |            |
+       | - System testing (face recognition &            |            |            |
+       |   liveness detection)                           |            |            |
+       | - Fix bugs & optimize system                    |            |            |
+       | - Documentation                                 |            |            |
+-------|------------------------------------------------|------------|------------|----------
+20–21  | - Discuss with advisor                          | 03-05-2026 | 16-05-2026 | 14 days
+       | - Complete F400 document                        |            |            |
+       | - Test software & hardware connectivity         |            |            |
+       | - Documentation                                 |            |            |
+-------|------------------------------------------------|------------|------------|----------
+22–23  | - Discuss with advisor                          | 17-05-2026 | 30-05-2026 | 14 days
+       | - Finalize F400 document                        |            |            |
+       | - Start F500 document                           |            |            |
+       | - System evaluation & performance testing       |            |            |
+       | - Documentation                                 |            |            |
+-------|------------------------------------------------|------------|------------|----------
+24–25  | - Discuss with advisor                          | 31-05-2026 | 13-06-2026 | 14 days
+       | - Develop F500 document                         |            |            |
+       | - Final system testing                          |            |            |
+       | - Performance evaluation                        |            |            |
+       | - Documentation                                 |            |            |
+-------|------------------------------------------------|------------|------------|----------
+26–27  | - Discuss with advisor                          | 14-06-2026 | 27-06-2026 | 14 days
+       | - Finalize F500 document                        |            |            |
+       | - Final system refinement                       |            |            |
+       | - Create project poster                         |            |            |
+       | - Prepare system demonstration                  |            |            |
+       | - Documentation                                 |            |            |
+
+
+================================================================================
+  CATATAN PERUBAHAN
+================================================================================
+
+1. [Tabel 2]  Job desc Jordy & Silfan DITUKAR dan diperjelas sesuai tugas nyata:
+              - Jordy  → Data Management + Admin Web Dashboard + Active Liveness Detection (frontend challenge + backend gate)
+              - Silfan → AI Face Recognition + User Web UI (halaman attendance user)
+
+2. [Tabel 3]  Tech stack disesuaikan dengan implementasi nyata:
+              - TensorFlow/PyTorch   → DIHAPUS (tidak dipakai)
+              - ONNX Runtime         → DIHAPUS (model diload via OpenCV DNN, bukan onnxruntime)
+              - MySQL                → Microsoft SQL Server (MSSQL)
+              - HTML/CSS/JavaScript  → React 18 + TypeScript + Vite + TailwindCSS + Radix UI
+              - "2D Modeling & Animation" → DIHAPUS
+              - Python "liveness analysis" → DIHAPUS (tidak ada Python-side liveness)
+              - Ditambah: JWT, OpenCV DNN Module, YuNet, ArcFace sebagai tools terpisah
+              - MediaPipe Face Mesh → diperbarui sebagai core Active Liveness Detection
+
+3. [Solution Selection]  Ditambah 2 paragraf:
+              - Paragraf Privacy: menjelaskan hanya embedding yang disimpan, bukan foto
+              - Paragraf Gamification: menjelaskan mekanisme poin (count + punctuality + streak)
+
+4. [Tabel 5]  Semua tanggal Week 13–27 diperbaiki:
+              - Week 13 s/d 27 sebelumnya copy-paste dari Week 1–5 (salah)
+              - Sekarang mengalir secara logis dari 15-03-2026 hingga 27-06-2026
+              - Week 20 yang sebelumnya salah tahun (2025) sudah dikoreksi ke 2026
+
+5. [Liveness]  Migrasi ke Active Liveness tercermin di:
+              - Tabel 2: deskripsi tugas masing-masing anggota
+              - Tabel 3: deskripsi MediaPipe Face Mesh sebagai core Active Liveness
+              - Pipeline di Solution Selection: sudah menggunakan istilah Active Liveness
+================================================================================

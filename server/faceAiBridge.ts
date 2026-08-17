@@ -35,12 +35,19 @@ export async function runFaceAiCommand<T>(command: "preview-detection" | "captur
     });
 
     processHandle.on("close", (code) => {
-      const lastLine = stdout
+      const stdoutLines = stdout
         .trim()
         .split(/\r?\n/)
         .map((entry) => entry.trim())
-        .filter(Boolean)
-        .pop();
+        .filter(Boolean);
+
+      for (const line of stdoutLines) {
+        if (line.startsWith("[VERIFY_AUDIT]")) {
+          console.log(line);
+        }
+      }
+
+      const lastLine = stdoutLines.pop();
 
       if (!lastLine) {
         reject(new Error(stderr || `Face AI bridge returned no output (exit code ${code ?? "unknown"})`));

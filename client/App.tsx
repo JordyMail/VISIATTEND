@@ -28,13 +28,11 @@ import Members from "@/pages/Members";
 import Events from "@/pages/Events";
 import Attendance from "@/pages/Attendance";
 import Reports from "@/pages/Reports";
-import Schedules from "@/pages/admin/Schedules";
 import Announcements from "@/pages/admin/Announcements";
 import QRManager from "@/pages/admin/QRManager";
 import AdminLeaderboard from "@/pages/admin/Leaderboard";
 import AdminSettings from "@/pages/Settings";
 import QuestionsManagement from "@/pages/admin/Questions";
-import ScheduleAttendance from "@/pages/admin/ScheduleAttendance";
 
 // User pages
 import UserDashboard from "@/pages/user/Dashboard";
@@ -108,8 +106,6 @@ export default function App() {
           <Route path="members" element={<Members />} />
           <Route path="events" element={<Events />} />
           <Route path="attendance" element={<Attendance />} />
-          <Route path="schedules" element={<Schedules />} />
-          <Route path="schedule-attendance" element={<ScheduleAttendance />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="reports" element={<Reports />} />
           <Route path="leaderboard" element={<AdminLeaderboard />} />
@@ -133,9 +129,6 @@ export default function App() {
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="members" element={<Members />} />
           <Route path="events" element={<Events />} />
-          <Route path="attendance" element={<Attendance />} />
-          <Route path="schedules" element={<Schedules />} />
-          <Route path="schedule-attendance" element={<ScheduleAttendance />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="qr" element={<QRManager />} />
           <Route path="reports" element={<Reports />} />

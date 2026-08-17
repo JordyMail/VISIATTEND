@@ -8,7 +8,7 @@
     ],
     "scripts": [
       "dist/server/**/*.js"
-    ]
+    ] 
   },
   "scripts": {
     "dev": "concurrently \"pnpm run dev:api\" \"pnpm run dev:frontend\"",
@@ -47,6 +47,7 @@
     "html5-qrcode": "^2.3.8",
     "js-cookie": "^3.0.5",
     "jsonwebtoken": "^9.0.3",
+    "@mediapipe/face_mesh": "^0.4.1633559619",
     "mssql": "^12.3.1",
     "nodemailer": "^9.0.1",
     "qrcode.react": "^4.2.0",

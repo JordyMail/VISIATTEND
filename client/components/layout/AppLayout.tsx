@@ -2,10 +2,10 @@
 import { useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Users, Calendar, CalendarDays, ClipboardList, BarChart3,
+  LayoutDashboard, Users, Calendar, ClipboardList, BarChart3,
   Settings, LogOut, ChevronLeft, ChevronRight, Megaphone,
   QrCode, ListChecks, Trophy, ShieldCheck, Layers, FileText,
-  UserCircle, CheckSquare, BookOpen, Bell, Menu, X,
+  UserCircle, CheckSquare, Bell, Menu, X,
   HelpCircle, Camera,
 } from "lucide-react";
 import {
@@ -28,8 +28,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { to: "/superadmin/members",             icon: Users,           label: "Members" },
   { to: "/superadmin/events",              icon: Calendar,        label: "Events" },
   { to: "/superadmin/attendance",          icon: ClipboardList,   label: "Attendance" },
-  { to: "/superadmin/schedules",           icon: BookOpen,        label: "Schedules" },
-  { to: "/superadmin/schedule-attendance", icon: CalendarDays,    label: "Schedule Attendance" },
+
   { to: "/superadmin/announcements",       icon: Megaphone,       label: "Announcements" },
   { to: "/superadmin/reports",             icon: BarChart3,       label: "Reports" },
   { to: "/superadmin/leaderboard",         icon: Trophy,          label: "Leaderboard" },
@@ -44,9 +43,6 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/admin/dashboard",            icon: LayoutDashboard, label: "Dashboard" },
   { to: "/admin/members",              icon: Users,           label: "Members" },
   { to: "/admin/events",               icon: Calendar,        label: "Events" },
-  { to: "/admin/attendance",           icon: ClipboardList,   label: "Attendance" },
-  { to: "/admin/schedules",            icon: BookOpen,        label: "Schedules" },
-  { to: "/admin/schedule-attendance",  icon: CalendarDays,    label: "Schedule Attendance" },
   { to: "/admin/announcements",        icon: Megaphone,       label: "Announcements" },
   { to: "/admin/qr",                   icon: QrCode,          label: "QR Manager" },
   { to: "/admin/reports",              icon: BarChart3,       label: "Reports" },
