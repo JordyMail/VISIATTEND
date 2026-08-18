@@ -245,19 +245,6 @@ export default function UserDashboard() {
 
         <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
           <div className="space-y-6">
-            <Card className="rounded-[30px] border-white/70 bg-white/80 shadow-[0_26px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-sm">
-              <CardContent className="p-6 md:p-8">
-                <div className="rounded-[24px] bg-gradient-to-r from-[#9333ea] via-[#6d5efc] to-[#58a5ff] p-4 shadow-[0_20px_60px_-40px_rgba(88,80,255,0.8)]">
-                <Button
-                  className="h-16 w-full justify-center rounded-[20px] bg-transparent text-2xl font-bold text-white shadow-none hover:bg-white/5"
-                  onClick={handleStartQuestion}
-                  disabled={quizCompleted}
-                >
-                  {questionButtonLabel}
-                </Button>
-              </div>
-              </CardContent>
-            </Card>
 
             <Card className="rounded-[30px] border-white/70 bg-white/85 shadow-[0_26px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-sm">
               <CardContent className="p-6 md:p-8">

@@ -37,7 +37,6 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { to: "/superadmin/audit",              icon: FileText,        label: "Audit Logs" },
   { to: "/superadmin/system",              icon: ShieldCheck,     label: "System" },
   { to: "/superadmin/settings",            icon: Settings,        label: "Settings" },
-  { to: "/superadmin/questions",           icon: HelpCircle,      label: "Soal" },
 ];
 
 const ADMIN_NAV: NavItem[] = [
@@ -49,7 +48,6 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/admin/reports",              icon: BarChart3,       label: "Reports" },
   { to: "/admin/leaderboard",          icon: Trophy,          label: "Leaderboard" },
   { to: "/admin/settings",             icon: Settings,        label: "Settings" },
-  { to: "/admin/questions",            icon: HelpCircle,      label: "Soal" },
 ];
 
 const ATTENDANCE_NAV: NavItem[] = [
@@ -59,7 +57,16 @@ const ATTENDANCE_NAV: NavItem[] = [
   { to: "/attendance/face-attendance", icon: CheckSquare,     label: "Face Attendance" },
 ];
 
-const USER_NAV: NavItem[] = [];
+const USER_NAV: NavItem[] = [
+  { to: "/user/dashboard",     icon: LayoutDashboard, label: "Home" },
+  { to: "/user/checkin",       icon: CheckSquare,     label: "Check In" },
+  { to: "/user/attendance",    icon: ClipboardList,   label: "My Attendance" },
+  { to: "/user/schedules",     icon: Calendar,        label: "Schedules" },
+  { to: "/user/announcements", icon: Bell,            label: "Announcements" },
+  { to: "/user/leaderboard",   icon: Trophy,          label: "Leaderboard" },
+  { to: "/user/profile",       icon: UserCircle,      label: "Profile" },
+  { to: "/user/questions",     icon: HelpCircle,      label: "Jawab Soal" },
+];
 
 const NAV_MAP: Record<AppRole, NavItem[]> = {
   super_admin: SUPER_ADMIN_NAV,

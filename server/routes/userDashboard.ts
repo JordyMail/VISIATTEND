@@ -233,12 +233,12 @@ export const handleGetUserDashboardQuestions: RequestHandler = async (req, res) 
       .input("memberId", sql.NVarChar, matchedUser.member_id)
       .input("attendanceDate", sql.DateTime, attendanceDate)
       .query(`
-        SELECT q.id, q.title, q.question_text, q.question_type, q.options, q.points, q.time_limit_minutes, q.correct_answer,
+        SELECT q.id, q.question_text, q.question_type, q.correct_answer, q.points,
           (SELECT COUNT(*) FROM user_answers ua 
            WHERE ua.question_id = q.id AND ua.member_id = @memberId) as answered
         FROM questions q
         WHERE q.is_active = 1
-          AND CAST(q.start_date AS DATE) = CAST(@attendanceDate AS DATE)
+          AND q.event_id IS NOT NULL
         ORDER BY q.created_at ASC
       `);
 
@@ -323,10 +323,9 @@ export const handleAnswerUserDashboardQuestion: RequestHandler = async (req, res
       .input("answerText", sql.NVarChar, userAnswerStr)
       .input("isCorrect", sql.Bit, isCorrect ? 1 : 0)
       .input("pointsEarned", sql.Int, pointsEarned)
-      .input("timeSpentSeconds", sql.Int, timeSpentSeconds || null)
       .query(`
-        INSERT INTO user_answers (member_id, question_id, answer_text, is_correct, points_earned, time_spent_seconds, attempt_number, answered_at)
-        VALUES (@memberId, @questionId, @answerText, @isCorrect, @pointsEarned, @timeSpentSeconds, 1, GETDATE());
+        INSERT INTO user_answers (member_id, question_id, answer_text, is_correct, points_earned, answered_at)
+        VALUES (@memberId, @questionId, @answerText, @isCorrect, @pointsEarned, GETDATE());
       `);
 
     // 5. If correct, insert into point_logs
@@ -336,7 +335,7 @@ export const handleAnswerUserDashboardQuestion: RequestHandler = async (req, res
         .input("member_id", sql.NVarChar, matchedUser.member_id)
         .input("points", sql.Int, 10)
         .input("type", sql.NVarChar, "question")
-        .input("notes", sql.NVarChar, `Bible Study Quiz reward for question: ${question.title}`)
+        .input("notes", sql.NVarChar, `Bible Study Quiz reward for question: ${question.question_text?.slice(0, 80)}`)
         .query(`
           INSERT INTO point_logs (member_id, points, type, notes, created_at)
           VALUES (@member_id, @points, @type, @notes, GETDATE())

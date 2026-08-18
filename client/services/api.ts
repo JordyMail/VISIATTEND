@@ -100,6 +100,22 @@ export const eventApi = {
   create: (data: any) => api.post("/events", data),
   update: (id: number, data: any) => api.put(`/events/${id}`, data),
   delete: (id: number) => api.delete(`/events/${id}`),
+  toggleLock: (id: number) => api.patch(`/events/${id}/lock`),
+};
+
+export const eventQuestionApi = {
+  getByEvent: (eventId: number) => api.get(`/events/${eventId}/questions`),
+  create: (eventId: number, data: { clue: string; answer: string; puzzleGrid?: string; questionOrder?: number }) =>
+    api.post(`/events/${eventId}/questions`, data),
+  update: (eventId: number, qid: number, data: { clue?: string; answer?: string; puzzleGrid?: string }) =>
+    api.put(`/events/${eventId}/questions/${qid}`, data),
+  delete: (eventId: number, qid: number) => api.delete(`/events/${eventId}/questions/${qid}`),
+};
+
+export const wordSearchApi = {
+  getForUser: () => api.get("/user/wordsearch"),
+  submit: (questionId: number, answer: string) =>
+    api.post(`/user/wordsearch/${questionId}/submit`, { answer }),
 };
 
 export const attendanceApi = {

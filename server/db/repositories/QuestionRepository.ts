@@ -5,30 +5,22 @@ export interface Question {
   id: number;
   title: string;
   questionText: string;
-  questionType: 'multiple_choice' | 'true_false' | 'short_answer';
-  options?: string; // JSON string
+  questionType: string;
   correctAnswer: string;
   points: number;
-  timeLimitMinutes: number;
   isActive: boolean;
   createdBy?: number;
-  startDate?: string;
-  endDate?: string;
-  maxAttempts: number;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface UserAnswer {
   id: number;
-  userId: number;
   memberId?: string;
   questionId: number;
   answerText: string;
   isCorrect: boolean;
   pointsEarned: number | null;
-  timeSpentSeconds?: number;
-  attemptNumber: number;
   answeredAt: string;
 }
 
@@ -88,22 +80,15 @@ export class QuestionRepository {
     const result = await pool
       .request()
       .input('title', sql.NVarChar, question.title)
-      .input('question_text', sql.NVarChar, question.questionText || (question as any).question_text) // FIX: handle both cases
-      .input('question_type', sql.NVarChar, question.questionType || (question as any).question_type) // FIX: handle both cases
-      .input('options', sql.NVarChar, question.options || null)
-      .input('correct_answer', sql.NVarChar, question.correctAnswer || (question as any).correct_answer) // FIX: handle both cases
+      .input('question_text', sql.NVarChar, question.questionText || (question as any).question_text)
+      .input('question_type', sql.NVarChar, question.questionType || (question as any).question_type || 'word_search')
+      .input('correct_answer', sql.NVarChar, question.correctAnswer || (question as any).correct_answer)
       .input('points', sql.Int, question.points || 10)
-      .input('time_limit_minutes', sql.Int, question.timeLimitMinutes || (question as any).time_limit_minutes || 5) // FIX
-      .input('created_by', sql.Int, question.createdBy || (question as any).created_by) // FIX: handle both cases
-      .input('start_date', sql.DateTime, question.startDate || (question as any).start_date || null) // FIX
-      .input('end_date', sql.DateTime, question.endDate || (question as any).end_date || null) // FIX
-      .input('max_attempts', sql.Int, question.maxAttempts || (question as any).max_attempts || 1) // FIX
+      .input('created_by', sql.Int, question.createdBy || (question as any).created_by)
       .query(`
-        INSERT INTO questions (title, question_text, question_type, options, correct_answer, 
-          points, time_limit_minutes, created_by, start_date, end_date, max_attempts)
+        INSERT INTO questions (title, question_text, question_type, correct_answer, points, created_by)
         OUTPUT INSERTED.*
-        VALUES (@title, @question_text, @question_type, @options, @correct_answer,
-          @points, @time_limit_minutes, @created_by, @start_date, @end_date, @max_attempts)
+        VALUES (@title, @question_text, @question_type, @correct_answer, @points, @created_by)
       `);
     
     return result.recordset[0];
@@ -123,10 +108,6 @@ export class QuestionRepository {
       request.input('questionText', sql.NVarChar, question.questionText);
       setClauses.push('question_text = @questionText');
     }
-    if (question.options !== undefined) {
-      request.input('options', sql.NVarChar, question.options);
-      setClauses.push('options = @options');
-    }
     if (question.correctAnswer !== undefined) {
       request.input('correctAnswer', sql.NVarChar, question.correctAnswer);
       setClauses.push('correct_answer = @correctAnswer');
@@ -135,25 +116,9 @@ export class QuestionRepository {
       request.input('points', sql.Int, question.points);
       setClauses.push('points = @points');
     }
-    if (question.timeLimitMinutes !== undefined) {
-      request.input('timeLimitMinutes', sql.Int, question.timeLimitMinutes);
-      setClauses.push('time_limit_minutes = @timeLimitMinutes');
-    }
     if (question.isActive !== undefined) {
       request.input('isActive', sql.Bit, question.isActive);
       setClauses.push('is_active = @isActive');
-    }
-    if (question.startDate !== undefined) {
-      request.input('startDate', sql.DateTime, question.startDate);
-      setClauses.push('start_date = @startDate');
-    }
-    if (question.endDate !== undefined) {
-      request.input('endDate', sql.DateTime, question.endDate);
-      setClauses.push('end_date = @endDate');
-    }
-    if (question.maxAttempts !== undefined) {
-      request.input('maxAttempts', sql.Int, question.maxAttempts);
-      setClauses.push('max_attempts = @maxAttempts');
     }
     
     await request.query(`UPDATE questions SET ${setClauses.join(', ')} WHERE id = @id`);
@@ -171,8 +136,6 @@ export class QuestionRepository {
 
   async getAvailableQuestions(userId: number): Promise<Question[]> {
     const pool = await getConnection();
-    
-    // Resolve member_id from userId
     const userRes = await pool.request()
       .input('userId', sql.Int, userId)
       .query('SELECT member_id FROM users WHERE id = @userId');
@@ -182,15 +145,14 @@ export class QuestionRepository {
       .request()
       .input('memberId', sql.NVarChar, memberId)
       .query(`
-        SELECT q.*, 
-          (SELECT COUNT(*) FROM user_answers ua 
+        SELECT q.id, q.question_text, q.question_type, q.correct_answer, q.points, q.is_active,
+          (SELECT COUNT(*) FROM user_answers ua
            WHERE ua.question_id = q.id AND ua.member_id = @memberId) as attempts_count
         FROM questions q
         WHERE q.is_active = 1
-          AND (q.start_date IS NULL OR q.start_date <= GETDATE())
-          AND (q.end_date IS NULL OR q.end_date >= GETDATE())
-          AND (SELECT COUNT(*) FROM user_answers ua 
-               WHERE ua.question_id = q.id AND ua.member_id = @memberId) < q.max_attempts
+          AND q.event_id IS NOT NULL
+          AND (SELECT COUNT(*) FROM user_answers ua
+               WHERE ua.question_id = q.id AND ua.member_id = @memberId) = 0
         ORDER BY q.created_at DESC
       `);
     
@@ -218,23 +180,10 @@ export class QuestionRepository {
     
     // Resolve member_id from userId
     const userRes = await pool.request()
-      .input('userId', sql.Int, answer.userId)
+      .input('userId', sql.Int, (answer as any).userId ?? 0)
       .query('SELECT member_id FROM users WHERE id = @userId');
-    const memberId = userRes.recordset[0]?.member_id || '';
+    const memberId = answer.memberId || userRes.recordset[0]?.member_id || '';
 
-    // Get attempt number
-    const attemptResult = await pool
-      .request()
-      .input('memberId', sql.NVarChar, memberId)
-      .input('questionId', sql.Int, answer.questionId)
-      .query(`
-        SELECT ISNULL(MAX(attempt_number), 0) + 1 as next_attempt
-        FROM user_answers
-        WHERE member_id = @memberId AND question_id = @questionId
-      `);
-    
-    const attemptNumber = attemptResult.recordset[0].next_attempt;
-    
     const result = await pool
       .request()
       .input('memberId', sql.NVarChar, memberId)
@@ -242,11 +191,9 @@ export class QuestionRepository {
       .input('answerText', sql.NVarChar, answer.answerText)
       .input('isCorrect', sql.Bit, isCorrect)
       .input('pointsEarned', sql.Int, pointsEarned)
-      .input('timeSpentSeconds', sql.Int, answer.timeSpentSeconds || null)
-      .input('attemptNumber', sql.Int, attemptNumber)
       .query(`
-        INSERT INTO user_answers (member_id, question_id, answer_text, is_correct, points_earned, time_spent_seconds, attempt_number)
-        VALUES (@memberId, @questionId, @answerText, @isCorrect, @pointsEarned, @timeSpentSeconds, @attemptNumber);
+        INSERT INTO user_answers (member_id, question_id, answer_text, is_correct, points_earned)
+        VALUES (@memberId, @questionId, @answerText, @isCorrect, @pointsEarned);
 
         SELECT * FROM user_answers WHERE id = SCOPE_IDENTITY();
       `);

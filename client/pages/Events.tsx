@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 import { DayPicker } from "react-day-picker";
 import {
   Pencil, Trash2, Loader2, CalendarDays, Plus, ArrowLeft,
-  Clock, Users, Save, ChevronLeft, ChevronRight, CheckCircle2, Search
+  Clock, Users, Save, ChevronLeft, ChevronRight, CheckCircle2, Search,
+  Lock, Unlock, HelpCircle, RefreshCw, X,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { eventApi, regularEventApi, userApi } from "@/services/api";
+import { eventApi, regularEventApi, userApi, eventQuestionApi } from "@/services/api";
+import { generateWordSearch, serializeGrid, deserializeGrid } from "@/lib/wordSearch";
 import { toast } from "@/components/ui/use-toast";
 import {
   format, isSameDay, parseISO, startOfDay, startOfWeek, endOfWeek, subWeeks,
@@ -39,6 +41,7 @@ interface Event {
   event_type: string;
   selectedMemberIds?: string[];
   created_at: string;
+  is_locked?: boolean;
 }
 
 type ViewMode = "main" | "day-manage";
@@ -70,6 +73,12 @@ function toDateStr(d: Date) {
 
 function parseLocalDate(dateStr?: string): Date {
   if (!dateStr) return new Date();
+  // Pure "YYYY-MM-DD" strings → parse directly as local (avoids UTC midnight shift on date-only ISO)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr))) {
+    const [y, m, d] = String(dateStr).split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  // Full ISO timestamps (e.g. "2026-08-17T17:00:00.000Z" from mssql useUTC:false) → use local methods
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -92,6 +101,16 @@ export default function Events() {
   // ── Manage Events Form State ────────────────────────────────────────────────
   const [dialogEvents, setDialogEvents] = useState<any[]>([]);
   const [deleteConfirmUid, setDeleteConfirmUid] = useState<string | null>(null);
+  // ── Lock State ─────────────────────────────────────────────────────────────
+  // maps event_schedule.id -> is_locked (populated when opening manage view)
+  const [lockedMap, setLockedMap] = useState<Record<number, boolean>>({});
+  const [lockingId, setLockingId] = useState<number | null>(null);
+  const [savingUid, setSavingUid] = useState<string | null>(null);
+
+  // ── Question Form State ────────────────────────────────────────────────────
+  // questions[eventUid] = list of {uid, id?, clue, answer, puzzleGrid?, generating}
+  const [questionsMap, setQuestionsMap] = useState<Record<string, any[]>>({});
+  const [deletedQuestionsMap, setDeletedQuestionsMap] = useState<Record<string, number[]>>({});
   const [memberSearchMap, setMemberSearchMap] = useState<Record<string, string>>({});
 
   // ── Filter State ────────────────────────────────────────────────────────────
@@ -204,12 +223,15 @@ export default function Events() {
     try {
       const todayEvents = getEventsForDate(d);
       const loadedEvents: any[] = [];
+      const newLockedMap: Record<number, boolean> = {};
+      const newQuestionsMap: Record<string, any[]> = {};
 
       for (const ev of todayEvents) {
         const res = await eventApi.getById(ev.id);
         const data = res.data.data;
+        const uid = `existing-${data.id}`;
         loadedEvents.push({
-          uid: `existing-${data.id}`,
+          uid,
           id: data.id,
           eventCode: data.event_code,
           eventType: data.event_type || "custom",
@@ -220,6 +242,22 @@ export default function Events() {
           participantAccess: data.participant_access || "Everyone",
           selectedMemberIds: data.selectedMemberIds || []
         });
+        newLockedMap[data.id] = !!data.is_locked;
+        // Load existing questions for this event
+        try {
+          const qRes = await eventQuestionApi.getByEvent(data.id);
+          const qs = Array.isArray(qRes.data.data) ? qRes.data.data : [];
+          newQuestionsMap[uid] = qs.map((q: any) => ({
+            uid: `q-${q.id}`,
+            id: q.id,
+            clue: q.question_text || q.title || "",
+            answer: q.correct_answer || "",
+            puzzleGrid: q.puzzle_grid ? deserializeGrid(q.puzzle_grid) : null,
+            generating: false,
+          }));
+        } catch {
+          newQuestionsMap[uid] = [];
+        }
       }
 
       if (loadedEvents.length === 0) {
@@ -227,6 +265,9 @@ export default function Events() {
       }
 
       loadedEvents.sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
+      setLockedMap(newLockedMap);
+      setQuestionsMap(newQuestionsMap);
+      setDeletedQuestionsMap({});
       setDialogEvents(loadedEvents);
       setViewMode("day-manage");
     } catch (err) {
@@ -275,6 +316,93 @@ export default function Events() {
     );
   };
 
+  // ── Lock Helpers ─────────────────────────────────────────────────────────────
+  // true only when every existing (saved) event on this date is locked
+  const isManageDateLocked = dialogEvents.filter(ev => ev.id).length > 0
+    && dialogEvents.filter(ev => ev.id).every(ev => !!lockedMap[ev.id]);
+
+  const handleToggleLock = async (eventId: number) => {
+    setLockingId(eventId);
+    try {
+      const res = await eventApi.toggleLock(eventId);
+      const newLocked: boolean = res.data.is_locked;
+      setLockedMap(prev => ({ ...prev, [eventId]: newLocked }));
+      toast({ title: newLocked ? "Event Locked" : "Event Unlocked", description: newLocked ? "Event terkunci." : "Event dibuka kembali." });
+    } catch {
+      toast({ title: "Error", description: "Gagal mengubah status lock", variant: "destructive" });
+    } finally {
+      setLockingId(null);
+    }
+  };
+
+  const handleToggleDateLock = async () => {
+    const eventIds = dialogEvents.filter(ev => ev.id).map(ev => ev.id as number);
+    if (eventIds.length === 0) return;
+    const shouldLock = !isManageDateLocked;
+    setSaving(true);
+    try {
+      for (const id of eventIds) {
+        if (!!lockedMap[id] !== shouldLock) {
+          await eventApi.toggleLock(id);
+          setLockedMap(prev => ({ ...prev, [id]: shouldLock }));
+        }
+      }
+      // Reload items to update main view lock state
+      const eventsRes = await eventApi.getAll();
+      setItems(eventsRes.data.data ?? []);
+      toast({ title: shouldLock ? "Semua Event Terkunci" : "Semua Event Dibuka", description: shouldLock ? "Event tidak dapat diedit." : "Event dapat diedit kembali." });
+    } catch {
+      toast({ title: "Error", description: "Gagal mengubah status lock", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Question Helpers ──────────────────────────────────────────────────────────
+  const getEventQuestions = (uid: string) => questionsMap[uid] ?? [];
+
+  const addQuestionToEvent = (uid: string) => {
+    const qs = getEventQuestions(uid);
+    if (qs.length >= 3) return;
+    const newQ = { uid: `newq-${Date.now()}`, id: undefined, clue: "", answer: "", puzzleGrid: null, generating: false };
+    setQuestionsMap(prev => ({ ...prev, [uid]: [...qs, newQ] }));
+  };
+
+  const removeQuestionFromEvent = (eventUid: string, questionUid: string, questionId?: number) => {
+    setQuestionsMap(prev => ({
+      ...prev,
+      [eventUid]: (prev[eventUid] ?? []).filter(q => q.uid !== questionUid),
+    }));
+    if (questionId) {
+      setDeletedQuestionsMap(prev => ({
+        ...prev,
+        [eventUid]: [...(prev[eventUid] ?? []), questionId],
+      }));
+    }
+  };
+
+  const updateQuestion = (eventUid: string, questionUid: string, field: string, value: any) => {
+    setQuestionsMap(prev => ({
+      ...prev,
+      [eventUid]: (prev[eventUid] ?? []).map(q =>
+        q.uid === questionUid ? { ...q, [field]: value } : q
+      ),
+    }));
+  };
+
+  const handleGeneratePuzzle = (eventUid: string, questionUid: string) => {
+    const qs = getEventQuestions(eventUid);
+    const q = qs.find(q => q.uid === questionUid);
+    if (!q || !q.answer.trim()) {
+      toast({ title: "Perhatian", description: "Masukkan Answer terlebih dahulu", variant: "destructive" });
+      return;
+    }
+    updateQuestion(eventUid, questionUid, "generating", true);
+    const result = generateWordSearch(q.answer.trim());
+    updateQuestion(eventUid, questionUid, "generating", false);
+    updateQuestion(eventUid, questionUid, "puzzleGrid", result);
+  };
+
   const handleSave = async () => {
     if (!selectedDate) return;
 
@@ -300,14 +428,122 @@ export default function Events() {
 
     setSaving(true);
     try {
-      await eventApi.create({ eventDate: toDateStr(selectedDate), events: dialogEvents });
-      toast({ title: "Berhasil", description: "Jadwal event berhasil disimpan" });
+      // Batch includes only filled events: those with IDs + those with a name
+      const eventsToSend = dialogEvents.filter(ev => ev.id || ev.eventName?.trim());
+      await eventApi.create({ eventDate: toDateStr(selectedDate), events: eventsToSend });
+
+      // After saving, fetch events for this date to get IDs (including newly created)
+      const allEventsRes = await eventApi.getAll();
+      const allEvents: Event[] = allEventsRes.data.data ?? [];
+      const dateStr = toDateStr(selectedDate);
+      const savedForDate = allEvents.filter(
+        e => e.date_event && toDateStr(parseLocalDate(e.date_event)) === dateStr
+      );
+
+      // Save questions for each event
+      for (const ev of eventsToSend) {
+        let eventId: number | undefined = ev.id;
+        if (!eventId) {
+          const match = savedForDate.find(
+            s => s.event_name === ev.eventName.trim() && s.start_time === ev.startTime
+          );
+          if (match) eventId = match.id;
+        }
+        if (!eventId) continue;
+        await saveQuestionsForEvent(ev.uid, eventId);
+      }
+
+      toast({ title: "Berhasil", description: "Semua jadwal berhasil disimpan" });
       await load();
       setViewMode("main");
     } catch (e: any) {
       toast({ title: "Error", description: e.response?.data?.message || "Gagal menyimpan", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ── Save questions for a single event — throws on first error ─────────────
+  const saveQuestionsForEvent = async (evUid: string, eventId: number) => {
+    const qs = questionsMap[evUid] ?? [];
+    const delIds = deletedQuestionsMap[evUid] ?? [];
+    for (const qid of delIds) {
+      try { await eventQuestionApi.delete(eventId, qid); } catch { /* deletion failure is non-fatal */ }
+    }
+    for (const q of qs) {
+      if (!q.clue.trim() || !q.answer.trim()) continue;
+      const puzzleGrid = q.puzzleGrid ? serializeGrid(q.puzzleGrid) : null;
+      if (q.id) {
+        await eventQuestionApi.update(eventId, q.id, { clue: q.clue, answer: q.answer, puzzleGrid: puzzleGrid ?? undefined });
+      } else {
+        await eventQuestionApi.create(eventId, { clue: q.clue, answer: q.answer, puzzleGrid: puzzleGrid ?? undefined });
+      }
+    }
+    setDeletedQuestionsMap(prev => { const n = { ...prev }; delete n[evUid]; return n; });
+  };
+
+  const handleSaveOne = async (targetEv: any) => {
+    if (!selectedDate) return;
+    const i = dialogEvents.findIndex(ev => ev.uid === targetEv.uid);
+
+    // Validate target event
+    if (!targetEv.eventName?.trim())
+      return toast({ title: "Validasi", description: `Nama Event ${i + 1} wajib diisi`, variant: "destructive" });
+    if (!targetEv.startTime || !targetEv.endTime)
+      return toast({ title: "Validasi", description: `Waktu Mulai dan Selesai wajib diisi`, variant: "destructive" });
+    if (targetEv.startTime >= targetEv.endTime)
+      return toast({ title: "Validasi", description: `Waktu Mulai harus lebih awal dari Selesai`, variant: "destructive" });
+
+    // Check time overlap with other events
+    for (const other of dialogEvents) {
+      if (other.uid === targetEv.uid || !other.eventName?.trim()) continue;
+      if (targetEv.endTime > other.startTime && targetEv.startTime < other.endTime)
+        return toast({
+          title: "Waktu Bertabrakan",
+          description: `"${targetEv.eventName}" bertabrakan dengan "${other.eventName}"`,
+          variant: "destructive",
+        });
+    }
+
+    setSavingUid(targetEv.uid);
+    try {
+      // Build safe batch: all events that already have IDs + this target event
+      const othersSaved = dialogEvents.filter(ev => ev.uid !== targetEv.uid && ev.id);
+      const batch = [...othersSaved, targetEv];
+      await eventApi.create({ eventDate: toDateStr(selectedDate), events: batch });
+
+      // Get the saved event ID (needed for new events)
+      let eventId: number | undefined = targetEv.id;
+      if (!eventId) {
+        const allEventsRes = await eventApi.getAll();
+        const allEvents: Event[] = allEventsRes.data.data ?? [];
+        const dateStr = toDateStr(selectedDate);
+        const savedForDate = allEvents.filter(
+          e => e.date_event && toDateStr(parseLocalDate(e.date_event)) === dateStr
+        );
+        const match = savedForDate.find(
+          s => s.event_name === targetEv.eventName.trim() && s.start_time === targetEv.startTime
+        );
+        if (match) {
+          eventId = match.id;
+          // Update dialogEvents with the new ID so subsequent saves work
+          setDialogEvents(prev => prev.map(ev =>
+            ev.uid === targetEv.uid ? { ...ev, id: match.id, uid: `existing-${match.id}` } : ev
+          ));
+        }
+      }
+
+      if (eventId) await saveQuestionsForEvent(targetEv.uid, eventId);
+
+      // Reload items list (for lock state etc.) without leaving the page
+      const eventsRes = await eventApi.getAll();
+      setItems(eventsRes.data.data ?? []);
+
+      toast({ title: "Berhasil", description: `Event ${i + 1} berhasil disimpan` });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.response?.data?.message || `Gagal menyimpan Event ${i + 1}`, variant: "destructive" });
+    } finally {
+      setSavingUid(null);
     }
   };
 
@@ -330,28 +566,57 @@ export default function Events() {
               </p>
             </div>
           </div>
-          <Button onClick={handleSave} disabled={saving} className="gap-2">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Simpan Jadwal
-          </Button>
         </div>
 
         {/* Event Forms */}
         <div className="space-y-5">
-          {dialogEvents.map((ev, index) => (
-            <Card key={ev.uid} className="overflow-hidden border shadow-sm">
+          {dialogEvents.map((ev, index) => {
+            const isEvLocked = ev.id ? !!lockedMap[ev.id] : false;
+            return (
+            <Card key={ev.uid} className={`overflow-hidden border shadow-sm transition-opacity ${isEvLocked ? "opacity-60" : ""}`}>
               {/* Card Header */}
-              <div className="flex items-center justify-between px-5 py-3 bg-muted/40 border-b">
-                <span className="text-sm font-bold text-primary">Event {index + 1}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => setDeleteConfirmUid(ev.uid)}
-                  title={`Hapus Event ${index + 1}`}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+              <div className={`flex items-center justify-between px-5 py-3 border-b ${isEvLocked ? "bg-amber-50/60" : "bg-muted/40"}`}>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-primary">Event {index + 1}</span>
+                  {isEvLocked && <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide flex items-center gap-0.5"><Lock className="h-3 w-3" /> Locked</span>}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`h-8 w-8 p-0 ${isEvLocked ? "text-amber-500 hover:text-amber-600 hover:bg-amber-50" : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"}`}
+                    onClick={() => ev.id && handleToggleLock(ev.id)}
+                    disabled={!ev.id || lockingId === ev.id}
+                    title={!ev.id ? "Simpan event dulu sebelum mengunci" : isEvLocked ? "Unlock event" : "Kunci event"}
+                  >
+                    {lockingId === ev.id
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : isEvLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 text-xs gap-1.5 font-semibold"
+                    onClick={() => handleSaveOne(ev)}
+                    disabled={isEvLocked || savingUid === ev.uid || saving}
+                    title={`Simpan Event ${index + 1}`}
+                  >
+                    {savingUid === ev.uid
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <Save className="h-3.5 w-3.5" />}
+                    Simpan Event {index + 1}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setDeleteConfirmUid(ev.uid)}
+                    disabled={isEvLocked}
+                    title={`Hapus Event ${index + 1}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
 
               {/* Card Form Body */}
@@ -361,6 +626,7 @@ export default function Events() {
                     <Label>Jenis Event</Label>
                     <Select
                       value={ev.eventType}
+                      disabled={isEvLocked}
                       onValueChange={(val) => {
                         updateEventField(ev.uid, "eventType", val);
                         updateEventField(ev.uid, "eventName", "");
@@ -380,6 +646,7 @@ export default function Events() {
                         <Label>Pilih Regular Event *</Label>
                         <Select
                           value={ev.eventName}
+                          disabled={isEvLocked}
                           onValueChange={(val) => updateEventField(ev.uid, "eventName", val)}
                         >
                           <SelectTrigger><SelectValue placeholder="Pilih event" /></SelectTrigger>
@@ -399,6 +666,7 @@ export default function Events() {
                           id={`evt-name-${ev.uid}`}
                           placeholder="Contoh: Ibadah Pemuda, Rapat Panitia..."
                           value={ev.eventName}
+                          disabled={isEvLocked}
                           onChange={(e) => updateEventField(ev.uid, "eventName", e.target.value)}
                         />
                       </>
@@ -413,6 +681,7 @@ export default function Events() {
                       id={`st-${ev.uid}`}
                       type="time"
                       value={ev.startTime}
+                      disabled={isEvLocked}
                       onChange={(e) => updateEventField(ev.uid, "startTime", e.target.value)}
                     />
                   </div>
@@ -422,6 +691,7 @@ export default function Events() {
                       id={`et-${ev.uid}`}
                       type="time"
                       value={ev.endTime}
+                      disabled={isEvLocked}
                       onChange={(e) => updateEventField(ev.uid, "endTime", e.target.value)}
                     />
                   </div>
@@ -434,6 +704,7 @@ export default function Events() {
                     placeholder="Tema khotbah atau deskripsi singkat..."
                     rows={2}
                     value={ev.description}
+                    disabled={isEvLocked}
                     onChange={(e) => updateEventField(ev.uid, "description", e.target.value)}
                   />
                 </div>
@@ -442,6 +713,7 @@ export default function Events() {
                   <Label>Participant Access Control</Label>
                   <Select
                     value={ev.participantAccess}
+                    disabled={isEvLocked}
                     onValueChange={(val) => {
                       updateEventField(ev.uid, "participantAccess", val);
                       if (val === "Everyone") updateEventField(ev.uid, "selectedMemberIds", []);
@@ -593,9 +865,121 @@ export default function Events() {
                     </div>
                   </div>
                 )}
+
+                {/* ── Question Game Section (only for Everyone access) ──────────────── */}
+                {ev.participantAccess === "Everyone" && (
+                  <div className="border rounded-lg p-4 space-y-3 bg-violet-50/40 border-violet-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <HelpCircle className="h-4 w-4 text-violet-600" />
+                        <span className="text-sm font-semibold text-violet-700">Question Game (Optional)</span>
+                        <Badge variant="secondary" className="text-[10px] h-5 px-2">
+                          {getEventQuestions(ev.uid).length}/3
+                        </Badge>
+                      </div>
+                      {getEventQuestions(ev.uid).length < 3 && !isEvLocked && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-violet-700 border-violet-300 hover:bg-violet-50 h-8 text-xs"
+                          onClick={() => addQuestionToEvent(ev.uid)}
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add Question
+                        </Button>
+                      )}
+                      {getEventQuestions(ev.uid).length >= 3 && (
+                        <span className="text-[11px] text-muted-foreground italic">Maksimal 3 questions per event</span>
+                      )}
+                    </div>
+
+                    {getEventQuestions(ev.uid).length === 0 && (
+                      <p className="text-xs text-muted-foreground py-1">
+                        Tidak ada question. Klik <strong>Add Question</strong> untuk menambahkan Word Search game.
+                      </p>
+                    )}
+
+                    {getEventQuestions(ev.uid).map((q, qIdx) => (
+                      <div key={q.uid} className="border rounded-md p-3 bg-white space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-violet-600">Question {qIdx + 1}</span>
+                          {!isEvLocked && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => removeQuestionFromEvent(ev.uid, q.uid, q.id)}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <Label className="text-xs">Clue *</Label>
+                            <Input
+                              placeholder="Contoh: What is the first book of the Bible?"
+                              value={q.clue}
+                              disabled={isEvLocked}
+                              onChange={(e) => updateQuestion(ev.uid, q.uid, "clue", e.target.value)}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Answer * (huruf kapital)</Label>
+                            <Input
+                              placeholder="Contoh: GENESIS"
+                              value={q.answer}
+                              disabled={isEvLocked}
+                              onChange={(e) => updateQuestion(ev.uid, q.uid, "answer", e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
+                              className="h-8 text-sm font-mono"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 h-8 text-xs"
+                            disabled={isEvLocked || !q.answer.trim()}
+                            onClick={() => handleGeneratePuzzle(ev.uid, q.uid)}
+                          >
+                            {q.generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                            {q.puzzleGrid ? "Regenerate Puzzle" : "Generate Puzzle"}
+                          </Button>
+                          {q.puzzleGrid && (
+                            <span className="text-[11px] text-green-600 font-medium flex items-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Puzzle ready ({q.puzzleGrid.size}×{q.puzzleGrid.size})
+                            </span>
+                          )}
+                        </div>
+                        {/* Puzzle Preview */}
+                        {q.puzzleGrid && (
+                          <div className="overflow-auto">
+                            <div className="inline-grid gap-px" style={{ gridTemplateColumns: `repeat(${q.puzzleGrid.size}, 1.4rem)` }}>
+                              {q.puzzleGrid.grid.map((row: string[], rIdx: number) =>
+                                row.map((cell: string, cIdx: number) => (
+                                  <div
+                                    key={`${rIdx}-${cIdx}`}
+                                    className="w-5 h-5 flex items-center justify-center text-[11px] font-mono border border-slate-200 bg-slate-50"
+                                  >
+                                    {cell}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
 
           {/* + Add Event Button */}
           {dialogEvents.length < 4 ? (
@@ -620,7 +1004,7 @@ export default function Events() {
           <Button variant="outline" onClick={goBackToMain}>Batal</Button>
           <Button onClick={handleSave} disabled={saving} size="lg" className="gap-2">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Simpan Jadwal
+            Simpan Semua Jadwal
           </Button>
         </div>
 
@@ -788,7 +1172,9 @@ export default function Events() {
                     <li
                       key={item.dateStr}
                       className={`flex items-center justify-between rounded-lg border p-3.5 transition-colors
-                        ${item.isPast ? "opacity-40 bg-muted/20 cursor-not-allowed" : "hover:bg-accent/60 cursor-pointer hover:border-primary/40"}
+                        ${item.isPast
+                          ? "opacity-50 bg-muted/20 cursor-not-allowed"
+                          : "hover:bg-accent/60 cursor-pointer hover:border-primary/40"}
                       `}
                       onClick={() => {
                         if (!item.isPast) {

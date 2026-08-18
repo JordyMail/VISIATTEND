@@ -71,7 +71,175 @@ async function log(
   }
 }
 
+// ─── Startup schema fix: ensure event_schedule allows multiple events per date ─
+async function ensureEventScheduleSchema() {
+  try {
+    const pool = await getConnection();
+
+    // 1. Drop UNIQUE constraint on date_event (original migration had it UNIQUE)
+    await pool.request().query(`
+      DECLARE @cn NVARCHAR(256);
+      SELECT @cn = tc.CONSTRAINT_NAME
+      FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+      INNER JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE ccu
+        ON tc.CONSTRAINT_NAME = ccu.CONSTRAINT_NAME
+      WHERE tc.TABLE_NAME = 'event_schedule'
+        AND tc.CONSTRAINT_TYPE = 'UNIQUE'
+        AND ccu.COLUMN_NAME = 'date_event';
+      IF @cn IS NOT NULL
+        EXEC('ALTER TABLE event_schedule DROP CONSTRAINT [' + @cn + ']');
+    `);
+
+    // 2. Also drop any unique INDEX (not constraint) on date_event
+    await pool.request().query(`
+      DECLARE @ix NVARCHAR(256);
+      SELECT @ix = i.name
+      FROM sys.indexes i
+      INNER JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+      INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+      WHERE i.object_id = OBJECT_ID('event_schedule')
+        AND i.is_unique = 1
+        AND c.name = 'date_event'
+        AND i.is_primary_key = 0;
+      IF @ix IS NOT NULL
+        EXEC('DROP INDEX [' + @ix + '] ON event_schedule');
+    `);
+
+    // 3. Widen event_code to NVARCHAR(20) if still narrow
+    await pool.request().query(`
+      IF EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('event_schedule')
+          AND name = 'event_code'
+          AND max_length < 40
+      )
+        ALTER TABLE event_schedule ALTER COLUMN event_code NVARCHAR(20) NOT NULL;
+    `);
+
+    // 4. Fix event_participants FK: should reference users(member_id), not user_member(member_id)
+    await pool.request().query(`
+      -- Drop the wrong FK pointing to user_member
+      DECLARE @fk NVARCHAR(256);
+      SELECT @fk = fk.name
+      FROM sys.foreign_keys fk
+      INNER JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+      INNER JOIN sys.columns c ON fkc.parent_object_id = c.object_id AND fkc.parent_column_id = c.column_id
+      INNER JOIN sys.tables rt ON fk.referenced_object_id = rt.object_id
+      WHERE fk.parent_object_id = OBJECT_ID('event_participants')
+        AND c.name = 'member_id'
+        AND rt.name = 'user_member';
+      IF @fk IS NOT NULL
+        EXEC('ALTER TABLE event_participants DROP CONSTRAINT [' + @fk + ']');
+    `);
+
+    // 5. Add is_locked column to event_schedule
+    await pool.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('event_schedule') AND name = 'is_locked'
+      )
+        ALTER TABLE event_schedule ADD is_locked BIT NOT NULL DEFAULT 0;
+    `);
+
+    // 6. Add event_id, puzzle_grid, question_order to questions table
+    await pool.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('questions') AND name = 'event_id'
+      )
+        ALTER TABLE questions ADD event_id INT NULL;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('questions') AND name = 'puzzle_grid'
+      )
+        ALTER TABLE questions ADD puzzle_grid NVARCHAR(MAX) NULL;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('questions') AND name = 'question_order'
+      )
+        ALTER TABLE questions ADD question_order INT NOT NULL DEFAULT 1;
+    `);
+
+    // 7. Ensure questions.event_id references event_schedule(id) with cascade delete
+    await pool.request().query(`
+      DECLARE @qfk NVARCHAR(256);
+      SELECT @qfk = fk.name
+      FROM sys.foreign_keys fk
+      INNER JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+      INNER JOIN sys.columns c ON fkc.parent_object_id = c.object_id AND fkc.parent_column_id = c.column_id
+      WHERE fk.parent_object_id = OBJECT_ID('questions') AND c.name = 'event_id';
+      IF @qfk IS NOT NULL
+        EXEC('ALTER TABLE questions DROP CONSTRAINT [' + @qfk + ']');
+
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.foreign_keys fk
+        INNER JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+        INNER JOIN sys.columns c ON fkc.parent_object_id = c.object_id AND fkc.parent_column_id = c.column_id
+        INNER JOIN sys.tables rt ON fk.referenced_object_id = rt.object_id
+        WHERE fk.parent_object_id = OBJECT_ID('questions')
+          AND c.name = 'event_id'
+          AND rt.name = 'event_schedule'
+      )
+        ALTER TABLE questions ADD CONSTRAINT FK_questions_event_schedule
+          FOREIGN KEY (event_id) REFERENCES event_schedule(id) ON DELETE CASCADE;
+    `);
+
+    // 8. Fix user_answers FK: reference users.member_id not user_member.member_id
+    await pool.request().query(`
+      DECLARE @fk2 NVARCHAR(256);
+      SELECT @fk2 = fk.name
+      FROM sys.foreign_keys fk
+      INNER JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+      INNER JOIN sys.columns c ON fkc.parent_object_id = c.object_id AND fkc.parent_column_id = c.column_id
+      INNER JOIN sys.tables rt ON fk.referenced_object_id = rt.object_id
+      WHERE fk.parent_object_id = OBJECT_ID('user_answers')
+        AND c.name = 'member_id'
+        AND rt.name = 'user_member';
+      IF @fk2 IS NOT NULL
+        EXEC('ALTER TABLE user_answers DROP CONSTRAINT [' + @fk2 + ']');
+    `);
+
+    // 8. Fix question_type CHECK constraint so word_search is accepted
+    await pool.request().query(`
+      DECLARE @chk NVARCHAR(256);
+      SELECT @chk = cc.name
+      FROM sys.check_constraints cc
+      INNER JOIN sys.columns c ON cc.parent_object_id = c.object_id AND cc.parent_column_id = c.column_id
+      WHERE cc.parent_object_id = OBJECT_ID('questions') AND c.name = 'question_type';
+      IF @chk IS NOT NULL EXEC('ALTER TABLE questions DROP CONSTRAINT [' + @chk + ']');
+    `);
+
+    // 9. Add UNIQUE constraint on user_answers(member_id, question_id) to prevent duplicate submissions
+    await pool.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.indexes
+        WHERE object_id = OBJECT_ID('user_answers') AND name = 'UX_user_answers_member_question'
+      )
+      BEGIN
+        -- Remove duplicates first (keep the earliest answer per member/question)
+        DELETE ua FROM user_answers ua
+        WHERE ua.id NOT IN (
+          SELECT MIN(id) FROM user_answers GROUP BY member_id, question_id
+        );
+        CREATE UNIQUE INDEX UX_user_answers_member_question ON user_answers(member_id, question_id);
+      END
+    `);
+
+    // 10. Clean up old test/legacy questions that have no event_id (not linked to any event)
+    await pool.request().query(`
+      DELETE FROM user_answers WHERE question_id IN (
+        SELECT id FROM questions WHERE event_id IS NULL
+      );
+      DELETE FROM questions WHERE event_id IS NULL;
+    `);
+  } catch (e) {
+    console.warn('[startup] ensureEventScheduleSchema skipped:', (e as any)?.message);
+  }
+}
+
 export function createServer() {
+  // Run schema fix in background (non-blocking, best-effort)
+  ensureEventScheduleSchema();
+
   const app = express();
 
   app.use(
@@ -1186,7 +1354,7 @@ export function createServer() {
       
       // Ambil semua event yang ada untuk tanggal tersebut di database
       const existingEventsResult = await request
-        .input("de", sql.Date, eventDate)
+        .input("de", sql.NVarChar(10), eventDate)
         .query("SELECT id, event_code FROM event_schedule WHERE date_event=@de");
       
       const existingEvents = existingEventsResult.recordset;
@@ -1196,6 +1364,11 @@ export function createServer() {
       const eventsToDelete = existingEvents.filter(e => !incomingIds.includes(e.id));
 
       for (const evToDelete of eventsToDelete) {
+        // Hapus jawaban/pertanyaan event sebelum event dihapus agar tidak meninggalkan data terkait
+        await new sql.Request(transaction)
+          .input("eventId", sql.Int, evToDelete.id)
+          .query("DELETE FROM questions WHERE event_id=@eventId");
+
         // Hapus detail peserta first (FK cascade)
         await new sql.Request(transaction)
           .input("eventId", sql.Int, evToDelete.id)
@@ -1250,7 +1423,7 @@ export function createServer() {
             .input("ec", sql.NVarChar, generatedCode)
             .input("en", sql.NVarChar, cleanName)
             .input("d", sql.NVarChar, cleanDesc)
-            .input("de", sql.Date, eventDate)
+            .input("de", sql.NVarChar(10), eventDate)
             .input("st", sql.NVarChar, cleanStart)
             .input("et", sql.NVarChar, cleanEnd)
             .input("pa", sql.NVarChar, access)
@@ -1258,7 +1431,7 @@ export function createServer() {
             .query(`
               INSERT INTO event_schedule (event_code, event_name, description, date_event, start_time, end_time, participant_access, event_type, created_at, updated_at)
               OUTPUT INSERTED.id
-              VALUES (@ec, @en, @d, @de, @st, @et, @pa, @evt, GETDATE(), GETDATE())
+              VALUES (@ec, @en, @d, CAST(@de AS DATE), @st, @et, @pa, @evt, GETDATE(), GETDATE())
             `);
           
           eventId = insertResult.recordset[0].id;
@@ -1324,6 +1497,9 @@ export function createServer() {
   app.delete("/api/events/:id", authenticateToken, requireAdmin, async (req: any, res) => {
     try {
       const pool = await getConnection();
+      await pool.request()
+        .input("id", sql.Int, req.params.id)
+        .query("DELETE FROM questions WHERE event_id=@id");
       // Remove participants first (FK)
       await pool.request()
         .input("id", sql.Int, req.params.id)
@@ -2942,8 +3118,288 @@ app.post(
   }
 );
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // EVENT LOCK / UNLOCK
+  // ════════════════════════════════════════════════════════════════════════════
+
+  // PATCH /api/events/:id/lock  — toggle is_locked
+  app.patch("/api/events/:id/lock", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      const ev = await pool.request()
+        .input("id", sql.Int, req.params.id)
+        .query("SELECT id, is_locked FROM event_schedule WHERE id=@id");
+      if (!ev.recordset.length)
+        return res.status(404).json({ success: false, message: "Event not found" });
+
+      const newLocked = ev.recordset[0].is_locked ? 0 : 1;
+      await pool.request()
+        .input("id", sql.Int, req.params.id)
+        .input("lk", sql.Bit, newLocked)
+        .query("UPDATE event_schedule SET is_locked=@lk, updated_at=GETDATE() WHERE id=@id");
+
+      await log(pool, req.user.id, newLocked ? "LOCK_EVENT" : "UNLOCK_EVENT", "event",
+        parseInt(req.params.id), `Event ${req.params.id} ${newLocked ? "locked" : "unlocked"}`, req.ip);
+
+      res.json({ success: true, is_locked: !!newLocked, message: newLocked ? "Event locked" : "Event unlocked" });
+    } catch (e: any) {
+      console.error("[LOCK EVENT]", e);
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // EVENT QUESTIONS (Word Search, linked to event_schedule)
+  // ════════════════════════════════════════════════════════════════════════════
+
+  // GET /api/events/:id/questions  — list questions for an event
+  app.get("/api/events/:id/questions", authenticateToken, requireAnyRole, async (req, res) => {
+    try {
+      const pool = await getConnection();
+      const r = await pool.request()
+        .input("eid", sql.Int, req.params.id)
+        .query(`SELECT id, title, question_text, correct_answer, puzzle_grid, question_order, points, is_active
+                FROM questions WHERE event_id=@eid ORDER BY question_order ASC`);
+      res.json({ success: true, data: r.recordset });
+    } catch (e: any) {
+      console.error("[GET EVENT QUESTIONS]", e);
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // POST /api/events/:id/questions  — add question to event (max 3)
+  app.post("/api/events/:id/questions", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { clue, answer, puzzleGrid, questionOrder } = req.body;
+      if (!clue?.trim() || !answer?.trim())
+        return res.status(400).json({ success: false, message: "clue and answer required" });
+
+      const pool = await getConnection();
+
+      // Max 3 questions per event
+      const count = await pool.request()
+        .input("eid", sql.Int, req.params.id)
+        .query("SELECT COUNT(*) as c FROM questions WHERE event_id=@eid AND is_active=1");
+      if ((count.recordset[0]?.c ?? 0) >= 3)
+        return res.status(400).json({ success: false, message: "Maksimal 3 question per event" });
+
+      const order = questionOrder ?? ((count.recordset[0]?.c ?? 0) + 1);
+      const r = await pool.request()
+        .input("eid", sql.Int, req.params.id)
+        .input("title", sql.NVarChar, clue.trim().slice(0, 200))
+        .input("qt", sql.NVarChar, clue.trim())
+        .input("ans", sql.NVarChar, answer.trim().toUpperCase())
+        .input("pg", sql.NVarChar, puzzleGrid || null)
+        .input("ord", sql.Int, order)
+        .input("cb", sql.Int, req.user.id)
+        .query(`INSERT INTO questions
+          (title, question_text, question_type, correct_answer, puzzle_grid, event_id,
+           question_order, points, is_active, created_by, created_at, updated_at)
+          OUTPUT INSERTED.*
+          VALUES (@title, @qt, 'word_search', @ans, @pg, @eid,
+                  @ord, 10, 1, @cb, GETDATE(), GETDATE())`);
+
+      res.status(201).json({ success: true, data: r.recordset[0] });
+    } catch (e: any) {
+      console.error("[CREATE EVENT QUESTION]", e);
+      res.status(500).json({ success: false, message: e.message || "DB error" });
+    }
+  });
+
+  // PUT /api/events/:id/questions/:qid  — update clue/answer/puzzle
+  app.put("/api/events/:id/questions/:qid", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const { clue, answer, puzzleGrid } = req.body;
+      const pool = await getConnection();
+      const rq = pool.request()
+        .input("id", sql.Int, req.params.qid)
+        .input("eid", sql.Int, req.params.id);
+      const sets: string[] = ["updated_at=GETDATE()"];
+      if (clue !== undefined) { rq.input("title", sql.NVarChar, clue.trim()); sets.push("title=@title", "question_text=@title"); }
+      if (answer !== undefined) { rq.input("ans", sql.NVarChar, answer.trim().toUpperCase()); sets.push("correct_answer=@ans"); }
+      if (puzzleGrid !== undefined) { rq.input("pg", sql.NVarChar, puzzleGrid || null); sets.push("puzzle_grid=@pg"); }
+      await rq.query(`UPDATE questions SET ${sets.join(",")} WHERE id=@id AND event_id=@eid`);
+      res.json({ success: true, message: "Question updated" });
+    } catch (e: any) {
+      console.error("[UPDATE EVENT QUESTION]", e);
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // DELETE /api/events/:id/questions/:qid
+  app.delete("/api/events/:id/questions/:qid", authenticateToken, requireAdmin, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      await pool.request()
+        .input("id", sql.Int, req.params.qid)
+        .input("eid", sql.Int, req.params.id)
+        .query("DELETE FROM questions WHERE id=@id AND event_id=@eid");
+      res.json({ success: true, message: "Question deleted" });
+    } catch (e: any) {
+      console.error("[DELETE EVENT QUESTION]", e);
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // GET /api/user/wordsearch  — word search questions for current user based on today's events
+  app.get("/api/user/wordsearch", authenticateToken, requireAnyRole, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+
+      // Get user's member_id
+      const mRes = await pool.request()
+        .input("uid", sql.Int, req.user.id)
+        .query("SELECT member_id FROM users WHERE id=@uid");
+      const memberId: string | null = mRes.recordset[0]?.member_id ?? null;
+
+      // Get all events that are unlocked, have questions, and user can access
+      // Access rule: participant_access='Everyone' → all users can play
+      const evRes = await pool.request().query(`
+        SELECT DISTINCT es.id as event_id, es.event_name, es.date_event, es.start_time, es.end_time,
+               es.participant_access, es.is_locked
+        FROM event_schedule es
+        INNER JOIN questions q ON q.event_id = es.id AND q.is_active = 1
+        WHERE es.is_locked = 0
+          AND es.participant_access = 'Everyone'
+        ORDER BY es.date_event DESC
+      `);
+
+      const eventRows = evRes.recordset;
+      const result = [];
+
+      for (const ev of eventRows) {
+        // Get questions for this event
+        const qRes = await pool.request()
+          .input("eid", sql.Int, ev.event_id)
+          .query(`SELECT id, title, question_text, correct_answer, puzzle_grid, question_order, points
+                  FROM questions WHERE event_id=@eid AND is_active=1 ORDER BY question_order ASC`);
+
+        const questions = qRes.recordset.map((q: any) => {
+          // Check if user already answered this question
+          return q;
+        });
+
+        if (questions.length === 0) continue;
+
+        // Check answered status per question for this user
+        const answeredRes = memberId
+          ? await pool.request()
+              .input("mid", sql.NVarChar, memberId)
+              .input("eid", sql.Int, ev.event_id)
+              .query(`SELECT ua.question_id, ua.is_correct FROM user_answers ua
+                      INNER JOIN questions q ON ua.question_id = q.id
+                      WHERE ua.member_id=@mid AND q.event_id=@eid`)
+          : { recordset: [] };
+
+        const answeredMap = new Map<number, boolean>();
+        for (const a of answeredRes.recordset) answeredMap.set(a.question_id, a.is_correct);
+
+        result.push({
+          event_id: ev.event_id,
+          event_name: ev.event_name,
+          date_event: ev.date_event,
+          start_time: ev.start_time,
+          questions: questions.map((q: any) => ({
+            id: q.id,
+            clue: q.question_text,
+            answer: q.correct_answer,
+            puzzle_grid: q.puzzle_grid,
+            question_order: q.question_order,
+            points: q.points,
+            answered: answeredMap.has(q.id),
+            is_correct: answeredMap.get(q.id) ?? null,
+          })),
+        });
+      }
+
+      res.json({ success: true, data: result });
+    } catch (e: any) {
+      console.error("[GET USER WORDSEARCH]", e);
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // POST /api/user/wordsearch/:questionId/submit  — submit answer (anti-spam: one attempt)
+  app.post("/api/user/wordsearch/:questionId/submit", authenticateToken, requireAnyRole, async (req: any, res) => {
+    try {
+      const { answer } = req.body;
+      if (!answer?.trim())
+        return res.status(400).json({ success: false, message: "answer required" });
+
+      const pool = await getConnection();
+
+      // Get user member_id
+      const mRes = await pool.request()
+        .input("uid", sql.Int, req.user.id)
+        .query("SELECT member_id FROM users WHERE id=@uid");
+      const memberId: string | null = mRes.recordset[0]?.member_id ?? null;
+      if (!memberId)
+        return res.status(400).json({ success: false, message: "User member_id not found" });
+
+      const qid = parseInt(req.params.questionId);
+
+      // Get question
+      const qRes = await pool.request()
+        .input("id", sql.Int, qid)
+        .query("SELECT id, correct_answer, points, event_id FROM questions WHERE id=@id AND is_active=1");
+      if (!qRes.recordset.length)
+        return res.status(404).json({ success: false, message: "Question not found" });
+
+      const question = qRes.recordset[0];
+
+      // Anti-spam: check if already answered
+      const dupCheck = await pool.request()
+        .input("mid", sql.NVarChar, memberId)
+        .input("qid", sql.Int, qid)
+        .query("SELECT id, is_correct FROM user_answers WHERE member_id=@mid AND question_id=@qid");
+      if (dupCheck.recordset.length) {
+        return res.json({
+          success: true,
+          already_answered: true,
+          is_correct: dupCheck.recordset[0].is_correct,
+          points_earned: 0,
+          message: "Kamu sudah menjawab soal ini",
+        });
+      }
+
+      const isCorrect = answer.trim().toUpperCase() === question.correct_answer.toUpperCase();
+      const pointsEarned = isCorrect ? (question.points ?? 10) : 0;
+
+      // Record answer
+      await pool.request()
+        .input("mid", sql.NVarChar, memberId)
+        .input("qid", sql.Int, qid)
+        .input("ans", sql.NVarChar, answer.trim().toUpperCase())
+        .input("ic", sql.Bit, isCorrect ? 1 : 0)
+        .input("pts", sql.Int, pointsEarned)
+        .query(`INSERT INTO user_answers (member_id, question_id, answer_text, is_correct, points_earned, answered_at)
+                VALUES (@mid, @qid, @ans, @ic, @pts, GETDATE())`);
+
+      // Award points if correct
+      if (isCorrect && pointsEarned > 0) {
+        await pool.request()
+          .input("mid", sql.NVarChar, memberId)
+          .input("pts", sql.Int, pointsEarned)
+          .query(`IF EXISTS (SELECT 1 FROM member_point WHERE member_id=@mid)
+                    UPDATE member_point SET points=points+@pts WHERE member_id=@mid
+                  ELSE
+                    INSERT INTO member_point (member_id, points) VALUES (@mid, @pts)`);
+      }
+
+      res.json({
+        success: true,
+        is_correct: isCorrect,
+        points_earned: pointsEarned,
+        message: isCorrect ? `Benar! +${pointsEarned} poin` : "Jawaban salah. Coba lagi lihat puzzle-nya!",
+      });
+    } catch (e: any) {
+      console.error("[SUBMIT WORDSEARCH]", e);
+      res.status(500).json({ success: false, message: e.message || "DB error" });
+    }
+  });
+
   // ============================================
-// QUESTIONS API
+// QUESTIONS API (legacy standalone — kept for compatibility)
 // ============================================
 
 const questionRepo = new QuestionRepository();
@@ -3030,15 +3486,10 @@ app.post('/api/questions', authenticateToken, requireAdmin, async (req: any, res
     const question = await questionRepo.create({
       title,
       questionText,
-      questionType: questionType as 'multiple_choice' | 'true_false' | 'short_answer',
-      options: options ? JSON.stringify(options) : null,
+      questionType: questionType as string,
       correctAnswer: String(correctAnswer),
       points: parseInt(points) || 10,
-      timeLimitMinutes: parseInt(timeLimitMinutes) || 5,
       createdBy: req.user.id,
-      startDate: startDate || null,
-      endDate: endDate || null,
-      maxAttempts: parseInt(maxAttempts) || 1
     });
     
     const pool = await getConnection();
@@ -3193,19 +3644,15 @@ app.post('/api/questions/:id/submit', authenticateToken, requireAnyRole, async (
       .input('answer_text', sql.NVarChar, userAnswer)
       .input('is_correct', sql.Bit, isCorrect ? 1 : 0)
       .input('points_earned', sql.Int, pointsEarned)
-      .input('time_spent_seconds', sql.Int, timeSpentSeconds || null)
-      .input('attempt_number', sql.Int, nextAttempt)
       .query(`
         INSERT INTO user_answers 
-        (member_id, question_id, answer_text, is_correct, points_earned, time_spent_seconds, attempt_number, answered_at)
-        VALUES (@member_id, @question_id, @answer_text, @is_correct, @points_earned, @time_spent_seconds, @attempt_number, GETDATE());
+        (member_id, question_id, answer_text, is_correct, points_earned, answered_at)
+        VALUES (@member_id, @question_id, @answer_text, @is_correct, @points_earned, GETDATE());
         
         SELECT * FROM user_answers WHERE id = SCOPE_IDENTITY();
       `);
     
     const answerResult = insertResult.recordset[0];
-    
-    console.log('✅ Answer saved:', answerResult);
 
     // If correct, insert into point_logs
     if (isCorrect) {
@@ -3214,7 +3661,7 @@ app.post('/api/questions/:id/submit', authenticateToken, requireAnyRole, async (
         .input("member_id", sql.NVarChar, memberId)
         .input("points", sql.Int, 10)
         .input("type", sql.NVarChar, "question")
-        .input("notes", sql.NVarChar, `Bible Study Quiz reward for question: ${question.title}`)
+        .input("notes", sql.NVarChar, `Question reward: ${question.question_text?.slice(0, 80)}`)
         .query(`
           INSERT INTO point_logs (member_id, points, type, notes, created_at)
           VALUES (@member_id, @points, @type, @notes, GETDATE())

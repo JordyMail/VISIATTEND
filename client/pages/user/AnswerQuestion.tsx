@@ -1,326 +1,330 @@
-// client/pages/user/AnswerQuestion.tsx
-import { useState, useEffect, useRef } from "react";
+﻿// client/pages/user/AnswerQuestion.tsx â€” Word Search Game
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  HelpCircle, Clock, Star, CheckCircle2, XCircle,
-  ArrowLeft, ArrowRight, Loader2, Timer, Trophy
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Trophy, Loader2, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import { questionApi } from "@/services/api";
+import { wordSearchApi } from "@/services/api";
+import { getCellsInLine, deserializeGrid, generateWordSearch } from "@/lib/wordSearch";
 import { toast } from "@/components/ui/use-toast";
+import { format, parseISO } from "date-fns";
+import { id as idLocale } from "date-fns/locale";
 
-interface Question {
+interface QuestionData {
   id: number;
-  title: string;
-  question_text: string;
-  question_type: 'multiple_choice' | 'true_false' | 'short_answer';
-  options?: string;
+  clue: string;
+  answer: string;
+  puzzle_grid: string | null;
+  question_order: number;
   points: number;
-  time_limit_minutes: number;
-  attempts_count: number;
-  max_attempts: number;
+  answered: boolean;
+  is_correct: boolean | null;
 }
 
-interface AnswerResult {
-  id?: number;
-  isCorrect: boolean;
-  pointsEarned: number;
-  message: string;
+interface EventData {
+  event_id: number;
+  event_name: string;
+  date_event: string;
+  start_time: string;
+  questions: QuestionData[];
 }
 
 export default function AnswerQuestion() {
   const navigate = useNavigate();
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [answer, setAnswer] = useState("");
+  const [events, setEvents] = useState<EventData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentEventIdx, setCurrentEventIdx] = useState(0);
+  const [currentQIdx, setCurrentQIdx] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<AnswerResult | null>(null);
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [startTime, setStartTime] = useState<number>(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    loadQuestions();
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
+  // Drag-selection state
+  const [selecting, setSelecting] = useState(false);
+  const [startCell, setStartCell] = useState<{ r: number; c: number } | null>(null);
+  const [hoverCell, setHoverCell] = useState<{ r: number; c: number } | null>(null);
+  const [selectedCells, setSelectedCells] = useState<{ r: number; c: number }[]>([]);
+  const [foundCells, setFoundCells] = useState<{ r: number; c: number }[]>([]);
+  const [lastResult, setLastResult] = useState<{ correct: boolean; points: number; message: string } | null>(null);
 
-  useEffect(() => {
-    if (questions.length > 0 && currentIndex < questions.length) {
-      startTimer();
-    }
-  }, [currentIndex, questions]);
-
-  const loadQuestions = async () => {
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const r = await questionApi.getAvailable();
-      setQuestions(r.data.data);
+      const r = await wordSearchApi.getForUser();
+      setEvents(r.data.data ?? []);
     } catch {
       toast({ title: "Error", description: "Gagal memuat soal", variant: "destructive" });
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Reset selection when changing question
+  useEffect(() => {
+    setSelecting(false);
+    setStartCell(null);
+    setHoverCell(null);
+    setSelectedCells([]);
+    setFoundCells([]);
+    setLastResult(null);
+  }, [currentEventIdx, currentQIdx]);
+
+  const currentEvent = events[currentEventIdx];
+  const currentQuestion = currentEvent?.questions[currentQIdx];
+
+  const grid = currentQuestion?.puzzle_grid
+    ? deserializeGrid(currentQuestion.puzzle_grid)
+    : currentQuestion?.answer
+    ? generateWordSearch(currentQuestion.answer)
+    : null;
+
+  const previewCells: { r: number; c: number }[] =
+    selecting && startCell && hoverCell
+      ? (getCellsInLine(startCell.r, startCell.c, hoverCell.r, hoverCell.c) ?? [])
+      : [];
+
+  const isCellPreview = (r: number, c: number) => previewCells.some(s => s.r === r && s.c === c);
+  const isCellSelected = (r: number, c: number) => selectedCells.some(s => s.r === r && s.c === c);
+  const isCellFound = (r: number, c: number) => foundCells.some(s => s.r === r && s.c === c);
+
+  const handleCellDown = (r: number, c: number) => {
+    if (currentQuestion?.answered || lastResult?.correct) return;
+    setSelecting(true);
+    setStartCell({ r, c });
+    setHoverCell({ r, c });
+    setSelectedCells([]);
   };
 
-  const startTimer = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    const question = questions[currentIndex];
-    setTimeLeft(question.time_limit_minutes);
-    setStartTime(Date.now());
-    
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          handleSubmit(true);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+  const handleCellEnter = (r: number, c: number) => {
+    if (!selecting) return;
+    setHoverCell({ r, c });
   };
 
-  const handleSubmit = async (timeUp = false) => {
-    if (!answer.trim() && !timeUp) {
-      toast({ title: "Perhatian", description: "Masukkan jawaban terlebih dahulu" });
-      return;
+  const handleCellUp = async (r: number, c: number) => {
+    if (!selecting || !startCell || !grid) return;
+    setSelecting(false);
+    const cells = getCellsInLine(startCell.r, startCell.c, r, c);
+    if (!cells || cells.length < 2) { setSelectedCells([]); return; }
+
+    const word = cells.map(cell => grid.grid[cell.r][cell.c]).join("");
+    const wordRev = word.split("").reverse().join("");
+    const answer = (currentQuestion.answer || "").toUpperCase();
+    const isMatch = word === answer || wordRev === answer;
+    setSelectedCells(cells);
+
+    if (isMatch) {
+      setFoundCells(cells);
+      await submitAnswer(answer);
+    } else {
+      setTimeout(() => setSelectedCells([]), 700);
     }
+  };
 
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    const timeSpent = Math.floor((Date.now() - startTime) / 1000);
+  const submitAnswer = async (answer: string) => {
+    if (!currentQuestion || submitting) return;
     setSubmitting(true);
-
     try {
-      const r = await questionApi.submitAnswer(
-        questions[currentIndex].id,
-        timeUp ? "" : answer,
-        timeSpent
-      );
-      
-      console.log('Submit result:', r.data); // Debug
-      
-      setResult({
-        isCorrect: r.data.data.isCorrect,
-        pointsEarned: r.data.data.pointsEarned,
-        message: r.data.data.message || r.data.message
+      const res = await wordSearchApi.submit(currentQuestion.id, answer);
+      const d = res.data;
+      setLastResult({
+        correct: d.isCorrect ?? d.correct ?? true,
+        points: d.pointsEarned ?? d.points ?? 0,
+        message: d.message ?? "Benar!",
       });
-      
-      if (r.data.data.isCorrect) {
-        toast({ 
-          title: "✅ Benar!", 
-          description: `Kamu mendapatkan ${r.data.data.pointsEarned} poin!` 
-        });
-      } else {
-        toast({ 
-          title: "❌ Salah", 
-          description: r.data.data.message || "Coba lagi!" 
-        });
-      }
+      load();
     } catch (e: any) {
-      console.error('Submit error:', e);
-      toast({ 
-        title: "Error", 
-        description: e.response?.data?.message || "Gagal submit jawaban",
-        variant: "destructive" 
-      });
+      setLastResult({ correct: false, points: 0, message: e.response?.data?.message || "Gagal submit" });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const nextQuestion = () => {
-    if (currentIndex < questions.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-      setAnswer("");
-      setResult(null);
+  const goNextQuestion = () => {
+    if (!currentEvent) return;
+    if (currentQIdx < currentEvent.questions.length - 1) {
+      setCurrentQIdx(prev => prev + 1);
+    } else if (currentEventIdx < events.length - 1) {
+      setCurrentEventIdx(prev => prev + 1);
+      setCurrentQIdx(0);
     }
   };
 
-  const formatTime = (seconds: number) => {
-    return `${seconds} detik`;
-  };
-
-  const progressPercent = timeLeft > 0 
-    ? ((questions[currentIndex]?.time_limit_minutes - timeLeft) / (questions[currentIndex]?.time_limit_minutes)) * 100
-    : 100;
+  const hasMoreQuestion = currentEvent && (
+    currentQIdx < currentEvent.questions.length - 1 ||
+    currentEventIdx < events.length - 1
+  );
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin" />
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  if (questions.length === 0) {
+  if (events.length === 0) {
     return (
-      <div className="p-4 md:p-6 max-w-lg mx-auto">
-        <Card>
-          <CardContent className="py-16 text-center">
-            <Trophy className="w-16 h-16 mx-auto text-yellow-500 mb-4" />
-            <h2 className="text-xl font-bold mb-2">Tidak Ada Soal Tersedia</h2>
-            <p className="text-muted-foreground mb-4">
-              Semua soal sudah dijawab atau belum ada soal baru.
-            </p>
-            <Button onClick={() => navigate("/user/dashboard")}>
-              Kembali ke Dashboard
-            </Button>
+      <div className="flex items-center justify-center min-h-[60vh] p-4">
+        <Card className="max-w-sm w-full">
+          <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+            <Trophy className="h-12 w-12 text-amber-400" />
+            <p className="text-lg font-semibold">Tidak Ada Soal Tersedia</p>
+            <p className="text-sm text-muted-foreground">Semua soal sudah dijawab atau belum ada soal baru.</p>
+            <Button onClick={() => navigate("/user/dashboard")}>Kembali ke Dashboard</Button>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  const currentQuestion = questions[currentIndex];
+  if (!currentEvent || !currentQuestion) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh] p-4">
+        <Card className="max-w-sm w-full">
+          <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+            <CheckCircle2 className="h-12 w-12 text-green-500" />
+            <p className="text-lg font-semibold">Semua Soal Selesai!</p>
+            <p className="text-sm text-muted-foreground">Kamu sudah menyelesaikan semua soal yang tersedia.</p>
+            <Button onClick={() => navigate("/user/dashboard")}>Kembali ke Dashboard</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const totalQuestions = currentEvent.questions.length;
+  const answeredCount = currentEvent.questions.filter(q => q.answered).length;
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" onClick={() => navigate("/user/dashboard")} className="gap-2">
-          <ArrowLeft className="w-4 h-4" /> Kembali
-        </Button>
-        <Badge variant="outline" className="gap-1">
-          <Star className="w-3 h-3 text-yellow-500" /> {currentQuestion.points} Poin
-        </Badge>
-      </div>
-
-      {/* Progress */}
-      <div className="space-y-2">
-        <div className="flex justify-between text-sm">
-          <span>Soal {currentIndex + 1} dari {questions.length}</span>
-          <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3" /> {formatTime(timeLeft)}
-          </span>
+    <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
+      {/* Event Header */}
+      <div>
+        <h1 className="text-xl font-bold">{currentEvent.event_name}</h1>
+        <p className="text-sm text-muted-foreground">
+          {currentEvent.date_event
+            ? format(parseISO(currentEvent.date_event), "EEEE, d MMMM yyyy", { locale: idLocale })
+            : ""}
+        </p>
+        <div className="flex items-center gap-2 mt-1">
+          <Badge variant="secondary" className="text-xs">Soal {currentQIdx + 1} / {totalQuestions}</Badge>
+          <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+            {answeredCount} / {totalQuestions} Selesai
+          </Badge>
         </div>
-        <Progress value={progressPercent} className="h-2" />
       </div>
 
-      {/* Question Card */}
       <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <HelpCircle className="w-5 h-5 text-primary" />
-                {currentQuestion.title}
-              </CardTitle>
-            </div>
+        <CardContent className="p-4 space-y-4">
+          {/* Clue */}
+          <div className="rounded-lg bg-violet-50 border border-violet-200 p-3">
+            <p className="text-xs font-semibold text-violet-600 uppercase tracking-wide mb-1">Find the hidden word</p>
+            <p className="text-sm font-medium text-slate-800">{currentQuestion.clue}</p>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-base">{currentQuestion.question_text}</p>
 
-          {/* Multiple Choice Options */}
-          {currentQuestion.question_type === 'multiple_choice' && (
-            <RadioGroup value={answer} onValueChange={setAnswer}>
-              {JSON.parse(currentQuestion.options || '[]').map((option: string, idx: number) => (
-                <div key={idx} className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-                  <RadioGroupItem value={String.fromCharCode(65 + idx)} id={`option-${idx}`} />
-                  <Label htmlFor={`option-${idx}`} className="flex-1 cursor-pointer">
-                    <span className="font-medium">{String.fromCharCode(65 + idx)}.</span> {option}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
+          {currentQuestion.answered && (
+            <div className="flex items-center gap-2 rounded-lg p-3 text-sm bg-green-50 text-green-700 border border-green-200">
+              <CheckCircle2 className="h-4 w-4 shrink-0" /> Soal ini sudah dijawab dengan benar.
+            </div>
           )}
 
-          {/* True/False Options */}
-          {currentQuestion.question_type === 'true_false' && (
-            <RadioGroup value={answer} onValueChange={setAnswer}>
-              {['Benar', 'Salah'].map((option) => (
-                <div key={option} className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-                  <RadioGroupItem value={option} id={`option-${option}`} />
-                  <Label htmlFor={`option-${option}`} className="flex-1 cursor-pointer">{option}</Label>
-                </div>
-              ))}
-            </RadioGroup>
+          {lastResult && (
+            <div className={`flex items-center gap-2 rounded-lg p-3 text-sm font-medium
+              ${lastResult.correct ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-600 border border-red-200"}`}>
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              {lastResult.message}
+              {lastResult.correct && lastResult.points > 0 && (
+                <span className="ml-auto font-bold">+{lastResult.points} pts</span>
+              )}
+            </div>
           )}
 
-          {/* Short Answer */}
-          {currentQuestion.question_type === 'short_answer' && (
-            <Textarea
-              rows={3}
-              placeholder="Tulis jawaban singkat..."
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-            />
-          )}
-
-                {/* Result */}
-                {result && (
-                <div className={`p-4 rounded-lg ${
-                    result.isCorrect 
-                    ? 'bg-green-50 border border-green-200' 
-                    : 'bg-red-50 border border-red-200'
-                }`}>
-                    <div className="flex items-center gap-2">
-                    {result.isCorrect ? (
-                        <CheckCircle2 className="w-5 h-5 text-green-600" />
-                    ) : (
-                        <XCircle className="w-5 h-5 text-red-600" />
-                    )}
-                    <div>
-                        <p className={`font-semibold ${
-                        result.isCorrect ? 'text-green-800' : 'text-red-800'
-                        }`}>
-                        {result.isCorrect ? 'Jawaban Benar!' : 'Jawaban Salah'}
-                        </p>
-                        <p className="text-sm mt-1">
-                        {result.message}
-                        </p>
-                    </div>
-                    </div>
-                </div>
+          {/* Word Search Grid */}
+          {grid ? (
+            <div
+              className="flex justify-center select-none"
+              onMouseLeave={() => {
+                if (selecting) { setSelecting(false); setStartCell(null); setHoverCell(null); setSelectedCells([]); }
+              }}
+            >
+              <div
+                className="inline-grid gap-px border border-slate-200 bg-slate-200 rounded-lg overflow-hidden"
+                style={{ gridTemplateColumns: `repeat(${grid.size}, 2rem)` }}
+              >
+                {grid.grid.map((row, r) =>
+                  row.map((cell, c) => {
+                    const found = isCellFound(r, c);
+                    const preview = isCellPreview(r, c);
+                    const selected = isCellSelected(r, c);
+                    return (
+                      <div
+                        key={`${r}-${c}`}
+                        data-r={r}
+                        data-c={c}
+                        className={`w-8 h-8 flex items-center justify-center text-sm font-bold cursor-pointer transition-colors
+                          ${found ? "bg-green-400 text-white"
+                          : preview ? "bg-violet-300 text-violet-900"
+                          : selected ? "bg-red-200 text-red-800"
+                          : "bg-white hover:bg-violet-50 text-slate-800"}`}
+                        onMouseDown={() => handleCellDown(r, c)}
+                        onMouseEnter={() => handleCellEnter(r, c)}
+                        onMouseUp={() => handleCellUp(r, c)}
+                      >
+                        {cell}
+                      </div>
+                    );
+                  })
                 )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-center py-8 text-muted-foreground text-sm">
+              Puzzle tidak tersedia.
+            </div>
+          )}
+
+          {submitting && (
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Memeriksa jawaban...
+            </div>
+          )}
+
+          {!currentQuestion.answered && !lastResult && (
+            <p className="text-center text-xs text-muted-foreground">
+              Klik dan seret pada grid untuk memilih kata yang tersembunyi.
+            </p>
+          )}
+
+          {(lastResult?.correct || currentQuestion.answered) && hasMoreQuestion && (
+            <Button className="w-full gap-2" onClick={goNextQuestion}>
+              Soal Berikutnya <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
+          {!hasMoreQuestion && (lastResult?.correct || currentQuestion.answered) && (
+            <Button className="w-full" onClick={() => navigate("/user/dashboard")}>
+              Selesai â€” Kembali ke Dashboard
+            </Button>
+          )}
         </CardContent>
       </Card>
 
-      {/* Actions */}
-      <div className="flex gap-3">
-        {!result ? (
-          <Button 
-            className="flex-1 gap-2" 
-            onClick={() => handleSubmit()}
-            disabled={submitting || !answer.trim()}
-          >
-            {submitting ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Mengirim...</>
-            ) : (
-              <><CheckCircle2 className="w-4 h-4" /> Submit Jawaban</>
-            )}
-          </Button>
-        ) : (
-          <>
-            {!result.isCorrect && (
-              <Button 
-                variant="outline" 
-                className="flex-1"
-                onClick={() => { setResult(null); setAnswer(""); }}
-              >
-                Coba Lagi
-              </Button>
-            )}
-            {currentIndex < questions.length - 1 && (
-              <Button 
-                className="flex-1 gap-2"
-                onClick={nextQuestion}
-              >
-                Soal Berikutnya <ArrowRight className="w-4 h-4" />
-              </Button>
-            )}
-          </>
-        )}
-      </div>
+      {totalQuestions > 1 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {currentEvent.questions.map((q, idx) => (
+            <button
+              key={q.id}
+              type="button"
+              className={`w-8 h-8 rounded-full text-xs font-bold border transition-colors
+                ${idx === currentQIdx ? "bg-primary text-white border-primary"
+                : q.answered ? "bg-green-100 text-green-700 border-green-300"
+                : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"}`}
+              onClick={() => setCurrentQIdx(idx)}
+            >
+              {idx + 1}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

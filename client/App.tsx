@@ -33,7 +33,6 @@ import Announcements from "@/pages/admin/Announcements";
 import QRManager from "@/pages/admin/QRManager";
 import AdminLeaderboard from "@/pages/admin/Leaderboard";
 import AdminSettings from "@/pages/Settings";
-import QuestionsManagement from "@/pages/admin/Questions";
 
 // User pages
 import UserDashboard from "@/pages/user/Dashboard";
@@ -115,11 +114,8 @@ export default function App() {
           <Route path="system" element={<SystemSettings />} />
           <Route path="audit" element={<AuditLogs />} />
           <Route path="settings" element={<AdminSettings />} />
-          <Route path="questions" element={<QuestionsManagement />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
-
-        {/* ══ ADMIN ══════════════════════════════════════════════════════════ */}
         <Route
           path="/admin"
           element={
@@ -136,7 +132,6 @@ export default function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="leaderboard" element={<AdminLeaderboard />} />
           <Route path="settings" element={<AdminSettings />} />
-          <Route path="questions" element={<QuestionsManagement />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 
