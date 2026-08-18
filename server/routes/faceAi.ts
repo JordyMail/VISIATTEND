@@ -2,6 +2,7 @@ import { RequestHandler } from "express";
 import { getFaceAiUser, recordFaceAiAttendance, upsertFaceAiUser } from "../faceAiStore";
 import { runFaceAiCommand } from "../faceAiBridge";
 import { getConnection, sql } from "../db/config";
+import { getActiveEvent } from "../utils/timezone.js";
 
 interface RegistrationPayload {
   name: string;
@@ -179,12 +180,24 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
     }
 
     const pool = await getConnection();
+
+    // Level 1: Website Availability Check (Active Event Detection)
+    const activeEvent = await getActiveEvent(pool);
+    if (!activeEvent) {
+      res.status(403).json({
+        success: false,
+        message: "Tidak ada event aktif saat ini. Website closed.",
+        code: "NO_ACTIVE_EVENT"
+      });
+      return;
+    }
+
     const memberResult = await pool
       .request()
       .input("email", sql.NVarChar, profile?.email ?? null)
       .input("name", sql.NVarChar, resolvedName)
       .query(`
-        SELECT TOP 1 id, member_id, name, email
+        SELECT TOP 1 id, member_id, name, email, category
         FROM user_member
         WHERE
           (@email IS NOT NULL AND LOWER(email) = LOWER(@email))
@@ -201,20 +214,54 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
       return;
     }
 
+    // Level 2: Participant Access Control List Check
+    if (activeEvent.participant_access === "Selected Members" || activeEvent.participant_access === "Excluded Members") {
+      const participantAccessResult = await pool.request()
+        .input("eventId", sql.Int, activeEvent.id)
+        .input("memberId", sql.NVarChar, member.member_id)
+        .query(`
+          SELECT access_type 
+          FROM event_participants 
+          WHERE event_id = @eventId AND member_id = @memberId
+        `);
+      
+      const hasRecord = participantAccessResult.recordset.length > 0;
+      
+      if (activeEvent.participant_access === "Selected Members" && !hasRecord) {
+        res.status(403).json({
+          success: false,
+          message: `Anda tidak terdaftar sebagai peserta untuk event "${activeEvent.event_name}" ini. (Khusus Anggota Terpilih)`,
+          code: "PARTICIPANT_ACCESS_DENIED"
+        });
+        return;
+      }
+      
+      if (activeEvent.participant_access === "Excluded Members" && hasRecord) {
+        res.status(403).json({
+          success: false,
+          message: `Anda tidak diperbolehkan mengikuti event "${activeEvent.event_name}". (Anggota Dikecualikan)`,
+          code: "PARTICIPANT_ACCESS_DENIED"
+        });
+        return;
+      }
+    }
+
+    // Duplicate Check-in validation for active event
     const duplicateResult = await pool
       .request()
       .input("member_id", sql.NVarChar, member.member_id)
+      .input("event_code", sql.NVarChar, activeEvent.event_code)
       .query(`
         SELECT TOP 1 id, attendance_date
         FROM attendance_member
         WHERE member_id = @member_id
-          AND CAST(attendance_date AS DATE) = CAST(GETDATE() AS DATE)
+          AND event_code = @event_code
       `);
 
     if (duplicateResult.recordset.length > 0) {
       res.status(409).json({
         success: false,
-        message: "Sudah melakukan attendance hari ini",
+        message: `Sudah melakukan attendance untuk event "${activeEvent.event_name}"`,
         data: {
           memberId: member.member_id,
           name: member.name,
@@ -230,6 +277,7 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
       .input("member_id", sql.NVarChar, member.member_id)
       .input("name", sql.NVarChar, member.name)
       .input("points", sql.Int, 10)
+      .input("event_code", sql.NVarChar, activeEvent.event_code)
       .query(`
         DECLARE @InsertedAttendance TABLE (
           id INT,
@@ -241,9 +289,6 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
           created_at DATETIME
         );
 
-        DECLARE @TodayEventCode NVARCHAR(20);
-        SELECT TOP 1 @TodayEventCode = event_code FROM event_schedule WHERE date_event = CAST(GETDATE() AS DATE);
-
         INSERT INTO attendance_member (user_id, member_id, name, attendance_date, points, event_code)
         OUTPUT 
           INSERTED.id, 
@@ -254,7 +299,7 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
           INSERTED.points, 
           INSERTED.created_at
         INTO @InsertedAttendance
-        VALUES (@user_id, @member_id, @name, GETDATE(), @points, @TodayEventCode);
+        VALUES (@user_id, @member_id, @name, GETDATE(), @points, @event_code);
 
         SELECT * FROM @InsertedAttendance;
       `);
@@ -304,10 +349,10 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
     });
   } catch (error) {
     const sqlMessage = error instanceof Error ? error.message : "";
-    if (sqlMessage.includes("UX_attendance_member_member_day")) {
+    if (sqlMessage.includes("UX_attendance_member_member_day") || sqlMessage.includes("UX_attendance_member_member_event")) {
       res.status(409).json({
         success: false,
-        message: "Sudah melakukan attendance hari ini",
+        message: "Sudah melakukan attendance untuk event ini",
       });
       return;
     }

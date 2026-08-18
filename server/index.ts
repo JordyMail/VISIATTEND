@@ -31,6 +31,7 @@ import {
   handleUpdateRegularEvent,
   handleDeleteRegularEvent,
 } from "./routes/regularEvent.js";
+import { getActiveEvent } from "./utils/timezone.js";
 import nodemailer from "nodemailer";
 
 // ─── Email transporter ────────────────────────────────────────────────────────
@@ -958,13 +959,14 @@ export function createServer() {
   app.get("/api/attendance-schedule/today", async (_req, res) => {
     try {
       const pool = await getConnection();
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      const r = await pool.request()
-        .input("d", sql.Date, new Date(todayStr))
-        .query(`SELECT COUNT(*) as cnt FROM event_schedule WHERE date_event=@d`);
-      res.json({ success: true, isOpen: r.recordset[0].cnt > 0 });
-    } catch {
+      const activeEvent = await getActiveEvent(pool);
+      res.json({ 
+        success: true, 
+        isOpen: activeEvent !== null,
+        activeEvent: activeEvent
+      });
+    } catch (e: any) {
+      console.error("[GET TODAY SCHEDULE]", e);
       res.status(500).json({ success: false, message: "DB error" });
     }
   });
@@ -1119,50 +1121,187 @@ export function createServer() {
         .query("SELECT * FROM event_schedule WHERE id=@id");
       if (!r.recordset.length)
         return res.status(404).json({ success: false, message: "Event not found" });
-      res.json({ success: true, data: r.recordset[0] });
-    } catch {
+      
+      const event = r.recordset[0];
+      
+      // Fetch selected/excluded member IDs for this event
+      const pR = await pool.request()
+        .input("eventId", sql.Int, event.id)
+        .query("SELECT member_id FROM event_participants WHERE event_id=@eventId");
+      
+      event.selectedMemberIds = pR.recordset.map((row: any) => row.member_id);
+      
+      res.json({ success: true, data: event });
+    } catch (e: any) {
+      console.error("[GET EVENT BY ID]", e);
       res.status(500).json({ success: false, message: "DB error" });
     }
   });
 
-  // POST /api/events
+  // POST /api/events (Batch Save for a Date)
   app.post("/api/events", authenticateToken, requireAdmin, async (req: any, res) => {
+    const transaction = new sql.Transaction(await getConnection());
     try {
-      const { eventCode, eventName, description, eventDate } = req.body;
-      if (!eventName || !eventDate)
-        return res.status(400).json({ success: false, message: "eventName and eventDate required" });
-      const pool = await getConnection();
+      const { eventDate, events } = req.body;
+      if (!eventDate || !Array.isArray(events)) {
+        return res.status(400).json({ success: false, message: "eventDate and events array required" });
+      }
 
-      // Auto-generate code if not provided: EVT-YYYYMMDD (derived from the event date)
+      // Validasi 1: Maksimal 4 event per tanggal
+      if (events.length > 4) {
+        return res.status(400).json({ success: false, message: "Maksimal 4 event dalam satu hari" });
+      }
+
+      // Validasi 2: Format & isi setiap event, serta start_time < end_time
+      for (let i = 0; i < events.length; i++) {
+        const ev = events[i];
+        if (!ev.eventName || !ev.eventName.trim()) {
+          return res.status(400).json({ success: false, message: `Event ke-${i+1} harus memiliki nama` });
+        }
+        if (!ev.startTime || !ev.endTime) {
+          return res.status(400).json({ success: false, message: `Event "${ev.eventName}" harus memiliki Start Time dan End Time` });
+        }
+        if (ev.startTime >= ev.endTime) {
+          return res.status(400).json({ success: false, message: `Event "${ev.eventName}": Start Time harus lebih awal daripada End Time` });
+        }
+      }
+
+      // Validasi 3: Cek apakah ada event yang bertabrakan (overlap)
+      const sortedEvents = [...events].sort((a, b) => a.startTime.localeCompare(b.startTime));
+      for (let i = 0; i < sortedEvents.length - 1; i++) {
+        const current = sortedEvents[i];
+        const next = sortedEvents[i + 1];
+        if (current.endTime > next.startTime) {
+          return res.status(400).json({
+            success: false,
+            message: `Waktu event bertabrakan: "${current.eventName}" (${current.startTime}-${current.endTime}) bertabrakan dengan "${next.eventName}" (${next.startTime}-${next.endTime})`
+          });
+        }
+      }
+
+      // Mulai transaksi database
+      await transaction.begin();
+
+      const request = new sql.Request(transaction);
+      
+      // Ambil semua event yang ada untuk tanggal tersebut di database
+      const existingEventsResult = await request
+        .input("de", sql.Date, eventDate)
+        .query("SELECT id, event_code FROM event_schedule WHERE date_event=@de");
+      
+      const existingEvents = existingEventsResult.recordset;
+
+      // Filter event untuk dihapus (ada di DB tapi tidak dikirim dari UI)
+      const incomingIds = events.map(e => e.id).filter(id => id !== undefined);
+      const eventsToDelete = existingEvents.filter(e => !incomingIds.includes(e.id));
+
+      for (const evToDelete of eventsToDelete) {
+        // Hapus detail peserta first (FK cascade)
+        await new sql.Request(transaction)
+          .input("eventId", sql.Int, evToDelete.id)
+          .query("DELETE FROM event_participants WHERE event_id=@eventId");
+
+        // Hapus event
+        await new sql.Request(transaction)
+          .input("eventId", sql.Int, evToDelete.id)
+          .query("DELETE FROM event_schedule WHERE id=@eventId");
+
+        await log(transaction, req.user.id, "DELETE_EVENT", "event", evToDelete.id, `Deleted event with code: ${evToDelete.event_code}`, req.ip);
+      }
+
+      // Insert atau update event
       const dateDigits = String(eventDate).replace(/-/g, "");
-      let code = eventCode ? String(eventCode).toUpperCase() : `EVT-${dateDigits}`;
 
-      // Unique date check
-      const dateCheck = await pool.request()
-        .input("de", sql.Date, new Date(eventDate))
-        .query("SELECT id FROM event_schedule WHERE date_event=@de");
-      if (dateCheck.recordset.length)
-        return res.status(400).json({ success: false, message: "Tanggal ini sudah memiliki event" });
+      for (let i = 0; i < events.length; i++) {
+        const ev = events[i];
+        const cleanName = ev.eventName.trim();
+        const cleanDesc = ev.description ? ev.description.trim() : null;
+        const cleanStart = ev.startTime; // format "HH:MM"
+        const cleanEnd = ev.endTime;     // format "HH:MM"
+        const access = ev.participantAccess || "Everyone";
+        const evType = ev.eventType || "custom";
 
-      const r = await pool.request()
-        .input("ec", sql.NVarChar, code)
-        .input("en", sql.NVarChar, eventName)
-        .input("d",  sql.NVarChar, description || null)
-        .input("de", sql.Date,     new Date(eventDate))
-        .query(
-          `INSERT INTO event_schedule (event_code, event_name, description, date_event, created_at, updated_at)
-           OUTPUT INSERTED.*
-           VALUES (@ec, @en, @d, @de, GETDATE(), GETDATE())`
-        );
-      await log(pool, req.user.id, "CREATE_EVENT", "event", r.recordset[0].id, `Created event: ${eventName}`, req.ip);
-      res.status(201).json({ success: true, data: r.recordset[0] });
+        let eventId = ev.id;
+        let eventCode = ev.eventCode;
+
+        if (eventId) {
+          // UPDATE
+          await new sql.Request(transaction)
+            .input("id", sql.Int, eventId)
+            .input("en", sql.NVarChar, cleanName)
+            .input("d", sql.NVarChar, cleanDesc)
+            .input("st", sql.NVarChar, cleanStart)
+            .input("et", sql.NVarChar, cleanEnd)
+            .input("pa", sql.NVarChar, access)
+            .input("evt", sql.NVarChar, evType)
+            .query(`
+              UPDATE event_schedule 
+              SET event_name=@en, description=@d, start_time=@st, end_time=@et, participant_access=@pa, event_type=@evt, updated_at=GETDATE()
+              WHERE id=@id
+            `);
+          await log(transaction, req.user.id, "UPDATE_EVENT", "event", eventId, `Updated event: ${cleanName}`, req.ip);
+        } else {
+          // INSERT
+          // Generate unique event code: EVT-YYYYMMDD-HHMM
+          const codeTime = cleanStart.replace(/:/g, "");
+          const generatedCode = `EVT-${dateDigits}-${codeTime}`;
+          
+          const insertResult = await new sql.Request(transaction)
+            .input("ec", sql.NVarChar, generatedCode)
+            .input("en", sql.NVarChar, cleanName)
+            .input("d", sql.NVarChar, cleanDesc)
+            .input("de", sql.Date, eventDate)
+            .input("st", sql.NVarChar, cleanStart)
+            .input("et", sql.NVarChar, cleanEnd)
+            .input("pa", sql.NVarChar, access)
+            .input("evt", sql.NVarChar, evType)
+            .query(`
+              INSERT INTO event_schedule (event_code, event_name, description, date_event, start_time, end_time, participant_access, event_type, created_at, updated_at)
+              OUTPUT INSERTED.id
+              VALUES (@ec, @en, @d, @de, @st, @et, @pa, @evt, GETDATE(), GETDATE())
+            `);
+          
+          eventId = insertResult.recordset[0].id;
+          eventCode = generatedCode;
+          await log(transaction, req.user.id, "CREATE_EVENT", "event", eventId, `Created event: ${cleanName} (${generatedCode})`, req.ip);
+        }
+
+        // Hapus access list lama di event_participants untuk event ini
+        await new sql.Request(transaction)
+          .input("eventId", sql.Int, eventId)
+          .query("DELETE FROM event_participants WHERE event_id=@eventId");
+
+        // Insert new access list jika access Selected Members atau Excluded Members
+        if ((access === "Selected Members" || access === "Excluded Members") && Array.isArray(ev.selectedMemberIds)) {
+          const typeMap = access === "Selected Members" ? "selected" : "excluded";
+          for (const memberId of ev.selectedMemberIds) {
+            await new sql.Request(transaction)
+              .input("eventId", sql.Int, eventId)
+              .input("memberId", sql.NVarChar, memberId)
+              .input("type", sql.NVarChar, typeMap)
+              .query(`
+                INSERT INTO event_participants (event_id, member_id, access_type, created_at)
+                VALUES (@eventId, @memberId, @type, GETDATE())
+              `);
+          }
+        }
+      }
+
+      await transaction.commit();
+      res.json({ success: true, message: "Events saved successfully" });
+
     } catch (e: any) {
-      console.error("[CREATE EVENT]", e);
+      console.error("[POST EVENTS BATCH]", e);
+      try {
+        await transaction.rollback();
+      } catch (err) {
+        console.error("Rollback error:", err);
+      }
       res.status(500).json({ success: false, message: e.message || "DB error" });
     }
   });
 
-  // PUT /api/events/:id
+  // PUT /api/events/:id (Legacy - deprecated in favor of batch save, but kept for compatibility)
   app.put("/api/events/:id", authenticateToken, requireAdmin, async (req: any, res) => {
     try {
       const { eventName, description } = req.body;
@@ -1185,6 +1324,10 @@ export function createServer() {
   app.delete("/api/events/:id", authenticateToken, requireAdmin, async (req: any, res) => {
     try {
       const pool = await getConnection();
+      // Remove participants first (FK)
+      await pool.request()
+        .input("id", sql.Int, req.params.id)
+        .query("DELETE FROM event_participants WHERE event_id=@id");
       const r = await pool.request()
         .input("id", sql.Int, req.params.id)
         .query("DELETE FROM event_schedule WHERE id=@id");
@@ -2243,7 +2386,7 @@ app.post(
   app.get(
     "/api/regular-events",
     authenticateToken,
-    requireSuperAdmin,
+    requireAdmin,
     handleGetRegularEvents
   );
 

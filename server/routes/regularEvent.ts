@@ -35,7 +35,7 @@ export const handleGetRegularEvents: RequestHandler = async (req: any, res) => {
   try {
     const pool = await getConnection();
     const result = await pool.request().query(
-      `SELECT * FROM Regular_Event ORDER BY event_code ASC`
+      `SELECT * FROM regular_event ORDER BY event_code ASC`
     );
     res.json({ success: true, data: result.recordset });
   } catch (error: any) {
@@ -57,7 +57,7 @@ export const handleCreateRegularEvent: RequestHandler = async (req: any, res) =>
     // Generate event code automatically by finding the maximum numerical event code and incrementing
     const maxResult = await pool.request().query(`
       SELECT ISNULL(MAX(TRY_CAST(event_code AS INT)), 0) AS maxCode
-      FROM Regular_Event
+      FROM regular_event
     `);
     const nextVal = (maxResult.recordset[0]?.maxCode || 0) + 1;
     const nextEventCode = String(nextVal).padStart(3, "0");
@@ -66,7 +66,7 @@ export const handleCreateRegularEvent: RequestHandler = async (req: any, res) =>
       .input("ec", sql.NVarChar, nextEventCode)
       .input("en", sql.NVarChar, eventName.trim())
       .query(`
-        INSERT INTO Regular_Event (event_code, event_name)
+        INSERT INTO regular_event (event_code, event_name)
         OUTPUT INSERTED.*
         VALUES (@ec, @en)
       `);
@@ -101,7 +101,7 @@ export const handleUpdateRegularEvent: RequestHandler = async (req: any, res) =>
     const result = await pool.request()
       .input("id", sql.Int, req.params.id)
       .input("en", sql.NVarChar, eventName.trim())
-      .query(`UPDATE Regular_Event SET event_name=@en WHERE id=@id`);
+      .query(`UPDATE regular_event SET event_name=@en WHERE id=@id`);
 
     if (!result.rowsAffected[0]) {
       return res.status(404).json({ success: false, message: "Regular Event not found" });
@@ -130,7 +130,7 @@ export const handleDeleteRegularEvent: RequestHandler = async (req: any, res) =>
     const pool = await getConnection();
     const result = await pool.request()
       .input("id", sql.Int, req.params.id)
-      .query(`DELETE FROM Regular_Event WHERE id=@id`);
+      .query(`DELETE FROM regular_event WHERE id=@id`);
 
     if (!result.rowsAffected[0]) {
       return res.status(404).json({ success: false, message: "Regular Event not found" });

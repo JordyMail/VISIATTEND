@@ -95,7 +95,7 @@ export const userApi = {
 };
 
 export const eventApi = {
-  getAll: () => api.get("/events"),
+  getAll: (filters?: any) => api.get("/events", { params: filters }),
   getById: (id: number) => api.get(`/events/${id}`),
   create: (data: any) => api.post("/events", data),
   update: (id: number, data: any) => api.put(`/events/${id}`, data),
