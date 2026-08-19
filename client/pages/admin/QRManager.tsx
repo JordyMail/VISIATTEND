@@ -20,7 +20,12 @@ interface QRToken {
   id: number; event_id: number; token: string;
   valid_date: string; expires_at: string; created_at: string;
 }
-interface Event { id: number; event_code: string; event_name: string; }
+interface Event {
+  id: number;
+  event_code: string;
+  event_name: string;
+  date_event?: string;
+}
 
 export default function QRManager() {
   const [events, setEvents]     = useState<Event[]>([]);
@@ -36,7 +41,19 @@ export default function QRManager() {
   const [form, setForm] = useState({ eventId: "", validDate: "", expiryMinutes: "60" });
 
   useEffect(() => {
-    eventApi.getAll({ isActive: true }).then((r) => setEvents(r.data.data)).catch(() => {});
+    eventApi
+      .getAll({ isActive: true })
+      .then((r) => {
+        const visibleEvents = (r.data.data || []).filter((event: Event) => {
+          if (!event.date_event) return true;
+          const eventDate = new Date(`${event.date_event}T00:00:00`);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          return eventDate >= today;
+        });
+        setEvents(visibleEvents);
+      })
+      .catch(() => {});
   }, []);
 
   const loadTokens = async (evId: string) => {

@@ -1,6 +1,6 @@
 // client/pages/Members.tsx
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit2, Trash2, Eye, EyeOff, RotateCcw, Loader2 } from "lucide-react";
+import { Edit2, Trash2, Eye, EyeOff, RotateCcw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,25 +19,15 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { userApi, divisionApi } from "@/services/api";
+import { userApi } from "@/services/api";
 import { getSessionUser, isRole } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
 
 interface User {
   id: number; full_name: string; member_id: string; email: string;
-  role: "super_admin" | "admin" | "user"; jabatan?: string; division?: string;
+  role: "super_admin" | "admin" | "user"; category?: string;
   phone_number?: string; is_active: boolean; created_at: string; last_login?: string;
 }
-interface Division { id: number; name: string; }
-
-const JABATAN_OPTIONS = [
-  { value: "preacher",      label: "Preacher / Pembina" },
-  { value: "ketua",         label: "Ketua" },
-  { value: "wakil_ketua",   label: "Wakil Ketua" },
-  { value: "kepala_divisi", label: "Kepala Divisi" },
-  { value: "member_divisi", label: "Member Divisi" },
-  { value: "peserta",       label: "Peserta" },
-];
 
 const ROLE_COLOR: Record<string, string> = {
   super_admin: "bg-purple-100 text-purple-700 border-purple-200",
@@ -53,20 +43,16 @@ const STATUS_COLOR = {
 const defaultForm = {
   fullName: "", memberId: "", email: "", password: "",
   role: "user" as "super_admin" | "admin" | "user",
-  jabatan: "peserta", division: "", phoneNumber: "",
+  phoneNumber: "",
 };
 
 export default function Members() {
   const me       = getSessionUser();
   const isSA     = isRole("super_admin");
   const [users, setUsers]       = useState<User[]>([]);
-  const [divisions, setDivisions] = useState<Division[]>([]);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
-  const [search, setSearch]     = useState("");
   const [filterRole, setFilterRole]       = useState("all");
-  const [filterJabatan, setFilterJabatan] = useState("all");
-  const [filterDivision, setFilterDivision] = useState("all");
   const [filterStatus, setFilterStatus]   = useState("all");
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -79,7 +65,6 @@ export default function Members() {
   const [showPw, setShowPw]         = useState(false);
 
   useEffect(() => {
-    divisionApi.getAll().then((r) => setDivisions(r.data.data)).catch(() => {});
     load();
   }, []);
 
@@ -93,19 +78,15 @@ export default function Members() {
   };
 
   const filtered = users.filter((u) => {
-    const matchSearch   = !search || [u.full_name, u.member_id, u.email, u.division].some((f) => f?.toLowerCase().includes(search.toLowerCase()));
-    const matchRole     = filterRole     === "all" || u.role     === filterRole;
-    const matchJabatan  = filterJabatan  === "all" || u.jabatan  === filterJabatan;
-    const matchDivision = filterDivision === "all" || u.division === filterDivision;
-    const matchStatus   = filterStatus   === "all" || (filterStatus === "active" ? u.is_active : !u.is_active);
-    return matchSearch && matchRole && matchJabatan && matchDivision && matchStatus;
+    const matchRole   = filterRole === "all" || u.role === filterRole;
+    const matchStatus = filterStatus === "all" || (filterStatus === "active" ? u.is_active : !u.is_active);
+    return matchRole && matchStatus;
   });
 
-  const openCreate = () => { setEditing(null); setForm(defaultForm); setShowPw(false); setDialogOpen(true); };
   const openEdit   = (u: User) => {
     setEditing(u);
     setForm({ fullName: u.full_name, memberId: u.member_id, email: u.email, password: "",
-      role: u.role, jabatan: u.jabatan || "peserta", division: u.division || "", phoneNumber: u.phone_number || "" });
+      role: u.role, phoneNumber: u.phone_number || "" });
     setDialogOpen(true);
   };
 
@@ -118,8 +99,9 @@ export default function Members() {
     setSaving(true);
     try {
       const payload = {
-        fullName: form.fullName, email: form.email, jabatan: form.jabatan,
-        division: form.division || undefined, phoneNumber: form.phoneNumber || undefined,
+        fullName: form.fullName,
+        email: form.email,
+        phoneNumber: form.phoneNumber || undefined,
         ...(isSA ? { role: form.role } : {}),
         ...(!editing ? { memberId: form.memberId || undefined, password: form.password } : {}),
       };
@@ -168,8 +150,6 @@ export default function Members() {
     } finally { setSaving(false); }
   };
 
-  const uniqueDivisions = Array.from(new Set(users.map((u) => u.division).filter(Boolean)));
-
   return (
     <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
@@ -178,36 +158,17 @@ export default function Members() {
           <h1 className="text-2xl font-bold">Manajemen Anggota</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Kelola akun anggota, admin, dan hak akses</p>
         </div>
-        <Button onClick={openCreate} className="gap-2"><Plus className="w-4 h-4" /> Tambah Anggota</Button>
       </div>
 
       {/* Filters */}
       <Card className="p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <div className="relative sm:col-span-2 lg:col-span-1">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Cari nama, ID, email..." value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
           <Select value={filterRole} onValueChange={setFilterRole}>
             <SelectTrigger><SelectValue placeholder="Semua role" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Role</SelectItem>
               {isSA && <SelectItem value="admin">Admin</SelectItem>}
               <SelectItem value="user">User</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={filterJabatan} onValueChange={setFilterJabatan}>
-            <SelectTrigger><SelectValue placeholder="Semua jabatan" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Jabatan</SelectItem>
-              {JABATAN_OPTIONS.map((j) => <SelectItem key={j.value} value={j.value}>{j.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filterDivision} onValueChange={setFilterDivision}>
-            <SelectTrigger><SelectValue placeholder="Semua divisi" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Divisi</SelectItem>
-              {uniqueDivisions.map((d) => <SelectItem key={d} value={d!}>{d}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -233,8 +194,7 @@ export default function Members() {
                 <TableRow>
                   <TableHead>Nama</TableHead>
                   <TableHead>ID</TableHead>
-                  <TableHead>Jabatan</TableHead>
-                  <TableHead>Divisi</TableHead>
+                  <TableHead>Category</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
@@ -255,10 +215,7 @@ export default function Members() {
                       </div>
                     </TableCell>
                     <TableCell className="text-sm font-mono">{u.member_id}</TableCell>
-                    <TableCell className="text-sm">
-                      {JABATAN_OPTIONS.find((j) => j.value === u.jabatan)?.label || u.jabatan || "-"}
-                    </TableCell>
-                    <TableCell className="text-sm">{u.division || "-"}</TableCell>
+                    <TableCell className="text-sm">{u.category || "-"}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={ROLE_COLOR[u.role]}>
                         {u.role === "super_admin" ? "Super Admin" : u.role === "admin" ? "Admin" : "User"}
@@ -341,25 +298,6 @@ export default function Members() {
                     onChange={(e) => setForm({ ...form, password: e.target.value })} />
                 </div>
               )}
-              <div>
-                <Label className="mb-1.5 block">Jabatan</Label>
-                <Select value={form.jabatan} onValueChange={(v) => setForm({ ...form, jabatan: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {JABATAN_OPTIONS.map((j) => <SelectItem key={j.value} value={j.value}>{j.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="mb-1.5 block">Divisi</Label>
-                <Select value={form.division} onValueChange={(v) => setForm({ ...form, division: v })}>
-                  <SelectTrigger><SelectValue placeholder="Pilih divisi" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unassigned">Tidak ada divisi</SelectItem>
-                    {divisions.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
               {isSA && (
                 <div className="col-span-2">
                   <Label className="mb-1.5 block">Role Sistem</Label>

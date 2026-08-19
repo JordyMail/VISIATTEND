@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   CheckCircle2, Clock, XCircle, Flame, TrendingUp, CalendarDays, Bell, Award,
 } from "lucide-react";
-import { attendanceApi, scheduleApi, announcementApi } from "@/services/api";
+import { attendanceApi, announcementApi, userDashboardApi } from "@/services/api";
 import { getSessionUser } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
 
@@ -36,11 +36,19 @@ export default function UserDashboard() {
       try {
         const [statsR, schedR, annR] = await Promise.all([
           attendanceApi.getMyStats(),
-          scheduleApi.getAll({ upcoming: true }),
+          userDashboardApi.getUpcomingEvents(),
           announcementApi.getAll(),
         ]);
         setStats(statsR.data.data);
-        setSchedules(schedR.data.data.slice(0, 5));
+        setSchedules((schedR.data.data ?? []).slice(0, 5).map((event: any) => ({
+          id: event.id,
+          event_name: event.event_name,
+          event_code: event.event_code,
+          event_type: event.event_type,
+          scheduled_date: event.date_event,
+          start_time: event.start_time,
+          end_time: event.end_time,
+        })));
         setAnnouncements(annR.data.data.slice(0, 4));
       } catch {
         toast({ title: "Error", description: "Failed to load dashboard", variant: "destructive" });

@@ -291,6 +291,7 @@ export const faceAiApi = {
 export const userDashboardApi = {
   getProfile: (params: { email?: string; name?: string }) =>
     api.get("/user-dashboard/profile", { params }),
+  getUpcomingEvents: () => api.get("/user/upcoming-events"),
   awardQuestionPoints: (data: { email?: string; name?: string; reward: number }) =>
     api.post("/user-dashboard/question/reward", data),
   getQuestions: (params: { email?: string; name?: string }) =>

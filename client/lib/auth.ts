@@ -17,6 +17,7 @@ export interface SessionUser {
   jabatan?: string;
   division?: string;
   avatar_url?: string;
+  photo_profile?: string;
   permissions: string[];
 }
 

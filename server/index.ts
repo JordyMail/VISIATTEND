@@ -665,7 +665,7 @@ export function createServer() {
     requireAdmin,
     async (req: any, res) => {
       try {
-        const { role, isActive, division, jabatan, search } = req.query;
+        const { role, isActive } = req.query;
         const pool = await getConnection();
         const rq = pool.request();
 
@@ -680,26 +680,14 @@ export function createServer() {
           rq.input("ia", sql.Bit, isActive === "true" ? 1 : 0);
           parts.push("u.is_active=@ia");
         }
-        if (division) {
-          rq.input("div", sql.NVarChar, division);
-          parts.push("u.division=@div");
-        }
-        if (jabatan) {
-          rq.input("jab", sql.NVarChar, jabatan);
-          parts.push("u.jabatan=@jab");
-        }
-        if (search) {
-          rq.input("s", sql.NVarChar, `%${search}%`);
-          parts.push(
-            "(u.full_name LIKE @s OR u.email LIKE @s OR u.member_id LIKE @s OR u.division LIKE @s)"
-          );
-        }
 
         const where = "WHERE " + parts.join(" AND ");
         const result = await rq.query(
-          `SELECT u.id,u.full_name,u.member_id,u.email,u.role,u.jabatan,u.division,
+          `SELECT u.id,u.full_name,u.member_id,u.email,u.role,
+                  COALESCE(um.category, 'general') AS category,
                   u.phone_number,u.is_active,u.created_at,u.last_login,u.avatar_url
-           FROM users u ${where}
+           FROM users u
+           LEFT JOIN user_member um ON um.member_id = u.member_id ${where}
            ORDER BY u.created_at DESC`
         );
         res.json({ success: true, data: result.recordset });
@@ -721,7 +709,12 @@ export function createServer() {
           .request()
           .input("id", sql.Int, req.params.id)
           .query(
-            "SELECT id,full_name,member_id,email,role,jabatan,division,phone_number,is_active,created_at,last_login,avatar_url FROM users WHERE id=@id"
+            `SELECT u.id,u.full_name,u.member_id,u.email,u.role,
+                    COALESCE(um.category, 'general') AS category,
+                    u.phone_number,u.is_active,u.created_at,u.last_login,u.avatar_url
+             FROM users u
+             LEFT JOIN user_member um ON um.member_id = u.member_id
+             WHERE u.id=@id`
           );
         if (!r.recordset.length)
           return res
@@ -1151,12 +1144,27 @@ export function createServer() {
         return res.status(400).json({ success: false, message: "name, email, category, phone, birthday required" });
       }
 
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const normalizedPhone = String(phone).trim();
+      const birthdayDate = new Date(String(birthday));
+      const minimumBirthday = new Date();
+      minimumBirthday.setFullYear(minimumBirthday.getFullYear() - 17);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ success: false, message: "Format email tidak valid" });
+      }
+      if (!/^\+62\d{8,13}$/.test(normalizedPhone)) {
+        return res.status(400).json({ success: false, message: "Nomor telepon harus diawali +62" });
+      }
+      if (Number.isNaN(birthdayDate.getTime()) || birthdayDate > minimumBirthday) {
+        return res.status(400).json({ success: false, message: "Usia minimal untuk registrasi adalah 17 tahun" });
+      }
+
       const pool = await getConnection();
 
       // ── 1. Check if email already exists in users table ──────────────────
       const emailCheck = await pool
         .request()
-        .input("emailCheck", sql.NVarChar, String(email).trim().toLowerCase())
+        .input("emailCheck", sql.NVarChar, normalizedEmail)
         .query("SELECT id FROM users WHERE email = @emailCheck");
       if (emailCheck.recordset.length) {
         return res.status(400).json({ success: false, message: "Email sudah terdaftar" });
@@ -1179,9 +1187,9 @@ export function createServer() {
       await pool
         .request()
         .input("umName",     sql.NVarChar, String(name).trim())
-        .input("umEmail",    sql.NVarChar, String(email).trim().toLowerCase())
+        .input("umEmail",    sql.NVarChar, normalizedEmail)
         .input("umCategory", sql.NVarChar, String(category).trim())
-        .input("umPhone",    sql.NVarChar, String(phone).trim())
+        .input("umPhone",    sql.NVarChar, normalizedPhone)
         .input("umBirthday", sql.Date,     new Date(String(birthday)))
         .input("umMemberId", sql.NVarChar, memberId)
         .query(`
@@ -1202,9 +1210,9 @@ export function createServer() {
         .request()
         .input("uName",     sql.NVarChar, String(name).trim())
         .input("uMemberId", sql.NVarChar, memberId)
-        .input("uEmail",    sql.NVarChar, String(email).trim().toLowerCase())
+        .input("uEmail",    sql.NVarChar, normalizedEmail)
         .input("uHash",     sql.NVarChar, passwordHash)
-        .input("uPhone",    sql.NVarChar, String(phone).trim())
+        .input("uPhone",    sql.NVarChar, normalizedPhone)
         .query(`
           INSERT INTO users
             (full_name, member_id, email, password_hash, role, phone_number, is_active, email_verified, created_at)
@@ -1268,12 +1276,20 @@ export function createServer() {
   // ════════════════════════════════════════════════════════════════════════════
 
   // GET /api/events
-  app.get("/api/events", async (_req, res) => {
+  app.get("/api/events", async (req, res) => {
     try {
       const pool = await getConnection();
-      const r = await pool.request().query(
-        `SELECT * FROM event_schedule ORDER BY date_event DESC`
-      );
+      const isActive = req.query.isActive;
+      const query = isActive !== undefined
+        ? `
+            SELECT *
+            FROM event_schedule
+            WHERE CAST(date_event AS DATE) >= CAST(GETDATE() AS DATE)
+            ORDER BY date_event ASC, start_time ASC
+          `
+        : `SELECT * FROM event_schedule ORDER BY date_event DESC`;
+
+      const r = await pool.request().query(query);
       res.json({ success: true, data: r.recordset });
     } catch {
       res.status(500).json({ success: false, message: "DB error" });
@@ -1302,6 +1318,66 @@ export function createServer() {
       res.json({ success: true, data: event });
     } catch (e: any) {
       console.error("[GET EVENT BY ID]", e);
+      res.status(500).json({ success: false, message: "DB error" });
+    }
+  });
+
+  // GET /api/user/upcoming-events — events visible to the logged-in member
+  app.get("/api/user/upcoming-events", authenticateToken, requireAnyRole, async (req: any, res) => {
+    try {
+      const pool = await getConnection();
+      const memberResult = await pool.request()
+        .input("uid", sql.Int, req.user.id)
+        .query("SELECT member_id FROM users WHERE id=@uid");
+      const memberId = memberResult.recordset[0]?.member_id;
+
+      if (!memberId) {
+        res.json({ success: true, data: [] });
+        return;
+      }
+
+      const result = await pool.request()
+        .input("memberId", sql.NVarChar, memberId)
+        .query(`
+          SELECT es.id, es.event_code, es.event_name, es.description,
+                 es.date_event, es.start_time, es.end_time,
+                 es.participant_access, es.event_type
+          FROM event_schedule es
+          WHERE CAST(es.date_event AS DATE) > CAST(GETDATE() AS DATE)
+             OR (
+               CAST(es.date_event AS DATE) = CAST(GETDATE() AS DATE)
+               AND (
+                 es.end_time IS NULL
+                 OR TRY_CONVERT(time, es.end_time) > CAST(GETDATE() AS time)
+               )
+             )
+            AND (
+              es.participant_access = 'Everyone'
+              OR (
+                es.participant_access = 'Selected Members'
+                AND EXISTS (
+                  SELECT 1 FROM event_participants ep
+                  WHERE ep.event_id = es.id
+                    AND ep.member_id = @memberId
+                    AND ep.access_type = 'selected'
+                )
+              )
+              OR (
+                es.participant_access = 'Excluded Members'
+                AND NOT EXISTS (
+                  SELECT 1 FROM event_participants ep
+                  WHERE ep.event_id = es.id
+                    AND ep.member_id = @memberId
+                    AND ep.access_type = 'excluded'
+                )
+              )
+            )
+          ORDER BY es.date_event ASC, es.start_time ASC
+        `);
+
+      res.json({ success: true, data: result.recordset });
+    } catch (e: any) {
+      console.error("[GET USER UPCOMING EVENTS]", e);
       res.status(500).json({ success: false, message: "DB error" });
     }
   });
@@ -1848,155 +1924,233 @@ app.get(
   );
 
   // POST /api/attendance/checkin (self check-in)
-  // POST /api/attendance/checkin (self check-in) - PERBAIKAN DENGAN DEBUG
-app.post(
-  "/api/attendance/checkin",
-  authenticateToken,
-  requireAnyRole,
-  async (req: any, res) => {
-    try {
-      const { qrToken, eventId } = req.body;
-      const pool = await getConnection();
-      const today = new Date().toISOString().split("T")[0];
+  app.post(
+    "/api/attendance/checkin",
+    authenticateToken,
+    requireAnyRole,
+    async (req: any, res) => {
+      try {
+        const { qrToken, eventId } = req.body;
+        const pool = await getConnection();
+        const today = new Date().toISOString().split("T")[0];
 
-      console.log('📱 Check-in attempt:', { 
-        userId: req.user.id, 
-        qrToken: qrToken ? qrToken.substring(0, 20) + '...' : null, 
-        eventId 
-      });
-
-      let resolvedEventId = eventId;
-      
-      if (qrToken) {
-        // Cari token di database
-        const tokenR = await pool
+        const userRow = await pool
           .request()
-          .input("t", sql.NVarChar, qrToken)
+          .input("uid", sql.Int, req.user.id)
           .query(`
-            SELECT * FROM qr_tokens 
-            WHERE token = @t
+            SELECT TOP 1
+              u.id,
+              u.member_id,
+              u.full_name,
+              u.email,
+              um.name AS member_name
+            FROM users u
+            LEFT JOIN user_member um ON um.member_id = u.member_id
+            WHERE u.id = @uid
           `);
-        
-        console.log('🔍 Token search result:', {
-          found: tokenR.recordset.length > 0,
-          token: qrToken.substring(0, 20) + '...'
-        });
-        
-        if (tokenR.recordset.length === 0) {
-          console.log('❌ Token not found in database');
-          return res.status(400).json({
+
+        if (!userRow.recordset[0]?.member_id) {
+          return res.status(404).json({
             success: false,
-            message: "QR code tidak valid. Token tidak ditemukan.",
+            message: "Data member untuk user ini belum ditemukan.",
           });
         }
-        
-        const tokenData = tokenR.recordset[0];
-        console.log('🎫 Token data:', {
-          id: tokenData.id,
-          eventId: tokenData.event_id,
-          expiresAt: tokenData.expires_at,
-          now: new Date(),
-          isExpired: new Date(tokenData.expires_at) < new Date()
-        });
-        
-        // Cek apakah token expired
-        if (new Date(tokenData.expires_at) < new Date()) {
-          console.log('⏰ Token expired');
+
+        const currentUser = userRow.recordset[0];
+        const memberId = currentUser.member_id;
+
+        let resolvedEventId = eventId;
+
+        if (qrToken) {
+          const tokenR = await pool
+            .request()
+            .input("t", sql.NVarChar, qrToken)
+            .query(`
+              SELECT * FROM qr_tokens 
+              WHERE token = @t
+            `);
+
+          if (tokenR.recordset.length === 0) {
+            return res.status(400).json({
+              success: false,
+              message: "QR code tidak valid. Token tidak ditemukan.",
+            });
+          }
+
+          const tokenData = tokenR.recordset[0];
+          if (new Date(tokenData.expires_at) < new Date()) {
+            return res.status(400).json({
+              success: false,
+              message: "QR code sudah kadaluarsa",
+            });
+          }
+
+          resolvedEventId = tokenData.event_id;
+        }
+
+        if (!resolvedEventId) {
           return res.status(400).json({
             success: false,
-            message: "QR code sudah kadaluarsa",
+            message: "Event ID atau QR token diperlukan",
           });
         }
-        
-        resolvedEventId = tokenData.event_id;
-      }
-      
-      if (!resolvedEventId) {
-        return res.status(400).json({
-          success: false,
-          message: "Event ID atau QR token diperlukan",
+
+        const eventR = await pool
+          .request()
+          .input("eid", sql.Int, resolvedEventId)
+          .query(`
+            SELECT TOP 1 id, event_code, event_name, start_time, end_time, participant_access
+            FROM event_schedule
+            WHERE id = @eid
+          `);
+
+        const targetEvent = eventR.recordset[0];
+        if (!targetEvent) {
+          return res.status(404).json({
+            success: false,
+            message: "Event tidak ditemukan.",
+          });
+        }
+
+        if (
+          targetEvent.participant_access === "Selected Members" ||
+          targetEvent.participant_access === "Excluded Members"
+        ) {
+          const participantAccessResult = await pool
+            .request()
+            .input("eventId", sql.Int, targetEvent.id)
+            .input("memberId", sql.NVarChar, memberId)
+            .query(`
+              SELECT access_type
+              FROM event_participants
+              WHERE event_id = @eventId AND member_id = @memberId
+            `);
+
+          const hasRecord = participantAccessResult.recordset.length > 0;
+
+          if (targetEvent.participant_access === "Selected Members" && !hasRecord) {
+            return res.status(403).json({
+              success: false,
+              message: `Anda tidak terdaftar sebagai peserta untuk event "${targetEvent.event_name}" ini. (Khusus Anggota Terpilih)`,
+              code: "PARTICIPANT_ACCESS_DENIED"
+            });
+          }
+
+          if (targetEvent.participant_access === "Excluded Members" && hasRecord) {
+            return res.status(403).json({
+              success: false,
+              message: `Anda tidak diperbolehkan mengikuti event "${targetEvent.event_name}". (Anggota Dikecualikan)`,
+              code: "PARTICIPANT_ACCESS_DENIED"
+            });
+          }
+        }
+
+        const duplicateResult = await pool
+          .request()
+          .input("member_id", sql.NVarChar, memberId)
+          .input("event_code", sql.NVarChar, targetEvent.event_code)
+          .query(`
+            SELECT TOP 1 id, attendance_date
+            FROM attendance_member
+            WHERE member_id = @member_id
+              AND event_code = @event_code
+          `);
+
+        if (duplicateResult.recordset.length > 0) {
+          return res.status(409).json({
+            success: false,
+            message: `Sudah melakukan attendance untuk event "${targetEvent.event_name}"`,
+            data: {
+              memberId,
+              name: currentUser.member_name || currentUser.full_name,
+              alreadyAttendanceAt: duplicateResult.recordset[0].attendance_date,
+            },
+          });
+        }
+
+        const settR = await pool
+          .request()
+          .query(
+            "SELECT setting_value FROM system_settings WHERE setting_key='lateness_threshold'"
+          );
+        const lateMin = parseInt(settR.recordset[0]?.setting_value || "15");
+
+        let status = "present";
+        const schedR = await pool
+          .request()
+          .input("eid", sql.Int, targetEvent.id)
+          .input("d", sql.Date, today)
+          .query(
+            "SELECT start_time FROM schedules WHERE event_id=@eid AND scheduled_date=@d"
+          );
+
+        if (schedR.recordset.length) {
+          const [h, m] = schedR.recordset[0].start_time
+            .split(":")
+            .map(Number);
+          const schedStart = new Date();
+          schedStart.setHours(h, m, 0, 0);
+          const lateThreshold = new Date(schedStart.getTime() + lateMin * 60000);
+          if (new Date() > lateThreshold) status = "late";
+        }
+
+        const attendanceInsert = await pool
+          .request()
+          .input("user_id", sql.NVarChar, String(req.user.id))
+          .input("member_id", sql.NVarChar, memberId)
+          .input("name", sql.NVarChar, currentUser.member_name || currentUser.full_name || "Member")
+          .input("points", sql.Int, 10)
+          .input("event_code", sql.NVarChar, targetEvent.event_code)
+          .query(`
+            INSERT INTO attendance_member (user_id, member_id, name, attendance_date, points, event_code)
+            OUTPUT INSERTED.*
+            VALUES (@user_id, @member_id, @name, GETDATE(), @points, @event_code)
+          `);
+
+        await pool
+          .request()
+          .input("member_id", sql.NVarChar, memberId)
+          .input("points", sql.Int, 10)
+          .input("type", sql.NVarChar, "attendance")
+          .input("notes", sql.NVarChar, `QR attendance reward for event: ${targetEvent.event_name}`)
+          .query(`
+            INSERT INTO point_logs (member_id, points, type, notes, created_at)
+            VALUES (@member_id, @points, @type, @notes, GETDATE())
+          `);
+
+        const totalPointsResult = await pool
+          .request()
+          .input("member_id", sql.NVarChar, memberId)
+          .query(`
+            SELECT COALESCE(points, 0) AS points
+            FROM member_point
+            WHERE member_id = @member_id
+          `);
+
+        const attendanceRecord = attendanceInsert.recordset[0];
+
+        res.status(201).json({
+          success: true,
+          data: {
+            memberId,
+            userId: req.user.id,
+            eventId: targetEvent.id,
+            eventCode: targetEvent.event_code,
+            eventName: targetEvent.event_name,
+            attendanceMember: attendanceRecord,
+            rewardedPoints: 10,
+            totalPoints: Number(totalPointsResult.recordset[0]?.points ?? 0),
+            status,
+          },
+          status,
+          message: `Check-in berhasil (${status === 'present' ? 'Hadir' : 'Terlambat'})`,
         });
+      } catch (e: any) {
+        console.error("❌ [CHECKIN ERROR]", e);
+        res.status(500).json({ success: false, message: "Server error" });
       }
-
-      // Cek apakah sudah check-in hari ini
-      const dup = await pool
-        .request()
-        .input("uid", sql.Int, req.user.id)
-        .input("eid", sql.Int, resolvedEventId)
-        .input("d", sql.Date, today)
-        .query(
-          "SELECT id FROM attendance WHERE user_id=@uid AND event_id=@eid AND attendance_date=@d"
-        );
-      
-      if (dup.recordset.length) {
-        return res.status(400).json({
-          success: false,
-          message: "Kamu sudah check-in hari ini untuk event ini",
-        });
-      }
-
-      // Tentukan status (present/late)
-      const settR = await pool
-        .request()
-        .query(
-          "SELECT setting_value FROM system_settings WHERE setting_key='lateness_threshold'"
-        );
-      const lateMin = parseInt(settR.recordset[0]?.setting_value || "15");
-
-      let status = "present";
-      const schedR = await pool
-        .request()
-        .input("eid", sql.Int, resolvedEventId)
-        .input("d", sql.Date, today)
-        .query(
-          "SELECT start_time FROM schedules WHERE event_id=@eid AND scheduled_date=@d"
-        );
-      
-      if (schedR.recordset.length) {
-        const [h, m] = schedR.recordset[0].start_time
-          .split(":")
-          .map(Number);
-        const schedStart = new Date();
-        schedStart.setHours(h, m, 0, 0);
-        const lateThreshold = new Date(
-          schedStart.getTime() + lateMin * 60000
-        );
-        if (new Date() > lateThreshold) status = "late";
-      }
-
-      // Insert attendance
-      const r = await pool
-        .request()
-        .input("uid", sql.Int, req.user.id)
-        .input("eid", sql.Int, resolvedEventId)
-        .input("d", sql.Date, today)
-        .input("ci", sql.DateTime, new Date())
-        .input("s", sql.NVarChar, status)
-        .input("di", sql.NVarChar, qrToken ? "QR Code Scan" : "Self Check-in")
-        .query(
-          `INSERT INTO attendance (user_id,event_id,attendance_date,check_in_time,status,device_info,created_at)
-           OUTPUT INSERTED.*
-           VALUES (@uid,@eid,@d,@ci,@s,@di,GETDATE())`
-        );
-      
-      console.log('✅ Check-in successful:', {
-        attendanceId: r.recordset[0].id,
-        status: status
-      });
-      
-      res.status(201).json({
-        success: true,
-        data: r.recordset[0],
-        status,
-        message: `Check-in berhasil (${status === 'present' ? 'Hadir' : 'Terlambat'})`,
-      });
-      
-    } catch (e: any) {
-      console.error("❌ [CHECKIN ERROR]", e);
-      res.status(500).json({ success: false, message: "Server error" });
     }
-  }
-);
+  );
 
 
   // GET /api/attendance (admin — all records)
@@ -2932,7 +3086,13 @@ app.post(
           .request()
           .input("id", sql.Int, req.user.id)
           .query(
-            "SELECT id,full_name,email,phone_number,role,jabatan,member_id,division,avatar_url,created_at FROM users WHERE id=@id"
+            `SELECT u.id,u.full_name,u.email,u.phone_number,u.role,u.member_id,
+                    u.avatar_url,
+                    COALESCE(um.photo_profile, u.avatar_url) AS photo_profile,
+                    u.created_at
+             FROM users u
+             LEFT JOIN user_member um ON um.member_id = u.member_id
+             WHERE u.id=@id`
           );
         if (!r.recordset.length)
           return res
@@ -2960,7 +3120,7 @@ app.post(
     requireAnyRole,
     async (req: any, res) => {
       try {
-        const { fullName, phoneNumber, avatarUrl } = req.body;
+        const { fullName, phoneNumber, avatarUrl, photoProfile } = req.body;
         const pool = await getConnection();
         await pool
           .request()
@@ -2968,8 +3128,20 @@ app.post(
           .input("fn", sql.NVarChar, fullName || null)
           .input("ph", sql.NVarChar, phoneNumber || null)
           .input("av", sql.NVarChar, avatarUrl || null)
+          .input("pp", sql.NVarChar, photoProfile || null)
           .query(
-            "UPDATE users SET full_name=ISNULL(@fn,full_name),phone_number=@ph,avatar_url=@av,updated_at=GETDATE() WHERE id=@id"
+            `UPDATE users
+             SET full_name = ISNULL(@fn, full_name),
+                 phone_number = @ph,
+                 avatar_url = @av,
+                 updated_at = GETDATE()
+             WHERE id = @id;
+
+             UPDATE um
+             SET photo_profile = @pp
+             FROM user_member um
+             INNER JOIN users u ON u.member_id = um.member_id
+             WHERE u.id = @id;`
           );
         res.json({ success: true, message: "Profile updated" });
       } catch {
@@ -3252,15 +3424,15 @@ app.post(
         .query("SELECT member_id FROM users WHERE id=@uid");
       const memberId: string | null = mRes.recordset[0]?.member_id ?? null;
 
-      // Get all events that are unlocked, have questions, and user can access
+      // Get all events that have questions and user can access.
+      // Locking an event only prevents admin edits; it must not hide its game.
       // Access rule: participant_access='Everyone' → all users can play
       const evRes = await pool.request().query(`
         SELECT DISTINCT es.id as event_id, es.event_name, es.date_event, es.start_time, es.end_time,
                es.participant_access, es.is_locked
         FROM event_schedule es
         INNER JOIN questions q ON q.event_id = es.id AND q.is_active = 1
-        WHERE es.is_locked = 0
-          AND es.participant_access = 'Everyone'
+        WHERE es.participant_access = 'Everyone'
         ORDER BY es.date_event DESC
       `);
 
@@ -3294,12 +3466,15 @@ app.post(
         const answeredMap = new Map<number, boolean>();
         for (const a of answeredRes.recordset) answeredMap.set(a.question_id, a.is_correct);
 
+        const unansweredQuestions = questions.filter((q: any) => !answeredMap.has(q.id));
+        if (unansweredQuestions.length === 0) continue;
+
         result.push({
           event_id: ev.event_id,
           event_name: ev.event_name,
           date_event: ev.date_event,
           start_time: ev.start_time,
-          questions: questions.map((q: any) => ({
+          questions: unansweredQuestions.map((q: any) => ({
             id: q.id,
             clue: q.question_text,
             answer: q.correct_answer,

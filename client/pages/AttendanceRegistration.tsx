@@ -44,6 +44,15 @@ const INITIAL_FORM: RegistrationFormState = {
   birthday: "",
 };
 
+const getMinimumBirthday = () => {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - 17);
+  return date.toISOString().slice(0, 10);
+};
+
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+const isValidPhone = (phone: string) => /^\+62\d{8,13}$/.test(phone.trim());
+
 export default function AttendanceRegistration() {
   const navigate = useNavigate();
   const [formState, setFormState] = useState<RegistrationFormState>(INITIAL_FORM);
@@ -54,11 +63,19 @@ export default function AttendanceRegistration() {
   const isFormComplete = useMemo(() => {
     return (
       formState.name.trim() !== "" &&
-      formState.email.trim() !== "" &&
+      isValidEmail(formState.email) &&
       formState.category !== "" &&
-      formState.phone.trim() !== "" &&
-      formState.birthday.trim() !== ""
+      isValidPhone(formState.phone) &&
+      formState.birthday.trim() !== "" &&
+      formState.birthday <= getMinimumBirthday()
     );
+  }, [formState]);
+
+  const validationMessage = useMemo(() => {
+    if (formState.email && !isValidEmail(formState.email)) return "Email harus menggunakan format yang valid, contoh: nama@email.com.";
+    if (formState.phone && !isValidPhone(formState.phone)) return "Nomor telepon harus diawali +62 dan hanya berisi angka, contoh: +628123456789.";
+    if (formState.birthday && formState.birthday > getMinimumBirthday()) return "Usia minimal untuk registrasi adalah 17 tahun.";
+    return null;
   }, [formState]);
 
   const updateField = <K extends keyof RegistrationFormState>(key: K, value: RegistrationFormState[K]) => {
@@ -190,7 +207,10 @@ export default function AttendanceRegistration() {
                   placeholder="Masukkan nomor telepon"
                   value={formState.phone}
                   disabled={isSaved}
-                  onChange={(event) => updateField("phone", event.target.value)}
+                  onChange={(event) => {
+                    const value = event.target.value.replace(/[^\d+]/g, "");
+                    updateField("phone", value.startsWith("0") ? `+62${value.slice(1)}` : value);
+                  }}
                 />
               </div>
 
@@ -199,6 +219,7 @@ export default function AttendanceRegistration() {
                 <Input
                   id="registration-birthday"
                   type="date"
+                  max={getMinimumBirthday()}
                   value={formState.birthday}
                   disabled={isSaved}
                   onChange={(event) => updateField("birthday", event.target.value)}
@@ -208,7 +229,7 @@ export default function AttendanceRegistration() {
 
             {!isFormComplete && !isSaved && (
               <p className="text-sm text-amber-600">
-                Lengkapi semua field terlebih dahulu agar tombol save aktif.
+                {validationMessage || "Lengkapi semua field terlebih dahulu agar tombol save aktif."}
               </p>
             )}
 

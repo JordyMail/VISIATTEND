@@ -217,12 +217,10 @@ export default function App() {
               path="/user-dashboard"
               element={
                 <RouteGuard requiredRoles={["super_admin", "admin", "user", "attendance"]}>
-                  <AppLayout role="user" />
+                  <AttendanceUserDashboard />
                 </RouteGuard>
               }
-            >
-              <Route index element={<AttendanceUserDashboard />} />
-            </Route>
+            />
 
             <Route path="/question-sistem" element={<QuestionSistem />} />
 

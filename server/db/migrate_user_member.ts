@@ -34,6 +34,12 @@ async function migrateUserMember() {
       WHERE TABLE_NAME = 'user_member' AND COLUMN_NAME = 'member_id'
     )
       ALTER TABLE user_member ADD member_id NVARCHAR(20) NULL;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_NAME = 'user_member' AND COLUMN_NAME = 'photo_profile'
+    )
+      ALTER TABLE user_member ADD photo_profile NVARCHAR(500) NULL;
   `);
 
   // 4) Backfill member_id for existing rows

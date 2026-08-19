@@ -11,15 +11,6 @@ import { settingsApi } from "@/services/api";
 import { getSessionUser, setSession, getSession } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
 
-const JABATAN_LABEL: Record<string, string> = {
-  preacher:      "Preacher / Pembina",
-  ketua:         "Ketua",
-  wakil_ketua:   "Wakil Ketua",
-  kepala_divisi: "Kepala Divisi",
-  member_divisi: "Member Divisi",
-  peserta:       "Peserta",
-};
-
 const ROLE_COLOR: Record<string, string> = {
   super_admin: "bg-purple-100 text-purple-700 border-purple-200",
   admin:       "bg-blue-100 text-blue-700 border-blue-200",
@@ -32,7 +23,7 @@ export default function UserProfile() {
   const [saving,   setSaving]   = useState(false);
   const [profile,  setProfile]  = useState({
     full_name: "", email: "", phone_number: "", member_id: "",
-    role: "", jabatan: "", division: "", avatar_url: "", created_at: "",
+    role: "", avatar_url: "", photo_profile: "", created_at: "",
   });
   const [passwords, setPasswords] = useState({
     currentPassword: "", newPassword: "", confirmPassword: "",
@@ -56,22 +47,37 @@ export default function UserProfile() {
       return toast({ title: "Validasi", description: "Nama wajib diisi", variant: "destructive" });
     setSaving(true);
     try {
+      const photoSource = profile.photo_profile || profile.avatar_url || undefined;
       await settingsApi.updateProfile({
         fullName:    profile.full_name,
         phoneNumber: profile.phone_number,
-        avatarUrl:   profile.avatar_url || undefined,
+        avatarUrl:   photoSource,
+        photoProfile: photoSource,
       });
-      // Update session user
       const sess = getSession();
       if (sess) {
-        sess.user.full_name  = profile.full_name;
-        sess.user.avatar_url = profile.avatar_url;
+        sess.user.full_name = profile.full_name;
+        sess.user.avatar_url = photoSource;
+        sess.user.photo_profile = photoSource;
         setSession(sess.user, { accessToken: sess.accessToken, refreshToken: sess.refreshToken });
       }
       toast({ title: "Berhasil", description: "Profil berhasil diperbarui" });
     } catch (e: any) {
       toast({ title: "Error", description: e.response?.data?.message || "Gagal memperbarui profil", variant: "destructive" });
     } finally { setSaving(false); }
+  };
+
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setProfile((prev) => ({ ...prev, photo_profile: result, avatar_url: result || prev.avatar_url }));
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
   };
 
   const handleChangePassword = async () => {
@@ -110,17 +116,18 @@ export default function UserProfile() {
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <div className="relative">
               <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border-4 border-background shadow-md">
-                {profile.avatar_url ? (
-                  <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                {(profile.photo_profile || profile.avatar_url) ? (
+                  <img src={profile.photo_profile || profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-3xl font-bold text-primary">
                     {profile.full_name?.charAt(0)?.toUpperCase() || "?"}
                   </span>
                 )}
               </div>
-              <button className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center shadow">
+              <label className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center shadow cursor-pointer hover:opacity-90">
                 <Camera className="w-3.5 h-3.5" />
-              </button>
+                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+              </label>
             </div>
             <div className="text-center sm:text-left flex-1">
               <h2 className="text-xl font-bold">{profile.full_name}</h2>
@@ -129,16 +136,6 @@ export default function UserProfile() {
                 <Badge variant="outline" className={ROLE_COLOR[profile.role]}>
                   {profile.role === "super_admin" ? "Super Admin" : profile.role === "admin" ? "Admin" : "Member"}
                 </Badge>
-                {profile.jabatan && (
-                  <Badge variant="outline" className="bg-gray-100 text-gray-700">
-                    {JABATAN_LABEL[profile.jabatan] || profile.jabatan}
-                  </Badge>
-                )}
-                {profile.division && (
-                  <Badge variant="outline" className="bg-indigo-100 text-indigo-700">
-                    {profile.division}
-                  </Badge>
-                )}
               </div>
               <p className="text-xs text-muted-foreground mt-2">
                 ID: {profile.member_id} · Bergabung: {profile.created_at ? new Date(profile.created_at).toLocaleDateString("id-ID", { month: "long", year: "numeric" }) : "-"}
@@ -182,19 +179,8 @@ export default function UserProfile() {
                 </div>
               </div>
               <div>
-                <Label htmlFor="avatar" className="mb-1.5 block">URL Foto Profil (opsional)</Label>
-                <Input id="avatar" placeholder="https://..." value={profile.avatar_url || ""}
-                  onChange={(e) => setProfile({ ...profile, avatar_url: e.target.value })} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="mb-1.5 block">Jabatan</Label>
-                  <Input disabled value={JABATAN_LABEL[profile.jabatan] || profile.jabatan || "-"} className="bg-muted" />
-                </div>
-                <div>
-                  <Label className="mb-1.5 block">Divisi</Label>
-                  <Input disabled value={profile.division || "-"} className="bg-muted" />
-                </div>
+                <Label htmlFor="avatar" className="mb-1.5 block">Foto Profil (opsional)</Label>
+                <Input id="avatar" value={profile.photo_profile || profile.avatar_url || ""} readOnly className="bg-muted" placeholder="Belum ada foto profil" />
               </div>
               <Button onClick={handleSaveProfile} disabled={saving} className="gap-2 w-full sm:w-auto">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

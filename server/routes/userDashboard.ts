@@ -3,15 +3,23 @@ import { getConnection, sql } from "../db/config";
 
 const TREND_DAY_LABELS = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Today"];
 
-const buildTrend = (totalPoints: number) => {
-  const safeTotal = Math.max(totalPoints, 0);
-  const offsets = [11, 9, 8, 6, 5, 3, 0];
+const buildTrend = (totalPoints: number, dailyPoints = new Map<string, number>()) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const firstDay = new Date(today);
+  firstDay.setDate(firstDay.getDate() - 6);
+  let runningPoints = Math.max(totalPoints, 0) - [...dailyPoints.values()].reduce((sum, value) => sum + value, 0);
 
-  return TREND_DAY_LABELS.map((label, index) => ({
-    label,
-    points: Math.max(safeTotal - offsets[index], 0),
-  }));
+  return TREND_DAY_LABELS.map((label, index) => {
+    const day = new Date(firstDay);
+    day.setDate(firstDay.getDate() + index);
+    const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+    runningPoints += dailyPoints.get(key) ?? 0;
+    return { label, points: Math.max(runningPoints, 0) };
+  });
 };
+
+const getEmptyTrend = () => TREND_DAY_LABELS.map((label) => ({ label, points: 0 }));
 
 const normalizeString = (value: unknown) => {
   if (typeof value !== "string") {
@@ -39,9 +47,14 @@ async function findMatchedUser(email: string | null, name: string | null) {
         um.member_id,
         um.name AS full_name,
         email,
-        COALESCE(mp.points, 0) AS points
+        COALESCE(log_totals.points, mp.points, 0) AS points
       FROM user_member um
       LEFT JOIN member_point mp ON mp.member_id = um.member_id
+      LEFT JOIN (
+        SELECT member_id, SUM(COALESCE(points, 0)) AS points
+        FROM point_logs
+        GROUP BY member_id
+      ) log_totals ON log_totals.member_id = um.member_id
       WHERE 1=1
         AND (
           (@email IS NOT NULL AND LOWER(email) = LOWER(@email))
@@ -50,7 +63,32 @@ async function findMatchedUser(email: string | null, name: string | null) {
       ORDER BY CASE WHEN @email IS NOT NULL AND LOWER(email) = LOWER(@email) THEN 0 ELSE 1 END, id ASC
     `);
 
-  return result.recordset[0] ?? null;
+  if (result.recordset[0]) return result.recordset[0];
+
+  const userResult = await pool
+    .request()
+    .input("userEmail", sql.NVarChar, email)
+    .input("userName", sql.NVarChar, name)
+    .query(`
+      SELECT TOP 1
+        u.id,
+        u.member_id,
+        u.full_name,
+        u.email,
+        COALESCE(log_totals.points, mp.points, 0) AS points
+      FROM users u
+      LEFT JOIN member_point mp ON mp.member_id = u.member_id
+      LEFT JOIN (
+        SELECT member_id, SUM(COALESCE(points, 0)) AS points
+        FROM point_logs
+        GROUP BY member_id
+      ) log_totals ON log_totals.member_id = u.member_id
+      WHERE (@userEmail IS NOT NULL AND LOWER(u.email) = LOWER(@userEmail))
+         OR (@userName IS NOT NULL AND LOWER(u.full_name) = LOWER(@userName))
+      ORDER BY CASE WHEN @userEmail IS NOT NULL AND LOWER(u.email) = LOWER(@userEmail) THEN 0 ELSE 1 END, u.id ASC
+    `);
+
+  return userResult.recordset[0] ?? null;
 }
 
 export const handleGetUserDashboard: RequestHandler = async (req, res) => {
@@ -67,7 +105,7 @@ export const handleGetUserDashboard: RequestHandler = async (req, res) => {
           matched: false,
           profile: null,
           points: 0,
-          trend: buildTrend(0),
+          trend: getEmptyTrend(),
         },
       });
       return;
@@ -77,6 +115,33 @@ export const handleGetUserDashboard: RequestHandler = async (req, res) => {
 
     // Fetch today's attendance record
     const pool = await getConnection();
+    const rankResult = await pool.request()
+      .input("member_id", sql.NVarChar, matchedUser.member_id)
+      .query(`
+        SELECT 1 + COUNT(*) AS rank
+        FROM member_point other
+        WHERE other.points > COALESCE((
+          SELECT points FROM member_point WHERE member_id=@member_id
+        ), 0)
+      `);
+    let dailyPoints = new Map<string, number>();
+    try {
+      const trendResult = await pool.request()
+        .input("member_id", sql.NVarChar, matchedUser.member_id)
+        .query(`
+          SELECT CONVERT(char(10), created_at, 23) AS point_date,
+                 SUM(COALESCE(points, 0)) AS points
+          FROM point_logs
+          WHERE member_id=@member_id
+            AND created_at >= DATEADD(day, -6, CAST(GETDATE() AS DATE))
+          GROUP BY CONVERT(char(10), created_at, 23)
+        `);
+      dailyPoints = new Map<string, number>(
+        trendResult.recordset.map((row: any) => [row.point_date, Number(row.points ?? 0)])
+      );
+    } catch (trendError) {
+      console.warn("[USER DASHBOARD TREND] Falling back to total points:", trendError);
+    }
     const attendanceResult = await pool
       .request()
       .input("member_id", sql.NVarChar, matchedUser.member_id)
@@ -99,8 +164,9 @@ export const handleGetUserDashboard: RequestHandler = async (req, res) => {
           email: matchedUser.email,
         },
         points,
+        rank: Number(rankResult.recordset[0]?.rank ?? 1),
         attendanceDate,
-        trend: buildTrend(points),
+        trend: buildTrend(points, dailyPoints),
       },
     });
   } catch (error) {
