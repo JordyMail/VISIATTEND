@@ -180,7 +180,9 @@ This command will run:
 7. `db:migrate:attendance_event_code` — Adds event_code to attendance records.
 8. `db:migrate:attendance_summary` — Creates automated attendance totals table and sync triggers.
 9. `db:migrate:questions` — Creates interactive question and response tables.
-10. `db:seed` — Inserts data including the default admin account and template events.
+10. `db:migrate:regular_event` — Creates the Regular_Event lookup table.
+11. `db:migrate:event_schedule_v3` — Renames Regular_Event, adds start_time/end_time/participant_access/event_type to event_schedule, and creates the event_participants table (required by Face AI attendance access checks).
+12. `db:seed` — Inserts data including the default admin account and template events.
 
 > [!NOTE]
 > If you need to run migration scripts manually one-by-one:
@@ -194,6 +196,8 @@ This command will run:
 > pnpm db:migrate:attendance_event_code
 > pnpm db:migrate:attendance_summary
 > pnpm db:migrate:questions
+> pnpm db:migrate:regular_event
+> pnpm db:migrate:event_schedule_v3
 > pnpm db:seed
 > ```
 
