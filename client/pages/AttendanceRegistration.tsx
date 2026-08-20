@@ -25,6 +25,7 @@ import {
 import { toast } from "@/components/ui/use-toast";
 import { setPendingRegistrationProfile } from "@/lib/attendanceFlow";
 import { userMemberApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 type RegistrationType = "student" | "other" | "";
 
@@ -45,6 +46,9 @@ const INITIAL_FORM: RegistrationFormState = {
 };
 
 const getMinimumBirthday = () => {
+const createAttendanceRegistrationSchema = (t: (key: import("@/lib/i18n").TranslationKey) => string) => z.object({
+  studentId: z.string({ required_error: t("studentRequired") }),
+});
   const date = new Date();
   date.setFullYear(date.getFullYear() - 17);
   return date.toISOString().slice(0, 10);
@@ -55,6 +59,7 @@ const isValidPhone = (phone: string) => /^\+62\d{8,13}$/.test(phone.trim());
 
 export default function AttendanceRegistration() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [formState, setFormState] = useState<RegistrationFormState>(INITIAL_FORM);
   const [isSaved, setIsSaved] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -72,9 +77,9 @@ export default function AttendanceRegistration() {
   }, [formState]);
 
   const validationMessage = useMemo(() => {
-    if (formState.email && !isValidEmail(formState.email)) return "Email harus menggunakan format yang valid, contoh: nama@email.com.";
-    if (formState.phone && !isValidPhone(formState.phone)) return "Nomor telepon harus diawali +62 dan hanya berisi angka, contoh: +628123456789.";
-    if (formState.birthday && formState.birthday > getMinimumBirthday()) return "Usia minimal untuk registrasi adalah 17 tahun.";
+    if (formState.email && !isValidEmail(formState.email)) return `${t("emailAddress")} ${t("required").toLowerCase()}`;
+    if (formState.phone && !isValidPhone(formState.phone)) return `${t("phoneNumber")} ${t("required").toLowerCase()}`;
+    if (formState.birthday && formState.birthday > getMinimumBirthday()) return t("minimumCharacters");
     return null;
   }, [formState]);
 
@@ -113,13 +118,13 @@ export default function AttendanceRegistration() {
       setIsSaved(true);
       setIsConfirmOpen(false);
       toast({
-        title: "✅ Akun berhasil dibuat!",
-        description: `Password login telah dikirim ke ${formState.email}. Silakan cek inbox (atau folder spam).`,
+        title: t("registrationSuccess"),
+        description: `${t("password")} ${t("emailAddress")}: ${formState.email}`,
       });
     } catch (error: any) {
       toast({
-        title: "Save gagal",
-        description: error?.response?.data?.message || "Gagal menyimpan data registrasi.",
+        title: t("error"),
+        description: error?.response?.data?.message || t("announcementSaveFailed"),
         variant: "destructive",
       });
     } finally {
@@ -139,18 +144,17 @@ export default function AttendanceRegistration() {
               onClick={() => navigate("/attendance")}
             >
               <ArrowLeft className="h-4 w-4" />
-              Back
+              {t("back")}
             </Button>
 
             <div className="flex flex-col gap-3">
               <div className="inline-flex w-fit items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-sm backdrop-blur-sm">
                 <ShieldCheck className="h-4 w-4" />
-                Start Registration
+                {t("startRegistration")}
               </div>
-              <h1 className="text-3xl font-bold sm:text-4xl">Input data awal registrasi</h1>
+              <h1 className="text-3xl font-bold sm:text-4xl">{t("registration")}</h1>
               <p className="max-w-2xl text-sm text-white/85 sm:text-base">
-                Isi semua data terlebih dahulu. Setelah data disimpan, akun akan otomatis dibuat dan
-                <strong> password dikirim ke email kamu</strong>. Lalu lanjutkan ke Face Registration.
+                {t("createAccountPrompt")}
               </p>
             </div>
           </div>
@@ -160,10 +164,10 @@ export default function AttendanceRegistration() {
           <CardContent className="space-y-6 p-6 md:p-8">
             <div className="grid gap-5 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="registration-name">Nama</Label>
+                <Label htmlFor="registration-name">{t("fullName")}</Label>
                 <Input
                   id="registration-name"
-                  placeholder="Masukkan nama lengkap"
+                  placeholder={`${t("fullName")}...`}
                   value={formState.name}
                   disabled={isSaved}
                   onChange={(event) => updateField("name", event.target.value)}
@@ -171,11 +175,11 @@ export default function AttendanceRegistration() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="registration-email">Email</Label>
+                <Label htmlFor="registration-email">{t("emailAddress")}</Label>
                 <Input
                   id="registration-email"
                   type="email"
-                  placeholder="Masukkan email"
+                  placeholder={`${t("emailAddress")}...`}
                   value={formState.email}
                   disabled={isSaved}
                   onChange={(event) => updateField("email", event.target.value)}
@@ -183,28 +187,28 @@ export default function AttendanceRegistration() {
               </div>
 
               <div className="space-y-2">
-                <Label>Student or Other</Label>
+                <Label>{t("category")}</Label>
                 <Select
                   value={formState.category}
                   disabled={isSaved}
                   onValueChange={(value) => updateField("category", value as RegistrationType)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Pilih kategori" />
+                    <SelectValue placeholder={t("category")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="student">Student</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="student">{t("student")}</SelectItem>
+                    <SelectItem value="other">{t("other")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="registration-phone">Phone</Label>
+                <Label htmlFor="registration-phone">{t("phoneNumber")}</Label>
                 <Input
                   id="registration-phone"
                   type="tel"
-                  placeholder="Masukkan nomor telepon"
+                  placeholder={`${t("phoneNumber")}...`}
                   value={formState.phone}
                   disabled={isSaved}
                   onChange={(event) => {
@@ -215,7 +219,7 @@ export default function AttendanceRegistration() {
               </div>
 
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="registration-birthday">Birthday</Label>
+                <Label htmlFor="registration-birthday">{t("date")}</Label>
                 <Input
                   id="registration-birthday"
                   type="date"
@@ -229,14 +233,14 @@ export default function AttendanceRegistration() {
 
             {!isFormComplete && !isSaved && (
               <p className="text-sm text-amber-600">
-                {validationMessage || "Lengkapi semua field terlebih dahulu agar tombol save aktif."}
+                {validationMessage || t("required")}
               </p>
             )}
 
             {isSaved && (
               <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                 <CheckCircle2 className="h-4 w-4" />
-                Data registrasi sudah disimpan dan field sekarang terkunci.
+                {t("success")}
               </div>
             )}
 
@@ -249,7 +253,7 @@ export default function AttendanceRegistration() {
               >
                 <span className="flex items-center gap-2">
                   <Save className="h-4 w-4" />
-                  {saving ? "Saving..." : "Save"}
+                  {saving ? t("saving") : t("save")}
                 </span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
@@ -263,7 +267,7 @@ export default function AttendanceRegistration() {
               >
                 <span className="flex items-center gap-2">
                   <Video className="h-4 w-4" />
-                  Start Face Registration
+                  {t("faceRegistration")}
                 </span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
@@ -275,15 +279,15 @@ export default function AttendanceRegistration() {
       <AlertDialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Apakah anda yakin?</AlertDialogTitle>
+            <AlertDialogTitle>{t("confirm")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Setelah disimpan, data nama, email, student or other, phone, dan birthday akan menjadi disable.
+              {t("continuePrompt")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmSave} disabled={saving}>
-              {saving ? "Menyimpan..." : "Ya, Save"}
+              {saving ? t("saving") : t("confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

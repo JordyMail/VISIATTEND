@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useLanguage } from "@/lib/i18n";
 
 interface HeaderNavProps {
   onMenuClick?: () => void;
@@ -29,6 +30,7 @@ export function HeaderNav({
   hideUserControls = false,
 }: HeaderNavProps) {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [hasNotifications] = useState(true);
 
   const handleLogout = () => {
@@ -103,7 +105,7 @@ export function HeaderNav({
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   <User className="w-4 h-4" />
-                  <span>Profile</span>
+                  <span>{t("profile")}</span>
                 </Link>
               </DropdownMenuItem>
 
@@ -113,7 +115,7 @@ export function HeaderNav({
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   <Settings className="w-4 h-4" />
-                  <span>Settings</span>
+                  <span>{t("settings")}</span>
                 </Link>
               </DropdownMenuItem>
 
@@ -124,7 +126,7 @@ export function HeaderNav({
                 onClick={handleLogout}
               >
                 <LogOut className="w-4 h-4" />
-                <span>Log out</span>
+                <span>{t("logout")}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

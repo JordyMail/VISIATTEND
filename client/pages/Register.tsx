@@ -5,15 +5,16 @@ import {
   Eye, EyeOff, User, Mail, Lock, Phone, Shield, ArrowLeft, CheckCircle, XCircle,
 } from "lucide-react";
 import { authApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 const JABATAN_OPTIONS = [
-  { value: "preacher",      label: "Preacher / Pembina" },
-  { value: "ketua",         label: "Ketua" },
-  { value: "wakil_ketua",   label: "Wakil Ketua" },
-  { value: "kepala_divisi", label: "Kepala Divisi" },
-  { value: "member_divisi", label: "Member Divisi" },
-  { value: "peserta",       label: "Peserta" },
-];
+  { value: "preacher", key: "rolePreacher" },
+  { value: "ketua", key: "roleChair" },
+  { value: "wakil_ketua", key: "roleViceChair" },
+  { value: "kepala_divisi", key: "roleDivisionHead" },
+  { value: "member_divisi", key: "roleDivisionMember" },
+  { value: "peserta", key: "roleParticipant" },
+] as const;
 
 interface PasswordStrength {
   score: number; hasLower: boolean; hasUpper: boolean;
@@ -22,6 +23,7 @@ interface PasswordStrength {
 
 export default function Register() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [formData, setFormData] = useState({
     fullName: "", email: "", password: "", confirmPassword: "",
     phoneNumber: "", jabatan: "peserta",
@@ -57,15 +59,17 @@ export default function Register() {
   };
 
   const validate = () => {
-    if (!formData.fullName.trim()) { setError("Nama lengkap wajib diisi"); return false; }
-    if (!formData.email.trim())    { setError("Email wajib diisi"); return false; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) { setError("Format email tidak valid"); return false; }
-    if (!formData.password)        { setError("Password wajib diisi"); return false; }
-    if (formData.password.length < 8) { setError("Password minimal 8 karakter"); return false; }
-    if (formData.password !== formData.confirmPassword) { setError("Konfirmasi password tidak cocok"); return false; }
-    if (pwStrength.score < 3)      { setError("Password terlalu lemah"); return false; }
-    if (!formData.phoneNumber)     { setError("Nomor HP wajib diisi"); return false; }
-    if (!agreeTerms)               { setError("Kamu harus menyetujui syarat dan ketentuan"); return false; }
+    if (!formData.fullName.trim()) { setError(`${t("fullName")} ${t("required").toLowerCase()}`); return false; }
+    if (!formData.email.trim())    { setError(`${t("emailAddress")} ${t("required").toLowerCase()}`); return false; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) { setError("Invalid email format"); return false; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) { setError(t("invalidEmail")); return false; }
+    if (!formData.password)        { setError(`${t("password")} ${t("required").toLowerCase()}`); return false; }
+    if (formData.password.length < 8) { setError(t("minCharacters")); return false; }
+    if (formData.password !== formData.confirmPassword) { setError(t("passwordMismatch")); return false; }
+    if (pwStrength.score < 3)      { setError(`${t("password")} is too weak`); return false; }
+      if (pwStrength.score < 3)      { setError(`${t("password")} ${t("weak").toLowerCase()}`); return false; }
+    if (!formData.phoneNumber)     { setError(`${t("phoneNumber")} ${t("required").toLowerCase()}`); return false; }
+    if (!agreeTerms)               { setError(`${t("agreeTo")} ${t("termsAndConditions")}`); return false; }
     return true;
   };
 
@@ -83,10 +87,11 @@ export default function Register() {
         phoneNumber: formData.phoneNumber,
         jabatan:     formData.jabatan,
       });
-      setSuccess("Registrasi berhasil! Kamu akan diarahkan ke halaman login...");
+      setSuccess(t("registrationSuccess"));
       setTimeout(() => navigate("/login"), 2500);
     } catch (err: any) {
       setError(err.response?.data?.message || "Registrasi gagal. Coba lagi.");
+      setError(err.response?.data?.message || t("registrationFailed"));
     } finally { setLoading(false); }
   };
 
@@ -96,9 +101,9 @@ export default function Register() {
     return "bg-green-500";
   };
   const strengthText = () => {
-    if (pwStrength.score <= 2) return "Lemah";
-    if (pwStrength.score === 3) return "Sedang";
-    return "Kuat";
+    if (pwStrength.score <= 2) return t("weak");
+    if (pwStrength.score === 3) return t("medium");
+    return t("strong");
   };
 
   const CheckRow = ({ ok, label }: { ok: boolean; label: string }) => (
@@ -113,12 +118,12 @@ export default function Register() {
       {/* Security badge */}
       <div className={`absolute top-4 right-4 flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-gray-200 transition-all duration-700 delay-300 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"}`}>
         <Shield className="w-4 h-4 text-green-600" />
-        <span className="text-xs text-gray-600">Secure Registration</span>
+        <span className="text-xs text-gray-600">{t("secureRegistration")}</span>
       </div>
 
       <Link to="/login" className={`absolute top-4 left-4 flex items-center gap-2 text-purple-600 hover:text-blue-900 transition-all duration-300 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm z-10 ${isVisible ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4"}`}>
         <ArrowLeft className="w-4 h-4" />
-        <span className="text-sm">Kembali ke Login</span>
+        <span className="text-sm">{t("backToLogin")}</span>
       </Link>
 
       {/* Blobs */}
@@ -133,7 +138,7 @@ export default function Register() {
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             VISIATTEND
           </h1>
-          <p className="text-gray-500 mt-1">Buat akun untuk mulai mencatat kehadiran</p>
+          <p className="text-gray-500 mt-1">{t("createAccountPrompt")}</p>
         </div>
 
         <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/20 p-6 md:p-8">
@@ -142,7 +147,7 @@ export default function Register() {
               <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-10 h-10 text-green-600" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Registrasi Berhasil!</h3>
+              <h3 className="text-xl font-semibold mb-2">{t("success")}</h3>
               <p className="text-gray-600">{success}</p>
             </div>
           ) : (
@@ -158,11 +163,11 @@ export default function Register() {
                 {/* Nama */}
                 <div className="md:col-span-2 space-y-1 group">
                   <label className="text-sm font-medium text-gray-700 flex items-center gap-2 group-hover:text-blue-600 transition-colors">
-                    <User className="w-4 h-4 text-gray-400" /> Nama Lengkap *
+                    <User className="w-4 h-4 text-gray-400" /> {t("fullName")} *
                   </label>
                   <input name="fullName" type="text" value={formData.fullName} onChange={handleChange}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white/50 hover:border-blue-300"
-                    placeholder="Nama lengkap sesuai KTP" disabled={loading} />
+                    placeholder={t("fullNamePlaceholder")} disabled={loading} />
                 </div>
 
                 {/* Email */}
@@ -178,7 +183,7 @@ export default function Register() {
                 {/* HP */}
                 <div className="space-y-1 group">
                   <label className="text-sm font-medium text-gray-700 flex items-center gap-2 group-hover:text-blue-600 transition-colors">
-                    <Phone className="w-4 h-4 text-gray-400" /> Nomor HP *
+                    <Phone className="w-4 h-4 text-gray-400" /> {t("phoneNumber")} *
                   </label>
                   <input name="phoneNumber" type="tel" value={formData.phoneNumber} onChange={handleChange}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white/50 hover:border-blue-300"
@@ -187,11 +192,11 @@ export default function Register() {
 
                 {/* Jabatan */}
                 <div className="md:col-span-2 space-y-1">
-                  <label className="text-sm font-medium text-gray-700">Jabatan dalam Organisasi</label>
+                  <label className="text-sm font-medium text-gray-700">{t("organizationRole")}</label>
                   <select name="jabatan" value={formData.jabatan} onChange={handleChange}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white/50 hover:border-blue-300"
                     disabled={loading}>
-                    {JABATAN_OPTIONS.map((j) => <option key={j.value} value={j.value}>{j.label}</option>)}
+                    {JABATAN_OPTIONS.map((j) => <option key={j.value} value={j.value}>{t(j.key)}</option>)}
                   </select>
                 </div>
 
@@ -220,11 +225,11 @@ export default function Register() {
                         <span className="text-xs text-gray-600">{strengthText()}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-1 text-xs">
-                        <CheckRow ok={pwStrength.minLength} label="Min 8 karakter" />
-                        <CheckRow ok={pwStrength.hasLower}  label="Huruf kecil" />
-                        <CheckRow ok={pwStrength.hasUpper}  label="Huruf besar" />
-                        <CheckRow ok={pwStrength.hasNumber} label="Angka" />
-                        <CheckRow ok={pwStrength.hasSpecial} label="Karakter khusus" />
+                        <CheckRow ok={pwStrength.minLength} label={t("minCharacters")} />
+                        <CheckRow ok={pwStrength.hasLower}  label={t("lowercase")} />
+                        <CheckRow ok={pwStrength.hasUpper}  label={t("uppercase")} />
+                        <CheckRow ok={pwStrength.hasNumber} label={t("number")} />
+                        <CheckRow ok={pwStrength.hasSpecial} label={t("specialCharacter")} />
                       </div>
                     </div>
                   )}
@@ -233,7 +238,7 @@ export default function Register() {
                 {/* Confirm password */}
                 <div className="space-y-1 group">
                   <label className="text-sm font-medium text-gray-700 flex items-center gap-2 group-hover:text-blue-600 transition-colors">
-                    <Lock className="w-4 h-4 text-gray-400" /> Konfirmasi Password *
+                    <Lock className="w-4 h-4 text-gray-400" /> {t("confirmPassword")} *
                   </label>
                   <div className="relative">
                     <input name="confirmPassword" type={showCPw ? "text" : "password"} value={formData.confirmPassword} onChange={handleChange}
@@ -245,7 +250,7 @@ export default function Register() {
                     </button>
                   </div>
                   {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                    <p className="text-xs text-red-500 mt-1">Password tidak cocok</p>
+                    <p className="text-xs text-red-500 mt-1">{t("passwordMismatch")}</p>
                   )}
                 </div>
               </div>
@@ -255,10 +260,10 @@ export default function Register() {
                 <input type="checkbox" id="terms" checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)}
                   className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" disabled={loading} />
                 <label htmlFor="terms" className="text-sm text-gray-600">
-                  Saya menyetujui{" "}
-                  <span className="text-blue-600 cursor-pointer hover:underline">Syarat & Ketentuan</span>
-                  {" "}dan{" "}
-                  <span className="text-blue-600 cursor-pointer hover:underline">Kebijakan Privasi</span>
+                  {t("agreeTo")} {" "}
+                  <span className="text-blue-600 cursor-pointer hover:underline">{t("termsAndConditions")}</span>
+                  {" "}{t("and")}{" "}
+                  <span className="text-blue-600 cursor-pointer hover:underline">{t("privacyPolicy")}</span>
                 </label>
               </div>
 
@@ -267,14 +272,14 @@ export default function Register() {
                 {loading ? (
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Mendaftar...</span>
+                    <span>{t("loading")}</span>
                   </div>
-                ) : "Daftar Sekarang"}
+                ) : t("registerNow")}
               </button>
 
               <p className="text-center text-sm text-gray-500">
-                Sudah punya akun?{" "}
-                <Link to="/login" className="text-blue-600 hover:underline font-medium">Masuk</Link>
+                {t("alreadyHaveAccount")}{" "}
+                <Link to="/login" className="text-blue-600 hover:underline font-medium">{t("signIn")}</Link>
               </p>
             </form>
           )}

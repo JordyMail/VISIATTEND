@@ -10,6 +10,7 @@ import { getCellsInLine, deserializeGrid, generateWordSearch } from "@/lib/wordS
 import { toast } from "@/components/ui/use-toast";
 import { format, parseISO } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { useLanguage } from "@/lib/i18n";
 
 interface QuestionData {
   id: number;
@@ -32,6 +33,7 @@ interface EventData {
 
 export default function AnswerQuestion() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [events, setEvents] = useState<EventData[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentEventIdx, setCurrentEventIdx] = useState(0);
@@ -52,7 +54,7 @@ export default function AnswerQuestion() {
       const r = await wordSearchApi.getForUser();
       setEvents(r.data.data ?? []);
     } catch {
-      toast({ title: "Error", description: "Gagal memuat soal", variant: "destructive" });
+      toast({ title: t("error"), description: `${t("error")}: ${t("questions")}`, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -169,9 +171,9 @@ export default function AnswerQuestion() {
         <Card className="max-w-sm w-full">
           <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
             <Trophy className="h-12 w-12 text-amber-400" />
-            <p className="text-lg font-semibold">Tidak Ada Soal Tersedia</p>
-            <p className="text-sm text-muted-foreground">Semua soal sudah dijawab atau belum ada soal baru.</p>
-            <Button onClick={() => navigate("/user/dashboard")}>Kembali ke Dashboard</Button>
+            <p className="text-lg font-semibold">{t("noResults")}</p>
+            <p className="text-sm text-muted-foreground">{t("noQuestionsToday")}</p>
+            <Button onClick={() => navigate("/user/dashboard")}>{t("backToHome")}</Button>
           </CardContent>
         </Card>
       </div>
@@ -184,9 +186,9 @@ export default function AnswerQuestion() {
         <Card className="max-w-sm w-full">
           <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
             <CheckCircle2 className="h-12 w-12 text-green-500" />
-            <p className="text-lg font-semibold">Semua Soal Selesai!</p>
-            <p className="text-sm text-muted-foreground">Kamu sudah menyelesaikan semua soal yang tersedia.</p>
-            <Button onClick={() => navigate("/user/dashboard")}>Kembali ke Dashboard</Button>
+            <p className="text-lg font-semibold">{t("success")}</p>
+            <p className="text-sm text-muted-foreground">{t("completed")}</p>
+            <Button onClick={() => navigate("/user/dashboard")}>{t("backToHome")}</Button>
           </CardContent>
         </Card>
       </div>
@@ -207,9 +209,9 @@ export default function AnswerQuestion() {
             : ""}
         </p>
         <div className="flex items-center gap-2 mt-1">
-          <Badge variant="secondary" className="text-xs">Soal {currentQIdx + 1} / {totalQuestions}</Badge>
+          <Badge variant="secondary" className="text-xs">{t("question")} {currentQIdx + 1} / {totalQuestions}</Badge>
           <Badge variant="outline" className="text-xs text-green-600 border-green-300">
-            {answeredCount} / {totalQuestions} Selesai
+            {answeredCount} / {totalQuestions} {t("completed")}
           </Badge>
         </div>
       </div>
@@ -218,13 +220,13 @@ export default function AnswerQuestion() {
         <CardContent className="p-4 space-y-4">
           {/* Clue */}
           <div className="rounded-lg bg-violet-50 border border-violet-200 p-3">
-            <p className="text-xs font-semibold text-violet-600 uppercase tracking-wide mb-1">Find the hidden word</p>
+            <p className="text-xs font-semibold text-violet-600 uppercase tracking-wide mb-1">{t("findHiddenWord")}</p>
             <p className="text-sm font-medium text-slate-800">{currentQuestion.clue}</p>
           </div>
 
           {currentQuestion.answered && (
             <div className="flex items-center gap-2 rounded-lg p-3 text-sm bg-green-50 text-green-700 border border-green-200">
-              <CheckCircle2 className="h-4 w-4 shrink-0" /> Soal ini sudah dijawab dengan benar.
+              <CheckCircle2 className="h-4 w-4 shrink-0" /> {t("answeredCorrectly")}
             </div>
           )}
 
@@ -297,12 +299,12 @@ export default function AnswerQuestion() {
 
           {(lastResult?.correct || currentQuestion.answered) && hasMoreQuestion && (
             <Button className="w-full gap-2" onClick={goNextQuestion}>
-              Soal Berikutnya <ChevronRight className="h-4 w-4" />
+              {t("nextQuestion")} <ChevronRight className="h-4 w-4" />
             </Button>
           )}
           {!hasMoreQuestion && (lastResult?.correct || currentQuestion.answered) && (
             <Button className="w-full" onClick={() => navigate("/user/dashboard")}>
-              Selesai â€” Kembali ke Dashboard
+              {t("completed")} - {t("backToDashboard")}
             </Button>
           )}
         </CardContent>

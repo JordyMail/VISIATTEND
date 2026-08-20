@@ -10,6 +10,7 @@ import {
 } from "@/lib/attendanceFlow";
 import { getSessionUser } from "@/lib/auth";
 import { memberLeaderboardApi, userDashboardApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 type AttendanceUser = {
   name: string;
@@ -57,6 +58,7 @@ const PARTICLES = Array.from({ length: 18 }, (_, i) => ({
 
 export default function UserDashboard() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const attendanceUser = getCurrentAttendanceUser();
   const sessionUser = getSessionUser();
   // Use the real attendance user; skip the fake 'attendance' operator session
@@ -109,8 +111,8 @@ export default function UserDashboard() {
         setLeaderboard(rows.slice(0, 10));
       } else {
         toast({
-          title: "Leaderboard tidak tersedia",
-          description: "Data leaderboard belum dapat dimuat.",
+          title: t("error"),
+          description: `${t("leaderboard")}: ${t("noData")}`,
           variant: "destructive",
         });
       }
@@ -122,8 +124,8 @@ export default function UserDashboard() {
       if (!active) return;
       setLoading(false);
       toast({
-        title: "Gagal memuat dashboard",
-        description: "Silakan coba refresh halaman.",
+        title: t("error"),
+        description: t("loading"),
         variant: "destructive",
       });
     });
@@ -144,19 +146,19 @@ export default function UserDashboard() {
       <div className="relative mx-auto flex w-full max-w-2xl flex-col items-center gap-5">
         {/* User card */}
         <div className="w-full rounded-[22px] border border-white/45 bg-white/20 px-6 py-6 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_10px_40px_rgba(0,0,0,0.42)] backdrop-blur-xl">
-          <p className="text-sm font-medium uppercase tracking-widest text-purple-300">Welcome</p>
+          <p className="text-sm font-medium uppercase tracking-widest text-purple-300">{t("welcome")}</p>
           <h1 className="mt-1 text-3xl font-bold text-white">{displayName}</h1>
           <p className="mt-1 text-xs text-purple-300/80">{formatActiveSince(attendanceDate)}</p>
         </div>
 
         {/* Leaderboard card */}
         <div className="w-full rounded-[22px] border border-white/50 bg-white/25 px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_12px_45px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:px-7">
-          <h2 className="mb-4 border-b border-white/35 pb-4 text-center text-lg font-bold text-white drop-shadow-sm">Leaderboard - Top 10</h2>
+          <h2 className="mb-4 border-b border-white/35 pb-4 text-center text-lg font-bold text-white drop-shadow-sm">{t("leaderboard")} - 10</h2>
 
           {loading ? (
-            <p className="py-10 text-center text-sm text-purple-200">Memuat leaderboard...</p>
+            <p className="py-10 text-center text-sm text-purple-200">{t("loading")}</p>
           ) : leaderboard.length === 0 ? (
-            <p className="py-10 text-center text-sm text-purple-200">Belum ada data leaderboard.</p>
+            <p className="py-10 text-center text-sm text-purple-200">{t("noData")}</p>
           ) : (
             <div className="grid grid-cols-2 gap-x-3 gap-y-2">
               {[leftCol, rightCol].map((col, ci) => (

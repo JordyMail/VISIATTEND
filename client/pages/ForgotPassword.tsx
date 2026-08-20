@@ -3,8 +3,10 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Mail, ArrowLeft, Shield, CheckCircle, AlertCircle } from "lucide-react";
 import { authApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 export default function ForgotPassword() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -23,17 +25,17 @@ export default function ForgotPassword() {
   const handleRequestReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!email) { setError("Email is required"); return; }
+    if (!email) { setError(t("emailRequired")); return; }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) { setError("Invalid email format"); return; }
+    if (!emailRegex.test(email)) { setError(t("invalidEmail")); return; }
 
     setLoading(true);
     try {
       await authApi.forgotPassword(email);
-      setSuccessMsg("Reset code sent! Check your email (or server console in dev).");
+      setSuccessMsg(t("resetCodeSent"));
       setStep("verify");
     } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to send reset code. Please try again.");
+      setError(err.response?.data?.message || t("resetPasswordFailed"));
     } finally {
       setLoading(false);
     }
@@ -43,7 +45,7 @@ export default function ForgotPassword() {
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (resetCode.length !== 6) { setError("Enter the 6-digit code"); return; }
+    if (resetCode.length !== 6) { setError(t("enterResetCode")); return; }
 
     setLoading(true);
     try {
@@ -67,10 +69,10 @@ export default function ForgotPassword() {
     setLoading(true);
     try {
       await authApi.resetPassword(email, resetCode, newPassword);
-      setSuccessMsg("Password reset successfully! Redirecting to login...");
+      setSuccessMsg(t("passwordResetSuccess"));
       setTimeout(() => { window.location.href = "/login"; }, 2500);
     } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to reset password");
+      setError(err.response?.data?.message || t("resetPasswordFailed"));
     } finally {
       setLoading(false);
     }
@@ -80,10 +82,10 @@ export default function ForgotPassword() {
     setLoading(true);
     try {
       await authApi.forgotPassword(email);
-      setSuccessMsg("New code sent!");
+      setSuccessMsg(t("resendCode"));
       setError("");
     } catch {
-      setError("Failed to resend code");
+      setError(t("resetPasswordFailed"));
     } finally {
       setLoading(false);
     }
@@ -94,7 +96,7 @@ export default function ForgotPassword() {
       {/* Security Badge */}
       <div className={`absolute top-4 right-4 flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-gray-200 transition-all duration-700 delay-300 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"}`}>
         <Shield className="w-4 h-4 text-green-600" />
-        <span className="text-xs text-gray-600">Secure Reset</span>
+        <span className="text-xs text-gray-600">{t("secureConnection")}</span>
       </div>
 
       <Link
@@ -103,7 +105,7 @@ export default function ForgotPassword() {
         style={{ zIndex: 100000 }}
       >
         <ArrowLeft className="w-4 h-4" />
-        <span className="text-sm">Back to Login</span>
+        <span className="text-sm">{t("backToLogin")}</span>
       </Link>
 
       <div className="absolute inset-0 bg-grid-slate-200 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] -z-10" />
@@ -114,14 +116,14 @@ export default function ForgotPassword() {
       <div className={`relative z-10 w-full max-w-md px-4 transition-all duration-1000 transform ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent animate-pulse-slow">
-            {step === "request" && "Forgot Password"}
-            {step === "verify" && "Verify Code"}
-            {step === "reset" && "Reset Password"}
+            {step === "request" && t("forgotPassword")}
+            {step === "verify" && t("verifyCode")}
+            {step === "reset" && t("resetPassword")}
           </h1>
           <p className="text-gray-500 mt-2">
-            {step === "request" && "Enter your email to receive a reset code"}
+            {step === "request" && t("sendResetCode")}
             {step === "verify" && `Enter the 6-digit code sent to ${email}`}
-            {step === "reset" && "Create a new password for your account"}
+            {step === "reset" && t("resetPasswordPrompt")}
           </p>
         </div>
 
@@ -147,7 +149,7 @@ export default function ForgotPassword() {
               <div className="space-y-2 group">
                 <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                   <Mail className="w-4 h-4 text-gray-400" />
-                  Email Address
+                  {t("emailAddress")}
                 </label>
                 <input
                   type="email"
@@ -166,14 +168,14 @@ export default function ForgotPassword() {
                 {loading ? (
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Sending...</span>
+                    <span>{t("loading")}</span>
                   </div>
-                ) : "Send Reset Code"}
+                ) : t("sendResetCode")}
               </button>
               <p className="text-center text-sm text-gray-500">
                 Remember your password?{" "}
                 <Link to="/login" className="text-blue-600 hover:underline font-medium">
-                  Sign in
+                  {t("signIn")}
                 </Link>
               </p>
             </form>
@@ -183,7 +185,7 @@ export default function ForgotPassword() {
           {step === "verify" && (
             <form onSubmit={handleVerifyCode} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Verification Code</label>
+                <label className="text-sm font-medium text-gray-700">{t("verificationCode")}</label>
                 <input
                   type="text"
                   value={resetCode}
@@ -202,9 +204,9 @@ export default function ForgotPassword() {
                 {loading ? (
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Verifying...</span>
+                    <span>{t("verifying")}</span>
                   </div>
-                ) : "Verify Code"}
+                ) : t("verifyCode")}
               </button>
               <div className="text-center">
                 <button
@@ -213,7 +215,7 @@ export default function ForgotPassword() {
                   disabled={loading}
                   className="text-sm text-blue-600 hover:text-blue-700 hover:underline disabled:opacity-50 transition-all duration-300"
                 >
-                  Resend Code
+                  {t("resendCode")}
                 </button>
               </div>
             </form>
@@ -224,7 +226,7 @@ export default function ForgotPassword() {
             <form onSubmit={handleResetPassword} className="space-y-6">
               <div className="space-y-4">
                 <div className="group">
-                  <label className="text-sm font-medium text-gray-700">New Password</label>
+                  <label className="text-sm font-medium text-gray-700">{t("newPassword")}</label>
                   <input
                     type="password"
                     value={newPassword}
@@ -233,10 +235,10 @@ export default function ForgotPassword() {
                     placeholder="••••••••"
                     disabled={loading}
                   />
-                  <p className="text-xs text-gray-500 mt-1">Minimum 8 characters</p>
+                  <p className="text-xs text-gray-500 mt-1">{t("minimumCharacters")}</p>
                 </div>
                 <div className="group">
-                  <label className="text-sm font-medium text-gray-700">Confirm Password</label>
+                  <label className="text-sm font-medium text-gray-700">{t("confirmPassword")}</label>
                   <input
                     type="password"
                     value={confirmPassword}
@@ -255,9 +257,9 @@ export default function ForgotPassword() {
                 {loading ? (
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Resetting...</span>
+                    <span>{t("loading")}</span>
                   </div>
-                ) : "Reset Password"}
+                ) : t("resetPassword")}
               </button>
             </form>
           )}

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { scheduleApi, eventApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface Schedule {
   id: number; event_id: number; event_name: string; event_code: string; event_type: string;
@@ -30,6 +31,7 @@ const EVENT_TYPE_LABEL: Record<string, string> = {
 };
 
 export default function UserSchedules() {
+  const { t } = useLanguage();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [events, setEvents]       = useState<Event[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -50,7 +52,7 @@ export default function UserSchedules() {
       });
       setSchedules(r.data.data);
     } catch {
-      toast({ title: "Error", description: "Gagal memuat jadwal", variant: "destructive" });
+      toast({ title: t("error"), description: `${t("error")}: ${t("schedules")}`, variant: "destructive" });
     } finally { setLoading(false); }
   };
 
@@ -72,8 +74,8 @@ export default function UserSchedules() {
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Jadwal Kegiatan</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Lihat jadwal ibadah dan kegiatan organisasi</p>
+        <h1 className="text-2xl font-bold">{t("schedules")}</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">{t("manageOrganizationSchedules")}</p>
       </div>
 
       {/* Filters */}
@@ -84,27 +86,27 @@ export default function UserSchedules() {
               <Button size="sm"
                 variant={showUpcoming ? "default" : "outline"}
                 onClick={() => { setShowUpcoming(true); loadSchedules(true, filterEvent); }}>
-                Mendatang
+                {t("upcoming")}
               </Button>
               <Button size="sm"
                 variant={!showUpcoming ? "default" : "outline"}
                 onClick={() => { setShowUpcoming(false); loadSchedules(false, filterEvent); }}>
-                Semua
+                {t("all")}
               </Button>
             </div>
             <Select value={filterEvent} onValueChange={setFilterEvent}>
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Semua event" />
+                <SelectValue placeholder={t("allEvents")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Semua Event</SelectItem>
+                <SelectItem value="all">{t("allEvents")}</SelectItem>
                 {events.map((e) => (
                   <SelectItem key={e.id} value={e.id.toString()}>{e.event_code} – {e.event_name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Button size="sm" variant="outline" onClick={handleFilter} className="gap-1.5">
-              <Filter className="w-3.5 h-3.5" /> Filter
+              <Filter className="w-3.5 h-3.5" /> {t("filter")}
             </Button>
           </div>
         </CardContent>
@@ -118,7 +120,7 @@ export default function UserSchedules() {
         <Card>
           <CardContent className="py-16 text-center">
             <CalendarDays className="w-12 h-12 mx-auto text-muted-foreground opacity-30 mb-3" />
-            <p className="text-muted-foreground">Tidak ada jadwal ditemukan</p>
+            <p className="text-muted-foreground">{t("noSchedules")}</p>
           </CardContent>
         </Card>
       ) : Object.entries(grouped).map(([month, items]) => (
@@ -144,7 +146,7 @@ export default function UserSchedules() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold">{s.event_name}</p>
                           {isToday(s.scheduled_date) && (
-                            <Badge className="bg-primary text-white text-xs">Hari Ini</Badge>
+                            <Badge className="bg-primary text-white text-xs">{t("todayLabel")}</Badge>
                           )}
                         </div>
                         <div className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">

@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { eventApi, attendanceApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 interface ClassData {
   name: string;
@@ -21,6 +22,7 @@ interface ClassData {
 }
 
 export function ClassAttendanceChart() {
+  const { t } = useLanguage();
   const [data, setData] = useState<ClassData[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -69,7 +71,7 @@ export function ClassAttendanceChart() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Attendance by Event</CardTitle>
+          <CardTitle className="text-lg">{t("attendanceByEvent")}</CardTitle>
         </CardHeader>
         <CardContent className="h-[300px] flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
@@ -82,10 +84,10 @@ export function ClassAttendanceChart() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Attendance by Event</CardTitle>
+          <CardTitle className="text-lg">{t("attendanceByEvent")}</CardTitle>
         </CardHeader>
         <CardContent className="h-[300px] flex items-center justify-center">
-          <p className="text-muted-foreground text-sm">No event data available</p>
+          <p className="text-muted-foreground text-sm">{t("noEventData")}</p>
         </CardContent>
       </Card>
     );
@@ -94,7 +96,7 @@ export function ClassAttendanceChart() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Attendance by Event</CardTitle>
+        <CardTitle className="text-lg">{t("attendanceByEvent")}</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
@@ -127,19 +129,19 @@ export function ClassAttendanceChart() {
             <Bar
               dataKey="present"
               fill="hsl(142 71% 45%)"
-              name="Present"
+              name={t("present")}
               radius={[4, 4, 0, 0]}
             />
             <Bar
               dataKey="absent"
               fill="hsl(0 84% 60%)"
-              name="Absent"
+              name={t("absent")}
               radius={[4, 4, 0, 0]}
             />
             <Bar
               dataKey="excused"
               fill="hsl(216 98% 52%)"
-              name="Excused"
+              name={t("excusedSick")}
               radius={[4, 4, 0, 0]}
             />
           </BarChart>

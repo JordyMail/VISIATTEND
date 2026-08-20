@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { attendanceApi, attendanceScheduleApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 interface DashboardOverview {
   totalMembers: number;
@@ -61,6 +62,7 @@ const extractPayload = <T,>(result: PromiseSettledResult<any>) => {
 
 export default function AttendanceDashboard() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [isAttendanceOpen, setIsAttendanceOpen] = useState<boolean | null>(null);
   const [overview, setOverview] = useState<DashboardOverview>({
     totalMembers: 0,
@@ -117,11 +119,11 @@ export default function AttendanceDashboard() {
   }, []);
 
   const stats = [
-    { label: "Member aktif", value: overview.totalMembers, icon: Users },
-    { label: "Event aktif", value: overview.activeEvents, icon: CalendarDays },
-    { label: "Sudah check-in", value: overview.checkedIn, icon: Activity },
+    { label: t("activeMember"), value: overview.totalMembers, icon: Users },
+    { label: t("activeEvent"), value: overview.activeEvents, icon: CalendarDays },
+    { label: t("checkedIn"), value: overview.checkedIn, icon: Activity },
     {
-      label: "Attendance rate",
+      label: t("attendanceRateLabel"),
       value: `${overview.attendanceRate.toFixed(1)}%`,
       icon: Sparkles,
     },
@@ -137,15 +139,15 @@ export default function AttendanceDashboard() {
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
               <CalendarDays className="h-8 w-8 text-red-500" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Attendance Belum Dibuka</h2>
+            <h2 className="text-xl font-bold text-gray-900">{t("attendanceNotOpen")}</h2>
             <p className="mt-2 text-sm text-gray-500">
-              Attendance hari ini belum dijadwalkan oleh admin. Silakan coba lagi pada tanggal yang telah ditentukan.
+              {t("attendanceNotOpenDescription")}
             </p>
             <button
               onClick={() => navigate("/attendance/home")}
               className="mt-6 w-full rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary/90"
             >
-              ← Back Home
+              ← {t("backHome")}
             </button>
           </div>
         </div>
@@ -159,14 +161,14 @@ export default function AttendanceDashboard() {
             <div className="space-y-5">
               <Badge className="w-fit border-0 bg-white/15 px-3 py-1 text-white backdrop-blur-sm">
                 <ShieldCheck className="mr-1 h-3.5 w-3.5" />
-                Attendance control center
+                {t("attendanceControlCenter")}
               </Badge>
               <div className="space-y-3">
                 <h1 className="text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
-                  Dashboard Attendance RESC
+                  {t("attendanceDashboardTitle")}
                 </h1>
                 <p className="max-w-2xl text-sm text-white/85 sm:text-base">
-                  Pilih aksi utama untuk mulai registrasi anggota baru atau langsung menjalankan attendance dari dashboard ini.
+                  {t("attendanceDashboardDescription")}
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -174,7 +176,7 @@ export default function AttendanceDashboard() {
                   <Link to="/attendance/registration">
                     <span className="flex items-center gap-2">
                       <UserPlus className="h-5 w-5" />
-                      Start Registrasi
+                      {t("startRegistration")}
                     </span>
                     <ArrowRight className="h-4 w-4" />
                   </Link>
@@ -188,7 +190,7 @@ export default function AttendanceDashboard() {
                   <Link to="/attendance/face-attendance">
                     <span className="flex items-center gap-2">
                       <Video className="h-5 w-5" />
-                      Start Attendance
+                      {t("startAttendance")}
                     </span>
                     <ArrowRight className="h-4 w-4" />
                   </Link>
@@ -199,8 +201,8 @@ export default function AttendanceDashboard() {
             <Card className="rounded-[28px] border border-white/25 bg-white/12 text-white shadow-none backdrop-blur-md">
               <CardContent className="space-y-4 p-6">
                 <div>
-                  <p className="text-sm text-white/75">Status hari ini</p>
-                  <h2 className="mt-1 text-2xl font-semibold">Live Attendance Summary</h2>
+                  <p className="text-sm text-white/75">{t("statusToday")}</p>
+                  <h2 className="mt-1 text-2xl font-semibold">{t("liveAttendanceSummary")}</h2>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {stats.map((stat) => {
@@ -218,7 +220,7 @@ export default function AttendanceDashboard() {
                   })}
                 </div>
                 <div className="rounded-2xl bg-slate-950/15 p-4 text-sm text-white/85">
-                  Pending: {overview.pending} orang • Absent: {overview.absent} orang
+                  {t("pendingPeople")}: {overview.pending} • {t("absentPeople")}: {overview.absent}
                 </div>
               </CardContent>
             </Card>

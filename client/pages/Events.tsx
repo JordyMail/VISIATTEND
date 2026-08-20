@@ -28,6 +28,7 @@ import {
   startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, isWithinInterval,
 } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { useLanguage } from "@/lib/i18n";
 
 interface Event {
   id: number;
@@ -68,6 +69,9 @@ const calendarClassNames = {
 };
 
 function toDateStr(d: Date) {
+const createEventSchema = (t: (key: import("@/lib/i18n").TranslationKey) => string) => z.object({
+  eventName: z.string({ required_error: t("eventNameRequired") }),
+});
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
@@ -85,6 +89,8 @@ function parseLocalDate(dateStr?: string): Date {
 }
 
 export default function Events() {
+  const { language, t } = useLanguage();
+  const dateLocale = language === "en" ? undefined : idLocale;
   // ── Data State ──────────────────────────────────────────────────────────────
   const [items, setItems] = useState<Event[]>([]);
   const [regularEvents, setRegularEvents] = useState<any[]>([]);
@@ -127,7 +133,7 @@ export default function Events() {
       const eventsRes = await eventApi.getAll();
       setItems(eventsRes.data.data ?? []);
     } catch {
-      toast({ title: "Error", description: "Gagal memuat data event", variant: "destructive" });
+      toast({ title: t("error"), description: `${t("error")}: ${t("events")}`, variant: "destructive" });
     }
     try {
       const regularRes = await regularEventApi.getAll();
@@ -213,7 +219,7 @@ export default function Events() {
   // ── Open Manage View for a Date ─────────────────────────────────────────────
   const openManageViewForDate = async (d: Date) => {
     if (startOfDay(d) < today) {
-      toast({ title: "Perhatian", description: "Tanggal ini sudah lewat dan tidak dapat diubah.", variant: "destructive" });
+      toast({ title: t("validation"), description: t("error"), variant: "destructive" });
       return;
     }
     setSelectedDate(d);
@@ -272,7 +278,7 @@ export default function Events() {
       setViewMode("day-manage");
     } catch (err) {
       console.error("openManageViewForDate error:", err);
-      toast({ title: "Error", description: "Gagal memuat detail event", variant: "destructive" });
+      toast({ title: t("error"), description: `${t("error")}: ${t("events")}`, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -327,9 +333,9 @@ export default function Events() {
       const res = await eventApi.toggleLock(eventId);
       const newLocked: boolean = res.data.is_locked;
       setLockedMap(prev => ({ ...prev, [eventId]: newLocked }));
-      toast({ title: newLocked ? "Event Locked" : "Event Unlocked", description: newLocked ? "Event terkunci." : "Event dibuka kembali." });
+      toast({ title: newLocked ? t("inactive") : t("activeEvent"), description: newLocked ? t("inactive") : t("activeEvent") });
     } catch {
-      toast({ title: "Error", description: "Gagal mengubah status lock", variant: "destructive" });
+      toast({ title: t("error"), description: t("error"), variant: "destructive" });
     } finally {
       setLockingId(null);
     }
@@ -350,9 +356,9 @@ export default function Events() {
       // Reload items to update main view lock state
       const eventsRes = await eventApi.getAll();
       setItems(eventsRes.data.data ?? []);
-      toast({ title: shouldLock ? "Semua Event Terkunci" : "Semua Event Dibuka", description: shouldLock ? "Event tidak dapat diedit." : "Event dapat diedit kembali." });
+      toast({ title: shouldLock ? t("inactive") : t("activeEvent"), description: shouldLock ? t("inactive") : t("activeEvent") });
     } catch {
-      toast({ title: "Error", description: "Gagal mengubah status lock", variant: "destructive" });
+      toast({ title: t("error"), description: t("error"), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -394,7 +400,7 @@ export default function Events() {
     const qs = getEventQuestions(eventUid);
     const q = qs.find(q => q.uid === questionUid);
     if (!q || !q.answer.trim()) {
-      toast({ title: "Perhatian", description: "Masukkan Answer terlebih dahulu", variant: "destructive" });
+      toast({ title: t("validation"), description: `${t("questions")} ${t("required").toLowerCase()}`, variant: "destructive" });
       return;
     }
     updateQuestion(eventUid, questionUid, "generating", true);
@@ -409,18 +415,18 @@ export default function Events() {
     for (let i = 0; i < dialogEvents.length; i++) {
       const ev = dialogEvents[i];
       if (!ev.eventName?.trim())
-        return toast({ title: "Validasi", description: `Nama Event ${i + 1} wajib diisi`, variant: "destructive" });
+        return toast({ title: t("validation"), description: `${t("eventNameRequired")} (${i + 1})`, variant: "destructive" });
       if (!ev.startTime || !ev.endTime)
-        return toast({ title: "Validasi", description: `Event "${ev.eventName}" wajib memiliki Waktu Mulai dan Selesai`, variant: "destructive" });
+        return toast({ title: t("validation"), description: `${ev.eventName}: ${t("eventTimeRequired")}`, variant: "destructive" });
       if (ev.startTime >= ev.endTime)
-        return toast({ title: "Validasi", description: `Event "${ev.eventName}": Waktu Mulai harus lebih awal dari Selesai`, variant: "destructive" });
+        return toast({ title: t("validation"), description: `${ev.eventName}: ${t("eventTimeOrder")}`, variant: "destructive" });
     }
 
     const sorted = [...dialogEvents].sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
     for (let i = 0; i < sorted.length - 1; i++) {
       if (sorted[i].endTime > sorted[i + 1].startTime)
         return toast({
-          title: "Waktu Bertabrakan",
+          title: t("timeConflict"),
           description: `"${sorted[i].eventName}" (${sorted[i].startTime}–${sorted[i].endTime}) bertabrakan dengan "${sorted[i + 1].eventName}" (${sorted[i + 1].startTime}–${sorted[i + 1].endTime})`,
           variant: "destructive"
         });
@@ -453,11 +459,11 @@ export default function Events() {
         await saveQuestionsForEvent(ev.uid, eventId);
       }
 
-      toast({ title: "Berhasil", description: "Semua jadwal berhasil disimpan" });
+      toast({ title: t("success"), description: t("saveChanges") });
       await load();
       setViewMode("main");
     } catch (e: any) {
-      toast({ title: "Error", description: e.response?.data?.message || "Gagal menyimpan", variant: "destructive" });
+      toast({ title: t("error"), description: e.response?.data?.message || t("error"), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -488,18 +494,18 @@ export default function Events() {
 
     // Validate target event
     if (!targetEv.eventName?.trim())
-      return toast({ title: "Validasi", description: `Nama Event ${i + 1} wajib diisi`, variant: "destructive" });
+      return toast({ title: t("validation"), description: `${t("eventNameRequired")} (${i + 1})`, variant: "destructive" });
     if (!targetEv.startTime || !targetEv.endTime)
-      return toast({ title: "Validasi", description: `Waktu Mulai dan Selesai wajib diisi`, variant: "destructive" });
+      return toast({ title: t("validation"), description: t("eventTimeRequired"), variant: "destructive" });
     if (targetEv.startTime >= targetEv.endTime)
-      return toast({ title: "Validasi", description: `Waktu Mulai harus lebih awal dari Selesai`, variant: "destructive" });
+      return toast({ title: t("validation"), description: t("eventTimeOrder"), variant: "destructive" });
 
     // Check time overlap with other events
     for (const other of dialogEvents) {
       if (other.uid === targetEv.uid || !other.eventName?.trim()) continue;
       if (targetEv.endTime > other.startTime && targetEv.startTime < other.endTime)
         return toast({
-          title: "Waktu Bertabrakan",
+          title: t("timeConflict"),
           description: `"${targetEv.eventName}" bertabrakan dengan "${other.eventName}"`,
           variant: "destructive",
         });
@@ -539,9 +545,9 @@ export default function Events() {
       const eventsRes = await eventApi.getAll();
       setItems(eventsRes.data.data ?? []);
 
-      toast({ title: "Berhasil", description: `Event ${i + 1} berhasil disimpan` });
+      toast({ title: t("success"), description: `${t("saveEvent")} ${i + 1}` });
     } catch (e: any) {
-      toast({ title: "Error", description: e.response?.data?.message || `Gagal menyimpan Event ${i + 1}`, variant: "destructive" });
+      toast({ title: t("error"), description: e.response?.data?.message || `${t("announcementSaveFailed")} ${i + 1}`, variant: "destructive" });
     } finally {
       setSavingUid(null);
     }
@@ -557,12 +563,12 @@ export default function Events() {
         <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b">
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" onClick={goBackToMain} className="gap-1.5">
-              <ArrowLeft className="h-4 w-4" /> Back
+              <ArrowLeft className="h-4 w-4" /> {t("back")}
             </Button>
             <div>
-              <h1 className="text-xl font-bold">Manage Event</h1>
+              <h1 className="text-xl font-bold">{t("manageEvent")}</h1>
               <p className="text-sm text-muted-foreground">
-                {format(selectedDate, "EEEE, d MMMM yyyy", { locale: idLocale })}
+                {format(selectedDate, "EEEE, d MMMM yyyy", { locale: dateLocale })}
               </p>
             </div>
           </div>
@@ -577,8 +583,8 @@ export default function Events() {
               {/* Card Header */}
               <div className={`flex items-center justify-between px-5 py-3 border-b ${isEvLocked ? "bg-amber-50/60" : "bg-muted/40"}`}>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-primary">Event {index + 1}</span>
-                  {isEvLocked && <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide flex items-center gap-0.5"><Lock className="h-3 w-3" /> Locked</span>}
+                  <span className="text-sm font-bold text-primary">{t("event")} {index + 1}</span>
+                  {isEvLocked && <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide flex items-center gap-0.5"><Lock className="h-3 w-3" /> {t("eventLocked")}</span>}
                 </div>
                 <div className="flex items-center gap-1">
                   <Button
@@ -587,7 +593,7 @@ export default function Events() {
                     className={`h-8 w-8 p-0 ${isEvLocked ? "text-amber-500 hover:text-amber-600 hover:bg-amber-50" : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"}`}
                     onClick={() => ev.id && handleToggleLock(ev.id)}
                     disabled={!ev.id || lockingId === ev.id}
-                    title={!ev.id ? "Simpan event dulu sebelum mengunci" : isEvLocked ? "Unlock event" : "Kunci event"}
+                    title={!ev.id ? t("saveEvent") : isEvLocked ? t("unlockEvent") : t("lockEvent")}
                   >
                     {lockingId === ev.id
                       ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -599,12 +605,12 @@ export default function Events() {
                     className="h-8 px-3 text-xs gap-1.5 font-semibold"
                     onClick={() => handleSaveOne(ev)}
                     disabled={isEvLocked || savingUid === ev.uid || saving}
-                    title={`Simpan Event ${index + 1}`}
+                    title={`${t("saveEvent")} ${index + 1}`}
                   >
                     {savingUid === ev.uid
                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       : <Save className="h-3.5 w-3.5" />}
-                    Simpan Event {index + 1}
+                    {t("saveEvent")} {index + 1}
                   </Button>
                   <Button
                     variant="ghost"
@@ -612,7 +618,7 @@ export default function Events() {
                     className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => setDeleteConfirmUid(ev.uid)}
                     disabled={isEvLocked}
-                    title={`Hapus Event ${index + 1}`}
+                    title={`${t("deleteEvent")} ${index + 1}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -623,7 +629,7 @@ export default function Events() {
               <CardContent className="p-5 space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <Label>Jenis Event</Label>
+                    <Label>{t("eventType")}</Label>
                     <Select
                       value={ev.eventType}
                       disabled={isEvLocked}
@@ -632,10 +638,10 @@ export default function Events() {
                         updateEventField(ev.uid, "eventName", "");
                       }}
                     >
-                      <SelectTrigger><SelectValue placeholder="Pilih jenis event" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder={t("selectEventType")} /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="regular">Regular Event</SelectItem>
-                        <SelectItem value="custom">Custom Event</SelectItem>
+                        <SelectItem value="regular">{t("regularEvent")}</SelectItem>
+                        <SelectItem value="custom">{t("customEvent")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -643,13 +649,13 @@ export default function Events() {
                   <div>
                     {ev.eventType === "regular" ? (
                       <>
-                        <Label>Pilih Regular Event *</Label>
+                        <Label>{t("selectRegularEvent")} *</Label>
                         <Select
                           value={ev.eventName}
                           disabled={isEvLocked}
                           onValueChange={(val) => updateEventField(ev.uid, "eventName", val)}
                         >
-                          <SelectTrigger><SelectValue placeholder="Pilih event" /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder={t("event")} /></SelectTrigger>
                           <SelectContent>
                             {regularEvents.map((re) => (
                               <SelectItem key={re.id} value={re.event_name}>
@@ -661,10 +667,10 @@ export default function Events() {
                       </>
                     ) : (
                       <>
-                        <Label htmlFor={`evt-name-${ev.uid}`}>Nama Event Custom *</Label>
+                        <Label htmlFor={`evt-name-${ev.uid}`}>{t("customEventName")} *</Label>
                         <Input
                           id={`evt-name-${ev.uid}`}
-                          placeholder="Contoh: Ibadah Pemuda, Rapat Panitia..."
+                          placeholder={t("customEventName")}
                           value={ev.eventName}
                           disabled={isEvLocked}
                           onChange={(e) => updateEventField(ev.uid, "eventName", e.target.value)}
@@ -676,7 +682,7 @@ export default function Events() {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <Label htmlFor={`st-${ev.uid}`}>Waktu Mulai *</Label>
+                    <Label htmlFor={`st-${ev.uid}`}>{t("startTime")} *</Label>
                     <Input
                       id={`st-${ev.uid}`}
                       type="time"
@@ -686,7 +692,7 @@ export default function Events() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor={`et-${ev.uid}`}>Waktu Selesai *</Label>
+                    <Label htmlFor={`et-${ev.uid}`}>{t("endTime")} *</Label>
                     <Input
                       id={`et-${ev.uid}`}
                       type="time"
@@ -698,10 +704,10 @@ export default function Events() {
                 </div>
 
                 <div>
-                  <Label htmlFor={`desc-${ev.uid}`}>Deskripsi / Tema</Label>
+                  <Label htmlFor={`desc-${ev.uid}`}>{t("themeDescription")}</Label>
                   <Textarea
                     id={`desc-${ev.uid}`}
-                    placeholder="Tema khotbah atau deskripsi singkat..."
+                    placeholder={t("description")}
                     rows={2}
                     value={ev.description}
                     disabled={isEvLocked}
@@ -710,7 +716,7 @@ export default function Events() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Participant Access Control</Label>
+                  <Label>{t("participantAccess")}</Label>
                   <Select
                     value={ev.participantAccess}
                     disabled={isEvLocked}
@@ -719,11 +725,11 @@ export default function Events() {
                       if (val === "Everyone") updateEventField(ev.uid, "selectedMemberIds", []);
                     }}
                   >
-                    <SelectTrigger><SelectValue placeholder="Pilih akses peserta" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t("selectParticipantAccess")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Everyone">Everyone (Semua Anggota)</SelectItem>
-                      <SelectItem value="Selected Members">Selected Members (Hanya Anggota Terpilih)</SelectItem>
-                      <SelectItem value="Excluded Members">Excluded Members (Semua Kecuali Anggota Dikecualikan)</SelectItem>
+                      <SelectItem value="Everyone">{t("everyoneMembers")}</SelectItem>
+                      <SelectItem value="Selected Members">{t("selectedMembers")}</SelectItem>
+                      <SelectItem value="Excluded Members">{t("excludedMembers")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -733,8 +739,8 @@ export default function Events() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                       <Label className="text-xs text-muted-foreground">
                         {ev.participantAccess === "Selected Members"
-                          ? "Pilih anggota yang DIPERBOLEHKAN hadir:"
-                          : "Pilih anggota yang TIDAK DIPERBOLEHKAN hadir:"}
+                          ? `${t("selectAll")}: ${t("present")}`
+                          : `${t("selectAll")}: ${t("absent")}`}
                       </Label>
                       <div className="flex items-center gap-1.5 text-xs self-end sm:self-auto">
                         <Badge variant="secondary" className="text-[10px] h-5 font-normal px-2">
@@ -760,7 +766,7 @@ export default function Events() {
                             updateEventField(ev.uid, "selectedMemberIds", Array.from(cur));
                           }}
                         >
-                          Pilih Semua
+                          {t("selectAll")}
                         </Button>
                         <span className="text-muted-foreground/40 text-[10px]">|</span>
                         <Button
@@ -786,7 +792,7 @@ export default function Events() {
                             }
                           }}
                         >
-                          Reset
+                          {t("clear")}
                         </Button>
                       </div>
                     </div>
@@ -796,7 +802,7 @@ export default function Events() {
                       <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                       <Input
                         type="text"
-                        placeholder="Cari nama atau ID anggota..."
+                        placeholder={t("memberSearch")}
                         value={memberSearchMap[ev.uid] || ""}
                         onChange={(e) =>
                           setMemberSearchMap((prev) => ({ ...prev, [ev.uid]: e.target.value }))
@@ -810,10 +816,10 @@ export default function Events() {
                       <div className="space-y-2">
                         {membersLoading ? (
                           <div className="flex items-center justify-center h-24 gap-2 text-muted-foreground text-xs">
-                            <Loader2 className="h-4 w-4 animate-spin" /> Memuat daftar anggota...
+                            <Loader2 className="h-4 w-4 animate-spin" /> {t("loadingMembers")}
                           </div>
                         ) : members.length === 0 ? (
-                          <p className="text-xs text-muted-foreground text-center py-4">Tidak ada anggota aktif.</p>
+                          <p className="text-xs text-muted-foreground text-center py-4">{t("noActiveMembers")}</p>
                         ) : (() => {
                           const searchQuery = (memberSearchMap[ev.uid] || "").toLowerCase().trim();
                           const filteredMembers = members.filter((m) => {
@@ -827,7 +833,7 @@ export default function Events() {
                           if (filteredMembers.length === 0) {
                             return (
                               <p className="text-xs text-muted-foreground text-center py-4">
-                                Tidak ada anggota yang cocok dengan "{memberSearchMap[ev.uid]}".
+                                {t("noMatchingMembers")}: "{memberSearchMap[ev.uid]}".
                               </p>
                             );
                           }
@@ -872,7 +878,7 @@ export default function Events() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <HelpCircle className="h-4 w-4 text-violet-600" />
-                        <span className="text-sm font-semibold text-violet-700">Question Game (Optional)</span>
+                        <span className="text-sm font-semibold text-violet-700">{t("questionGameOptional")}</span>
                         <Badge variant="secondary" className="text-[10px] h-5 px-2">
                           {getEventQuestions(ev.uid).length}/3
                         </Badge>
@@ -885,24 +891,24 @@ export default function Events() {
                           className="gap-1.5 text-violet-700 border-violet-300 hover:bg-violet-50 h-8 text-xs"
                           onClick={() => addQuestionToEvent(ev.uid)}
                         >
-                          <Plus className="h-3.5 w-3.5" /> Add Question
+                          <Plus className="h-3.5 w-3.5" /> {t("addQuestion")}
                         </Button>
                       )}
                       {getEventQuestions(ev.uid).length >= 3 && (
-                        <span className="text-[11px] text-muted-foreground italic">Maksimal 3 questions per event</span>
+                        <span className="text-[11px] text-muted-foreground italic">{t("maxQuestions")}</span>
                       )}
                     </div>
 
                     {getEventQuestions(ev.uid).length === 0 && (
                       <p className="text-xs text-muted-foreground py-1">
-                        Tidak ada question. Klik <strong>Add Question</strong> untuk menambahkan Word Search game.
+                        {t("noQuestions")}
                       </p>
                     )}
 
                     {getEventQuestions(ev.uid).map((q, qIdx) => (
                       <div key={q.uid} className="border rounded-md p-3 bg-white space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-violet-600">Question {qIdx + 1}</span>
+                          <span className="text-xs font-semibold text-violet-600">{t("questionNumber")} {qIdx + 1}</span>
                           {!isEvLocked && (
                             <Button
                               type="button"
@@ -917,9 +923,9 @@ export default function Events() {
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div>
-                            <Label className="text-xs">Clue *</Label>
+                            <Label className="text-xs">{t("clue")} *</Label>
                             <Input
-                              placeholder="Contoh: What is the first book of the Bible?"
+                              placeholder={t("clue")}
                               value={q.clue}
                               disabled={isEvLocked}
                               onChange={(e) => updateQuestion(ev.uid, q.uid, "clue", e.target.value)}
@@ -927,9 +933,9 @@ export default function Events() {
                             />
                           </div>
                           <div>
-                            <Label className="text-xs">Answer * (huruf kapital)</Label>
+                            <Label className="text-xs">{t("answer")} * ({t("uppercaseHint")})</Label>
                             <Input
-                              placeholder="Contoh: GENESIS"
+                              placeholder={t("answer")}
                               value={q.answer}
                               disabled={isEvLocked}
                               onChange={(e) => updateQuestion(ev.uid, q.uid, "answer", e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
@@ -947,11 +953,11 @@ export default function Events() {
                             onClick={() => handleGeneratePuzzle(ev.uid, q.uid)}
                           >
                             {q.generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                            {q.puzzleGrid ? "Regenerate Puzzle" : "Generate Puzzle"}
+                            {q.puzzleGrid ? t("regeneratePuzzle") : t("generatePuzzle")}
                           </Button>
                           {q.puzzleGrid && (
                             <span className="text-[11px] text-green-600 font-medium flex items-center gap-1">
-                              <CheckCircle2 className="h-3.5 w-3.5" /> Puzzle ready ({q.puzzleGrid.size}×{q.puzzleGrid.size})
+                              <CheckCircle2 className="h-3.5 w-3.5" /> {t("puzzleReady")} ({q.puzzleGrid.size}×{q.puzzleGrid.size})
                             </span>
                           )}
                         </div>
@@ -994,14 +1000,14 @@ export default function Events() {
             </Button>
           ) : (
             <p className="text-center text-xs text-muted-foreground py-2 italic">
-              Maksimal 4 event per hari tercapai.
+              {t("maxEventsReached")}
             </p>
           )}
         </div>
 
         {/* Bottom Save Action Bar */}
         <div className="flex justify-end gap-3 pt-4 border-t">
-          <Button variant="outline" onClick={goBackToMain}>Batal</Button>
+          <Button variant="outline" onClick={goBackToMain}>{t("cancel")}</Button>
           <Button onClick={handleSave} disabled={saving} size="lg" className="gap-2">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Simpan Semua Jadwal
@@ -1012,18 +1018,18 @@ export default function Events() {
         <AlertDialog open={!!deleteConfirmUid} onOpenChange={(o) => !o && setDeleteConfirmUid(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Hapus Event Ini?</AlertDialogTitle>
+                <AlertDialogTitle>{t("deleteEvent")}?</AlertDialogTitle>
               <AlertDialogDescription>
-                Event ini akan dihapus dari daftar tanggal ini. Perubahan akan disimpan ketika Anda menekan tombol "Simpan Jadwal".
+                {t("cannotUndo")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Batal</AlertDialogCancel>
+              <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={() => deleteConfirmUid && removeEvent(deleteConfirmUid)}
                 className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
               >
-                Hapus
+                {t("delete")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -1038,9 +1044,9 @@ export default function Events() {
   return (
     <div className="p-4 md:p-6 space-y-5">
       <div>
-        <h1 className="text-2xl font-bold">Event Management</h1>
+        <h1 className="text-2xl font-bold">{t("eventManagement")}</h1>
         <p className="text-muted-foreground text-sm mt-0.5">
-          Pilih tanggal di kalender atau daftar di bawah untuk mengelola event (maksimal 4 event per hari).
+          {t("clickCalendarToSelect")} ({t("maxEventsReached")})
         </p>
       </div>
 
@@ -1079,7 +1085,7 @@ export default function Events() {
                         <ChevronLeft className="h-4 w-4" />
                       </button>
                       <span className="text-sm font-medium min-w-[110px] text-center">
-                        {format(calendarMonth.date, "MMMM yyyy", { locale: idLocale })}
+                        {format(calendarMonth.date, "MMMM yyyy", { locale: dateLocale })}
                       </span>
                       <button
                         type="button"
@@ -1101,8 +1107,8 @@ export default function Events() {
                   <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50/90 px-3.5 py-1.5 text-xs text-blue-700 shadow-xs max-w-full">
                     <CalendarDays className="h-3.5 w-3.5 shrink-0 text-blue-600" />
                     <span className="truncate">
-                      <strong>{format(selectedDate, "EEEE, d MMMM yyyy", { locale: idLocale })}</strong>
-                      {" | "}{getEventsForDate(selectedDate).length} Event Terjadwal
+                      <strong>{format(selectedDate, "EEEE, d MMMM yyyy", { locale: dateLocale })}</strong>
+                      {" | "}{getEventsForDate(selectedDate).length} {t("eventCount")}
                     </span>
                   </div>
                   <Button
@@ -1112,7 +1118,7 @@ export default function Events() {
                     disabled={saving}
                   >
                     <Pencil className="h-3.5 w-3.5" />
-                    Manage Event | {format(selectedDate, "d MMM yyyy", { locale: idLocale })}
+                    {t("manageEventShort")} | {format(selectedDate, "d MMM yyyy", { locale: dateLocale })}
                   </Button>
                 </>
               ) : (
@@ -1129,28 +1135,28 @@ export default function Events() {
           <CardHeader className="pb-3 space-y-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <CalendarDays className="h-4 w-4" />
-              Semua Event
-              <Badge variant="secondary" className="ml-auto">{groupedDates.length} Tanggal</Badge>
+              {t("allEvents")}
+              <Badge variant="secondary" className="ml-auto">{groupedDates.length} {t("dateCount")}</Badge>
             </CardTitle>
             <div className="flex flex-col sm:flex-row gap-2">
               <Select value={filter} onValueChange={(v) => setFilter(v as FilterOption)}>
                 <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm">
-                  <SelectValue placeholder="Filter tanggal" />
+                  <SelectValue placeholder={t("filterByDate")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all_time">All Time</SelectItem>
-                  <SelectItem value="this_week">This Week</SelectItem>
-                  <SelectItem value="last_week">Last Week</SelectItem>
-                  <SelectItem value="this_month">This Month</SelectItem>
-                  <SelectItem value="last_month">Last Month</SelectItem>
-                  <SelectItem value="this_year">This Year</SelectItem>
-                  <SelectItem value="custom">Custom Range</SelectItem>
+                  <SelectItem value="all_time">{t("allTime")}</SelectItem>
+                  <SelectItem value="this_week">{t("thisWeek")}</SelectItem>
+                  <SelectItem value="last_week">{t("lastWeek")}</SelectItem>
+                  <SelectItem value="this_month">{t("thisMonth")}</SelectItem>
+                  <SelectItem value="last_month">{t("lastMonth")}</SelectItem>
+                  <SelectItem value="this_year">{t("thisYear")}</SelectItem>
+                  <SelectItem value="custom">{t("customRange")}</SelectItem>
                 </SelectContent>
               </Select>
               {filter === "custom" && (
                 <div className="flex items-center gap-2">
                   <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="h-9 text-sm" />
-                  <span className="text-xs text-muted-foreground shrink-0">s/d</span>
+                          <span className="text-xs text-muted-foreground shrink-0">{t("until")}</span>
                   <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="h-9 text-sm" />
                 </div>
               )}
@@ -1163,7 +1169,7 @@ export default function Events() {
               </div>
             ) : groupedDates.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
-                Tidak ada event pada rentang ini.
+                {t("noEventsInRange")}
               </p>
             ) : (
               <ul className="space-y-2.5 max-h-[480px] overflow-y-auto pr-1">
@@ -1184,17 +1190,17 @@ export default function Events() {
                     >
                       <div className="space-y-0.5">
                         <p className="text-sm font-semibold">
-                          {format(item.dateObj, "EEEE, d MMMM yyyy", { locale: idLocale })}
+                          {format(item.dateObj, "EEEE, d MMMM yyyy", { locale: dateLocale })}
                         </p>
                         <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                           <CheckCircle2 className={`h-3.5 w-3.5 ${item.isPast ? "text-muted-foreground" : "text-green-600"}`} />
-                          {item.eventsCount} Event Terjadwal
-                          {item.isPast && <span className="ml-1 text-[10px] uppercase font-bold text-muted-foreground">(Sudah Lewat)</span>}
+                          {item.eventsCount} {t("eventCount")}
+                          {item.isPast && <span className="ml-1 text-[10px] uppercase font-bold text-muted-foreground">{t("pastLabel")}</span>}
                         </p>
                       </div>
                       {!item.isPast && (
                         <Button variant="ghost" size="sm" className="text-xs gap-1 hover:bg-primary/10 hover:text-primary">
-                          Manage Event
+                          {t("manageEventShort")}
                         </Button>
                       )}
                     </li>

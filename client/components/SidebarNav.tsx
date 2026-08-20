@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useLanguage } from "@/lib/i18n";
 
 const navigation = [
   {
@@ -30,6 +31,7 @@ const navigation = [
 
 export function SidebarNav() {
   const location = useLocation();
+  const { t } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(true);
 
   return (
@@ -44,9 +46,7 @@ export function SidebarNav() {
       <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border flex-shrink-0">
         {isExpanded && (
           <div className="flex items-center gap-2 min-w-0"> {/* min-w-0 untuk mengatasi overflow */}
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0">
-              VA
-            </div>
+            <img src="/logo-resc.png" alt="Logo" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
             <span className="font-bold text-lg truncate">VISIATTEND</span>
           </div>
         )}
@@ -86,10 +86,10 @@ export function SidebarNav() {
                   : "text-sidebar-foreground",
                 !isExpanded && "justify-center px-2" // Center content saat collapsed
               )}
-              title={!isExpanded ? item.name : undefined}
+              title={!isExpanded ? (item.name === "Home" ? t("home") : item.name === "Attendance" ? t("attendance") : t("leaderboard")) : undefined}
             >
               <Icon className="w-5 h-5 flex-shrink-0" />
-              {isExpanded && <span className="truncate">{item.name}</span>}
+              {isExpanded && <span className="truncate">{item.name === "Home" ? t("home") : item.name === "Attendance" ? t("attendance") : t("leaderboard")}</span>}
             </Link>
           );
         })}

@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
 import { setCurrentAttendanceUser } from "@/lib/attendanceFlow";
 import { faceAiApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 const MAX_CAPTURE_WIDTH = 640;
 const JPEG_QUALITY = 0.82;
@@ -109,6 +110,7 @@ function extractMetrics(points: MeshPoint[]): FaceMetrics | null {
 
 export default function FaceAttendance() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const previewRequestRef = useRef(false);
@@ -120,7 +122,7 @@ export default function FaceAttendance() {
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [statusText, setStatusText] = useState("Arahkan wajah ke kamera untuk memulai Active Liveness challenge.");
+  const [statusText, setStatusText] = useState(t("faceAttendance"));
   const [faceDetection, setFaceDetection] = useState<FaceDetection | null>(null);
   const [frameSize, setFrameSize] = useState<FrameSize>({ width: 16, height: 9 });
   const [challenge, setChallenge] = useState<ChallengeType | null>(null);
@@ -170,8 +172,8 @@ export default function FaceAttendance() {
     if (!frame) {
       setProcessing(false);
       toast({
-        title: "Attendance gagal",
-        description: "Gagal mengambil frame dari kamera.",
+        title: t("error"),
+        description: t("noData"),
         variant: "destructive",
       });
       return;
@@ -179,7 +181,7 @@ export default function FaceAttendance() {
 
     setFaceDetection(null);
     setFrameSize({ width: frame.width, height: frame.height });
-    setStatusText("Challenge sukses. Memverifikasi wajah...");
+    setStatusText(t("verifying"));
 
     try {
       const response = await faceAiApi.verifyAttendance({
@@ -216,17 +218,17 @@ export default function FaceAttendance() {
 
       setCurrentAttendanceUser(profile);
       toast({
-        title: "Attendance berhasil",
-        description: `${profile.name} berhasil dikenali setelah Active Liveness challenge.`,
+        title: t("success"),
+        description: `${profile.name} ${t("success").toLowerCase()}`,
       });
       navigate("/user-dashboard");
     } catch (error: any) {
       const responseData = error.response?.data?.data;
       const code = responseData?.code;
       const errorTitle = code === "ACTIVE_LIVENESS_REQUIRED"
-        ? "Active Liveness wajib"
-        : "Attendance gagal";
-      const errorDesc = error.response?.data?.message || "Wajah belum dikenali. Registrasi dulu sebelum attendance.";
+        ? t("required")
+        : t("error");
+      const errorDesc = error.response?.data?.message || t("noResults");
 
       toast({
         title: errorTitle,
@@ -243,7 +245,7 @@ export default function FaceAttendance() {
 
   const failChallenge = (reason: string) => {
     toast({
-      title: "Active Liveness gagal",
+      title: t("error"),
       description: reason,
       variant: "destructive",
     });
@@ -263,7 +265,7 @@ export default function FaceAttendance() {
     setChallengeRemainMs(remain);
 
     if (remain <= 0) {
-      failChallenge("Challenge timeout. Ulangi attendance dan lakukan gerakan sesuai instruksi.");
+      failChallenge(t("loading"));
       return;
     }
 
@@ -277,7 +279,7 @@ export default function FaceAttendance() {
       session.earSum += metrics.ear;
       session.yawSum += metrics.yaw;
       session.smileSum += metrics.smile;
-      setStatusText(`Kalibrasi challenge: ${CHALLENGE_LABEL[session.challenge]}...`);
+      setStatusText(`${t("loading")}: ${CHALLENGE_LABEL[session.challenge]}...`);
       return;
     }
 
@@ -323,7 +325,7 @@ export default function FaceAttendance() {
       maxSmileRise: session.maxSmileRise,
     };
 
-    setStatusText(`Challenge sukses: ${CHALLENGE_LABEL[session.challenge]}.`);
+    setStatusText(`${t("success")}: ${CHALLENGE_LABEL[session.challenge]}.`);
     challengeRef.current = null;
     setChallenge(null);
     setChallengeRemainMs(0);
@@ -511,15 +513,15 @@ export default function FaceAttendance() {
               onClick={() => navigate("/attendance")}
             >
               <ArrowLeft className="h-4 w-4" />
-              Back
+              {t("back")}
             </Button>
 
             <div className="flex items-center gap-3">
               <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs backdrop-blur-sm">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Active Liveness
+                {t("activeLiveness")}
               </div>
-              <h1 className="text-lg font-bold">Attendance wajah dengan challenge acak</h1>
+              <h1 className="text-lg font-bold">{t("randomChallengeAttendance")}</h1>
             </div>
           </div>
         </section>
@@ -532,8 +534,8 @@ export default function FaceAttendance() {
                   <ScanFace className="h-4.5 w-4.5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Attendance Check</h2>
-                  <p className="text-sm text-slate-500">Face Detection to Active Liveness to Recognition</p>
+                  <h2 className="text-lg font-semibold text-slate-900">{t("attendanceCheck")}</h2>
+                  <p className="text-sm text-slate-500">{t("faceDetectionLivenessRecognition")}</p>
                 </div>
               </div>
 
@@ -541,8 +543,8 @@ export default function FaceAttendance() {
 
               {challenge && (
                 <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-                  <div className="font-semibold">Challenge: {CHALLENGE_LABEL[challenge]}</div>
-                  <div>Waktu tersisa: {(challengeRemainMs / 1000).toFixed(1)} detik</div>
+                  <div className="font-semibold">{t("challenge")}: {CHALLENGE_LABEL[challenge]}</div>
+                  <div>{t("timeRemaining")}: {(challengeRemainMs / 1000).toFixed(1)} {t("seconds")}</div>
                 </div>
               )}
             </CardContent>
@@ -573,9 +575,9 @@ export default function FaceAttendance() {
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <Button type="button" className="h-11 rounded-2xl" disabled={!cameraReady || processing} onClick={startChallenge}>
                   {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-                  Start Active Attendance
+                  {t("startActiveAttendance")}
                 </Button>
-                <Button type="button" variant="outline" className="h-11 rounded-2xl" onClick={() => navigate("/attendance")}>Kembali ke Dashboard</Button>
+                <Button type="button" variant="outline" className="h-11 rounded-2xl" onClick={() => navigate("/attendance")}>{t("backToDashboard")}</Button>
               </div>
             </CardContent>
           </Card>

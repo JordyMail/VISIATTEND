@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { attendanceApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 interface AttendanceTrendChartProps {
   days?: number;
@@ -27,6 +28,7 @@ export function AttendanceTrendChart({
   days = 7,
   eventId,
 }: AttendanceTrendChartProps) {
+  const { t } = useLanguage();
   const [data, setData] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -73,7 +75,7 @@ export function AttendanceTrendChart({
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Attendance Trend</CardTitle>
+          <CardTitle className="text-lg">{t("attendanceTrendChart")}</CardTitle>
         </CardHeader>
         <CardContent className="h-[300px] flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
@@ -85,7 +87,7 @@ export function AttendanceTrendChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Attendance Trend</CardTitle>
+        <CardTitle className="text-lg">{t("attendanceTrendChart")}</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
@@ -122,7 +124,7 @@ export function AttendanceTrendChart({
               strokeWidth={2}
               dot={{ fill: "hsl(var(--primary))", r: 4 }}
               activeDot={{ r: 6 }}
-              name="Present"
+              name={t("present")}
             />
           </LineChart>
         </ResponsiveContainer>

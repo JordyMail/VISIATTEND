@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { motion, type Variants } from "framer-motion";
 import { dashboardApi, userApi, eventApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 interface DashboardStats {
     totalMembers: number;
@@ -31,6 +32,7 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
+  const { t } = useLanguage();
   const [stats, setStats] = useState<DashboardStats>({
     totalMembers: 0,
     activeEvents: 0,
@@ -133,9 +135,9 @@ export default function Dashboard() {
         className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
       >
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold">Dashboard</h1>
+          <h1 className="text-3xl md:text-4xl font-bold">{t("dashboard")}</h1>
           <p className="text-muted-foreground mt-1">
-            Welcome back! Here's your church attendance overview.
+            {t("welcome")}
           </p>
         </div>
         <motion.div 
@@ -145,10 +147,10 @@ export default function Dashboard() {
           transition={{ delay: 0.3, duration: 0.5 }}
         >
           <Button variant="outline" className="gap-2">
-            Export Report
+            {t("reports")}
           </Button>
           <Button className="gap-2 bg-primary hover:bg-primary/90">
-            Add Event
+            {t("add")} {t("event")}
           </Button>
         </motion.div>
       </motion.div>
@@ -159,42 +161,42 @@ export default function Dashboard() {
       >
         <motion.div variants={itemVariants}>
           <StatCard
-            title="Total Members"
+            title={t("totalMember")}
             value={stats.totalMembers}
             icon={Users}
             color="primary"
-            description="Active member accounts"
-            trend={{ value: 12, direction: "up", label: "vs last month" }}
+            description={t("activeMember")}
+            trend={{ value: 12, direction: "up", label: t("lastUpdated") }}
           />
         </motion.div>
         <motion.div variants={itemVariants}>
           <StatCard
-            title="Active Events"
+            title={t("activeEvent")}
             value={stats.activeEvents}
             icon={BookOpen}
             color="info"
-            description="Events in session"
-            trend={{ value: 5, direction: "up", label: "vs last month" }}
+            description={t("activeEvent")}
+            trend={{ value: 5, direction: "up", label: t("lastUpdated") }}
           />
         </motion.div>
         <motion.div variants={itemVariants}>
           <StatCard
-            title="Today's Attendance"
+            title={t("todayAttendance")}
             value={`${stats.todayAttendance.checkedIn}/${stats.totalMembers}`}
             icon={CalendarCheck}
             color="success"
-            description={`${stats.todayAttendance.pending} pending, ${stats.todayAttendance.absent} absent`}
-            trend={{ value: 3, direction: "down", label: "absence rate" }}
+            description={`${stats.todayAttendance.pending} ${t("pending").toLowerCase()}, ${stats.todayAttendance.absent} ${t("absent").toLowerCase()}`}
+            trend={{ value: 3, direction: "down", label: t("attendanceRate") }}
           />
         </motion.div>
         <motion.div variants={itemVariants}>
           <StatCard
-            title="Attendance Rate"
+            title={t("attendanceRate")}
             value={`${stats.attendanceRate}%`}
             icon={TrendingUp}
             color="warning"
-            description="Overall attendance percentage"
-            trend={{ value: 2.5, direction: "up", label: "vs last semester" }}
+            description={t("attendanceRate")}
+            trend={{ value: 2.5, direction: "up", label: t("lastUpdated") }}
           />
         </motion.div>
       </motion.div>
@@ -216,16 +218,16 @@ export default function Dashboard() {
         <motion.div variants={itemVariants} className="lg:col-span-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Recent Activities</CardTitle>
+              <CardTitle className="text-lg">{t("recentActivity")}</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Time</TableHead>
+                    <TableHead>{t("name")}</TableHead>
+                    <TableHead>{t("actions")}</TableHead>
+                    <TableHead>{t("description")}</TableHead>
+                    <TableHead>{t("time")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -238,7 +240,7 @@ export default function Dashboard() {
                       className="border-b transition-colors hover:bg-muted/50"
                     >
                       <TableCell className="font-medium">
-                        {activity.user_name || "System"}
+                        {activity.user_name || t("systemUser")}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{activity.action}</Badge>
@@ -261,12 +263,12 @@ export default function Dashboard() {
           <motion.div whileHover={{ scale: 1.02 }}>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Quick Stats</CardTitle>
+                <CardTitle className="text-base">{t("quickActions")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <motion.div>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Present Today
+                    {t("presentToday")}
                   </p>
                   <div className="text-2xl font-bold">
                     {stats.todayAttendance.checkedIn}
@@ -285,7 +287,7 @@ export default function Dashboard() {
 
                 <motion.div>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Pending Attendance
+                    {t("pending")} {t("attendance")}
                   </p>
                   <div className="text-2xl font-bold">
                     {stats.todayAttendance.pending}
@@ -304,7 +306,7 @@ export default function Dashboard() {
 
                 <motion.div>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Absent Today
+                    {t("absent")} {t("todayAttendance")}
                   </p>
                   <div className="text-2xl font-bold">
                     {stats.todayAttendance.absent}

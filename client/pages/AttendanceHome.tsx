@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { attendanceApi, eventApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 interface AttendanceOverview {
   totalMembers: number;
@@ -55,6 +56,7 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function AttendanceHome() {
+  const { t } = useLanguage();
   const [overview, setOverview] = useState<AttendanceOverview>({
     totalMembers: 0,
     activeEvents: 0,
@@ -136,22 +138,22 @@ export default function AttendanceHome() {
 
   const quickStats = [
     {
-      label: "Member aktif",
+      label: t("activeMember"),
       value: overview.totalMembers,
       icon: Users,
     },
     {
-      label: "Event aktif",
+      label: t("activeEvent"),
       value: overview.activeEvents,
       icon: CalendarDays,
     },
     {
-      label: "Sudah check-in",
+      label: t("checkedIn"),
       value: overview.checkedIn,
       icon: Activity,
     },
     {
-      label: "Attendance rate",
+      label: t("attendanceRate"),
       value: formatRate(overview.attendanceRate),
       icon: Sparkles,
     },
@@ -174,22 +176,22 @@ export default function AttendanceHome() {
             <div className="space-y-5">
               <Badge className="border-0 bg-white/15 px-3 py-1 text-white backdrop-blur-sm">
                 <Shield className="mr-1 h-3.5 w-3.5" />
-                Secure attendance workspace
+                {t("secureAttendanceWorkspace")}
               </Badge>
 
               <div className="space-y-3">
                 <h1 className="max-w-2xl text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
-                  Dashboard Home Attendance RESC
+                  {t("attendanceHomeTitle")}
                 </h1>
                 <p className="max-w-2xl text-sm text-white/82 sm:text-base">
-                  Dashboard Home Attendance RESC
+                  {t("attendanceHomeTitle")}
                 </p>
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Button asChild size="lg" className="h-12 rounded-2xl bg-white px-6 text-primary hover:bg-white/90">
                   <Link to="/attendance">
-                    Buka Attendance
+                    {t("openAttendance")}
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>
@@ -199,7 +201,7 @@ export default function AttendanceHome() {
                   variant="outline"
                   className="h-12 rounded-2xl border-white/30 bg-white/10 px-6 text-white hover:bg-white/15 hover:text-white"
                 >
-                  <Link to="/leaderboard">Lihat Leaderboard</Link>
+                  <Link to="/leaderboard">{t("viewAll")} {t("leaderboard")}</Link>
                 </Button>
               </div>
 
@@ -228,7 +230,7 @@ export default function AttendanceHome() {
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CalendarDays className="h-5 w-5 text-white/80" />
-                    <p className="text-sm font-medium text-white/80">Event Aktif</p>
+                    <p className="text-sm font-medium text-white/80">{t("activeEvent")}</p>
                   </div>
                   <span className="rounded-full bg-white/20 px-3 py-0.5 text-sm font-semibold">
                     {activeEventList.length}
@@ -237,7 +239,7 @@ export default function AttendanceHome() {
 
                 {activeEventList.length === 0 ? (
                   <div className="flex flex-1 items-center justify-center rounded-3xl bg-slate-950/16 p-6 text-center">
-                    <p className="text-sm text-white/60">Belum ada event aktif saat ini.</p>
+                    <p className="text-sm text-white/60">{t("noActiveEvents")}</p>
                   </div>
                 ) : (
                   <div className="relative flex-1 overflow-hidden rounded-3xl bg-slate-950/16">

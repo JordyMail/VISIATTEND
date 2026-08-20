@@ -70,5 +70,17 @@
     "name": "Silfan",
     "confidence": 0.7533661127090454,
     "capturedAt": "2026-08-19T12:36:49.318Z"
+  },
+  {
+    "userId": "JORDY-980268",
+    "name": "Jordy",
+    "confidence": 0.7334462404251099,
+    "capturedAt": "2026-08-20T05:02:33.259Z"
+  },
+  {
+    "userId": "SILFAN-100453",
+    "name": "Silfan",
+    "confidence": 0.7543344497680664,
+    "capturedAt": "2026-08-20T10:09:34.728Z"
   }
 ]

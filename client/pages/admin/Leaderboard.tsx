@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { memberLeaderboardApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface LeaderboardEntry {
   member_id: string;
@@ -18,6 +19,7 @@ interface LeaderboardEntry {
 const MEDALS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
 export default function AdminLeaderboardPage() {
+  const { t } = useLanguage();
   const [data, setData] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -35,7 +37,7 @@ export default function AdminLeaderboardPage() {
         setData([]);
       }
     } catch {
-      toast({ title: "Error", description: "Gagal memuat leaderboard", variant: "destructive" });
+      toast({ title: t("error"), description: `${t("error")}: ${t("leaderboard")}`, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -48,10 +50,10 @@ export default function AdminLeaderboardPage() {
     <div className="p-4 md:p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Trophy className="w-6 h-6 text-yellow-500" /> Leaderboard Admin
+          <Trophy className="w-6 h-6 text-yellow-500" /> {t("leaderboardAdmin")}
         </h1>
         <p className="text-muted-foreground text-sm mt-0.5">
-          Peringkat seluruh anggota berdasarkan akumulasi poin
+          {t("allMembersRanking")}
         </p>
       </div>
 
@@ -63,7 +65,7 @@ export default function AdminLeaderboardPage() {
         <Card>
           <CardContent className="py-16 text-center">
             <Trophy className="w-12 h-12 mx-auto text-muted-foreground opacity-30 mb-3" />
-            <p className="text-muted-foreground">Belum ada data poin anggota</p>
+            <p className="text-muted-foreground">{t("memberPointsData")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -97,7 +99,7 @@ export default function AdminLeaderboardPage() {
                     
                     {/* Points display */}
                     <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col items-center justify-center">
-                      <span className="text-xs text-muted-foreground">Total Poin</span>
+                      <span className="text-xs text-muted-foreground">{t("total")} {t("points")}</span>
                       <span className="text-3xl font-black text-purple-600 mt-1">{entry.points || 0}</span>
                     </div>
                   </CardContent>
@@ -109,20 +111,20 @@ export default function AdminLeaderboardPage() {
           {/* Rest of leaderboard */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Peringkat Lengkap Anggota</CardTitle>
+              <CardTitle className="text-base">{t("completeMemberRanking")}</CardTitle>
             </CardHeader>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-muted/50 text-left text-sm font-semibold text-slate-700">
-                    <th className="px-4 py-3">Rank</th>
-                    <th className="px-4 py-3">Nama</th>
-                    <th className="px-4 py-3">ID Anggota</th>
-                    <th className="px-4 py-3">Kategori</th>
-                    <th className="px-4 py-3 text-center">Terakhir Update</th>
+                    <th className="px-4 py-3">{t("rank")}</th>
+                    <th className="px-4 py-3">{t("name")}</th>
+                    <th className="px-4 py-3">{t("memberId")}</th>
+                    <th className="px-4 py-3">{t("category")}</th>
+                    <th className="px-4 py-3 text-center">{t("lastUpdated")}</th>
                     <th className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Zap className="w-3 h-3 text-purple-500" /> Poin
+                        <Zap className="w-3 h-3 text-purple-500" /> {t("points")}
                       </div>
                     </th>
                   </tr>

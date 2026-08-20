@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { announcementApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface Announcement {
   id: number; title: string; body: string; pinned: boolean; is_active: boolean;
@@ -26,6 +27,7 @@ interface Announcement {
 const defaultForm = { title: "", body: "", pinned: false };
 
 export default function AdminAnnouncements() {
+  const { t } = useLanguage();
   const [items, setItems]       = useState<Announcement[]>([]);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
@@ -42,7 +44,7 @@ export default function AdminAnnouncements() {
     try {
       const r = await announcementApi.getAll();
       setItems(r.data.data);
-    } catch { toast({ title: "Error", description: "Gagal memuat pengumuman", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), description: t("announcementLoadFailed"), variant: "destructive" }); }
     finally { setLoading(false); }
   };
 
@@ -55,16 +57,16 @@ export default function AdminAnnouncements() {
 
   const handleSave = async () => {
     if (!form.title.trim() || !form.body.trim())
-      return toast({ title: "Validasi", description: "Judul dan isi wajib diisi", variant: "destructive" });
+      return toast({ title: t("validation"), description: t("titleAndBodyRequired"), variant: "destructive" });
     setSaving(true);
     try {
       if (editing) await announcementApi.update(editing.id, { title: form.title, body: form.body, pinned: form.pinned });
       else         await announcementApi.create({ title: form.title, body: form.body, pinned: form.pinned });
-      toast({ title: "Berhasil", description: editing ? "Pengumuman diperbarui" : "Pengumuman dibuat" });
+      toast({ title: t("success"), description: editing ? t("announcementUpdated") : t("announcementCreated") });
       setDialogOpen(false);
       load();
     } catch (e: any) {
-      toast({ title: "Error", description: e.response?.data?.message || "Gagal menyimpan", variant: "destructive" });
+      toast({ title: t("error"), description: e.response?.data?.message || t("announcementSaveFailed"), variant: "destructive" });
     } finally { setSaving(false); }
   };
 
@@ -72,24 +74,24 @@ export default function AdminAnnouncements() {
     try {
       await announcementApi.update(a.id, { isActive: !a.is_active });
       load();
-    } catch { toast({ title: "Error", description: "Gagal mengubah status", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), description: t("announcementStatusFailed"), variant: "destructive" }); }
   };
 
   const handleTogglePin = async (a: Announcement) => {
     try {
       await announcementApi.update(a.id, { pinned: !a.pinned });
       load();
-    } catch { toast({ title: "Error", description: "Gagal mengubah pin", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), description: t("announcementPinFailed"), variant: "destructive" }); }
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
       await announcementApi.delete(deleteId);
-      toast({ title: "Berhasil", description: "Pengumuman dihapus" });
+      toast({ title: t("success"), description: t("announcementDeleted") });
       setDeleteId(null);
       load();
-    } catch { toast({ title: "Error", description: "Gagal menghapus", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), description: t("announcementDeleteFailed"), variant: "destructive" }); }
   };
 
   const filtered = items.filter((a) =>
@@ -100,13 +102,13 @@ export default function AdminAnnouncements() {
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Manajemen Pengumuman</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Buat dan kelola pengumuman untuk anggota</p>
+          <h1 className="text-2xl font-bold">{t("announcementManagement")}</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("manageAnnouncements")}</p>
         </div>
-        <Button onClick={openCreate} className="gap-2"><Plus className="w-4 h-4" /> Buat Pengumuman</Button>
+        <Button onClick={openCreate} className="gap-2"><Plus className="w-4 h-4" /> {t("createAnnouncement")}</Button>
       </div>
 
-      <Input placeholder="Cari pengumuman..." value={search}
+      <Input placeholder={`${t("search")}...`} value={search}
         onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
 
       {loading ? (
@@ -117,7 +119,7 @@ export default function AdminAnnouncements() {
         <Card>
           <CardContent className="py-16 text-center">
             <Megaphone className="w-12 h-12 mx-auto text-muted-foreground opacity-30 mb-3" />
-            <p className="text-muted-foreground">Belum ada pengumuman</p>
+            <p className="text-muted-foreground">{t("noAnnouncements")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -130,28 +132,28 @@ export default function AdminAnnouncements() {
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       {a.pinned && <span className="text-yellow-500 text-sm">📌</span>}
                       <h3 className="font-semibold">{a.title}</h3>
-                      {!a.is_active && <Badge variant="outline" className="bg-gray-100 text-gray-500 text-xs">Nonaktif</Badge>}
+                      {!a.is_active && <Badge variant="outline" className="bg-gray-100 text-gray-500 text-xs">{t("inactive")}</Badge>}
                     </div>
                     <p className="text-sm text-muted-foreground line-clamp-3 whitespace-pre-wrap">{a.body}</p>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Oleh {a.author_name || "System"} · {new Date(a.created_at).toLocaleDateString("id-ID", { day:"numeric", month:"long", year:"numeric" })}
+                      {t("by")} {a.author_name || t("systemUser")} · {new Date(a.created_at).toLocaleDateString("id-ID", { day:"numeric", month:"long", year:"numeric" })}
                     </p>
                   </div>
                   <div className="flex sm:flex-col gap-2 flex-shrink-0">
                     <Button variant="ghost" size="sm" className={`gap-1.5 text-xs ${a.pinned ? "text-yellow-600" : ""}`}
                       onClick={() => handleTogglePin(a)}>
-                      <Pin className="w-3.5 h-3.5" /> {a.pinned ? "Unpin" : "Pin"}
+                      <Pin className="w-3.5 h-3.5" /> {a.pinned ? t("unpin") : t("pin")}
                     </Button>
                     <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => openEdit(a)}>
-                      <Pencil className="w-3.5 h-3.5" /> Edit
+                      <Pencil className="w-3.5 h-3.5" /> {t("edit")}
                     </Button>
                     <div className="flex items-center gap-1.5">
                       <Switch checked={a.is_active} onCheckedChange={() => handleToggleActive(a)} className="scale-75" />
-                      <span className="text-xs text-muted-foreground">{a.is_active ? "Aktif" : "Off"}</span>
+                      <span className="text-xs text-muted-foreground">{a.is_active ? t("present") : t("off")}</span>
                     </div>
                     <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-destructive"
                       onClick={() => setDeleteId(a.id)}>
-                      <Trash2 className="w-3.5 h-3.5" /> Hapus
+                      <Trash2 className="w-3.5 h-3.5" /> {t("delete")}
                     </Button>
                   </div>
                 </div>
@@ -165,30 +167,30 @@ export default function AdminAnnouncements() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Pengumuman" : "Buat Pengumuman Baru"}</DialogTitle>
-            <DialogDescription>Pengumuman akan tampil kepada semua anggota</DialogDescription>
+            <DialogTitle>{editing ? `${t("edit")} ${t("announcements")}` : t("newAnnouncement")}</DialogTitle>
+            <DialogDescription>{t("announcementVisibleToMembers")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="mb-1.5 block">Judul *</Label>
-              <Input placeholder="Judul pengumuman..." value={form.title}
+              <Label className="mb-1.5 block">{t("announcementTitle")} *</Label>
+              <Input placeholder={`${t("announcementTitle")}...`} value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })} />
             </div>
             <div>
-              <Label className="mb-1.5 block">Isi Pengumuman *</Label>
-              <Textarea placeholder="Tulis isi pengumuman di sini..." rows={5}
+              <Label className="mb-1.5 block">{t("announcementBody")} *</Label>
+              <Textarea placeholder={t("writeAnnouncement")} rows={5}
                 value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
             </div>
             <div className="flex items-center gap-3">
               <Switch checked={form.pinned} onCheckedChange={(v) => setForm({ ...form, pinned: v })} />
-              <Label>Tandai sebagai penting (📌 Pin)</Label>
+              <Label>{t("markImportant")} ({t("pin")})</Label>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>{t("cancel")}</Button>
             <Button onClick={handleSave} disabled={saving} className="gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editing ? "Simpan" : "Publikasikan"}
+              {editing ? t("save") : t("publish")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -198,13 +200,13 @@ export default function AdminAnnouncements() {
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Hapus Pengumuman</AlertDialogTitle>
-            <AlertDialogDescription>Pengumuman akan dihapus permanen dan tidak dapat dibatalkan.</AlertDialogDescription>
+            <AlertDialogTitle>{t("delete")} {t("announcements")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("permanentlyDeleted")} {t("cannotUndo")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Hapus
+              {t("delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

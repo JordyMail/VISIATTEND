@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { scheduleApi, eventApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface Schedule {
   id: number; event_id: number; event_name: string; event_code: string; event_type: string;
@@ -37,6 +38,7 @@ const EVENT_TYPE_COLOR: Record<string, string> = {
 const defaultForm = { eventId: "", scheduledDate: "", startTime: "", endTime: "", location: "", notes: "" };
 
 export default function AdminSchedules() {
+  const { t } = useLanguage();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [events, setEvents]       = useState<Event[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -62,7 +64,7 @@ export default function AdminSchedules() {
         upcoming,
       });
       setSchedules(r.data.data);
-    } catch { toast({ title: "Error", description: "Gagal memuat jadwal", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), description: `${t("error")}: ${t("schedules")}`, variant: "destructive" }); }
     finally { setLoading(false); }
   };
 
@@ -79,7 +81,7 @@ export default function AdminSchedules() {
 
   const handleSave = async () => {
     if (!form.eventId || !form.scheduledDate || !form.startTime)
-      return toast({ title: "Validasi", description: "Event, tanggal, dan jam mulai wajib diisi", variant: "destructive" });
+      return toast({ title: t("validation"), description: `${t("event")}, ${t("date")}, ${t("startTime")} ${t("required").toLowerCase()}`, variant: "destructive" });
     setSaving(true);
     try {
       const payload = {
@@ -89,11 +91,11 @@ export default function AdminSchedules() {
       };
       if (editing) await scheduleApi.update(editing.id, payload);
       else         await scheduleApi.create(payload);
-      toast({ title: "Berhasil", description: editing ? "Jadwal diperbarui" : "Jadwal ditambahkan" });
+      toast({ title: t("success"), description: editing ? t("announcementUpdated") : t("addSchedule") });
       setDialogOpen(false);
       load(filterEvent, showUpcoming);
     } catch (e: any) {
-      toast({ title: "Error", description: e.response?.data?.message || "Gagal menyimpan", variant: "destructive" });
+      toast({ title: t("error"), description: e.response?.data?.message || t("announcementSaveFailed"), variant: "destructive" });
     } finally { setSaving(false); }
   };
 
@@ -101,10 +103,10 @@ export default function AdminSchedules() {
     if (!deleteId) return;
     try {
       await scheduleApi.delete(deleteId);
-      toast({ title: "Berhasil", description: "Jadwal dihapus" });
+      toast({ title: t("success"), description: t("delete") });
       setDeleteId(null);
       load(filterEvent, showUpcoming);
-    } catch { toast({ title: "Error", description: "Gagal menghapus", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), description: t("announcementDeleteFailed"), variant: "destructive" }); }
   };
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString("id-ID", {
@@ -116,10 +118,10 @@ export default function AdminSchedules() {
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Manajemen Jadwal</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Kelola jadwal kegiatan organisasi</p>
+          <h1 className="text-2xl font-bold">{t("scheduleManagement")}</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("manageOrganizationSchedules")}</p>
         </div>
-        <Button onClick={openCreate} className="gap-2"><Plus className="w-4 h-4" /> Tambah Jadwal</Button>
+        <Button onClick={openCreate} className="gap-2"><Plus className="w-4 h-4" /> {t("addSchedule")}</Button>
       </div>
 
       {/* Filters */}
@@ -127,10 +129,10 @@ export default function AdminSchedules() {
         <div className="flex flex-wrap gap-3 items-center">
           <Select value={filterEvent} onValueChange={(v) => { setFilterEvent(v); load(v, showUpcoming); }}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Semua event" />
+              <SelectValue placeholder={t("allEvents")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Event</SelectItem>
+              <SelectItem value="all">{t("allEvents")}</SelectItem>
               {events.map((e) => (
                 <SelectItem key={e.id} value={e.id.toString()}>{e.event_code} – {e.event_name}</SelectItem>
               ))}
@@ -138,9 +140,9 @@ export default function AdminSchedules() {
           </Select>
           <div className="flex gap-2">
             <Button size="sm" variant={!showUpcoming ? "default" : "outline"}
-              onClick={() => { setShowUpcoming(false); load(filterEvent, false); }}>Semua</Button>
+              onClick={() => { setShowUpcoming(false); load(filterEvent, false); }}>{t("all")}</Button>
             <Button size="sm" variant={showUpcoming ? "default" : "outline"}
-              onClick={() => { setShowUpcoming(true); load(filterEvent, true); }}>Mendatang</Button>
+              onClick={() => { setShowUpcoming(true); load(filterEvent, true); }}>{t("upcoming")}</Button>
           </div>
         </div>
       </Card>
@@ -156,12 +158,12 @@ export default function AdminSchedules() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tanggal</TableHead>
-                  <TableHead>Event</TableHead>
-                  <TableHead>Waktu</TableHead>
-                  <TableHead>Lokasi</TableHead>
-                  <TableHead>Catatan</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
+                  <TableHead>{t("date")}</TableHead>
+                  <TableHead>{t("event")}</TableHead>
+                  <TableHead>{t("time")}</TableHead>
+                  <TableHead>{t("location")}</TableHead>
+                  <TableHead>{t("notes")}</TableHead>
+                  <TableHead className="text-right">{t("actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -201,7 +203,7 @@ export default function AdminSchedules() {
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
                       <CalendarDays className="w-8 h-8 mx-auto opacity-30 mb-2" />
-                      Tidak ada jadwal
+                      {t("noSchedules")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -215,14 +217,14 @@ export default function AdminSchedules() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Jadwal" : "Tambah Jadwal Baru"}</DialogTitle>
-            <DialogDescription>Isi detail jadwal kegiatan</DialogDescription>
+            <DialogTitle>{editing ? `${t("edit")} ${t("schedules")}` : t("addSchedule")}</DialogTitle>
+            <DialogDescription>{t("scheduleDetails")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="mb-1.5 block">Event *</Label>
+              <Label className="mb-1.5 block">{t("event")} *</Label>
               <Select value={form.eventId} onValueChange={(v) => setForm({ ...form, eventId: v })}>
-                <SelectTrigger><SelectValue placeholder="Pilih event" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={`${t("event")}...`} /></SelectTrigger>
                 <SelectContent>
                   {events.map((e) => (
                     <SelectItem key={e.id} value={e.id.toString()}>{e.event_code} – {e.event_name}</SelectItem>
@@ -231,33 +233,33 @@ export default function AdminSchedules() {
               </Select>
             </div>
             <div>
-              <Label className="mb-1.5 block">Tanggal *</Label>
+              <Label className="mb-1.5 block">{t("date")} *</Label>
               <Input type="date" value={form.scheduledDate} onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="mb-1.5 block">Jam Mulai *</Label>
+                <Label className="mb-1.5 block">{t("startTime")} *</Label>
                 <Input type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} />
               </div>
               <div>
-                <Label className="mb-1.5 block">Jam Selesai</Label>
+                <Label className="mb-1.5 block">{t("endTime")}</Label>
                 <Input type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} />
               </div>
             </div>
             <div>
-              <Label className="mb-1.5 block">Lokasi</Label>
-              <Input placeholder="Nama tempat / ruangan..." value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+              <Label className="mb-1.5 block">{t("location")}</Label>
+              <Input placeholder={t("placeOrRoom")} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
             </div>
             <div>
-              <Label className="mb-1.5 block">Catatan</Label>
-              <Input placeholder="Informasi tambahan..." value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+              <Label className="mb-1.5 block">{t("notes")}</Label>
+              <Input placeholder={t("additionalInformation")} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>{t("cancel")}</Button>
             <Button onClick={handleSave} disabled={saving} className="gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editing ? "Simpan" : "Tambah"}
+              {editing ? t("save") : t("add")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -267,13 +269,13 @@ export default function AdminSchedules() {
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Hapus Jadwal</AlertDialogTitle>
-            <AlertDialogDescription>Jadwal ini akan dihapus permanen. Lanjutkan?</AlertDialogDescription>
+            <AlertDialogTitle>{t("delete")} {t("schedules")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("permanentlyDeleted")} {t("continuePrompt")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Hapus
+              {t("delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

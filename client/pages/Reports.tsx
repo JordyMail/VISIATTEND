@@ -17,6 +17,7 @@ import { reportsApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
 import { format as formatDate } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { useLanguage } from "@/lib/i18n";
 
 type PeriodOption =
   | "this_week" | "last_week" | "this_month" | "last_month"
@@ -58,6 +59,7 @@ const PERIOD_LABELS: Record<PeriodOption, string> = {
 };
 
 export default function Reports() {
+  const { t } = useLanguage();
   const [period, setPeriod] = useState<PeriodOption>("this_month");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -110,7 +112,7 @@ export default function Reports() {
   // ─── PDF export via print (event as subheading) ────────────────────────────
   const exportPDF = (report: ReportRecord) => {
     if (!report.groups.length) {
-      toast({ title: "No data", description: "Nothing to export.", variant: "destructive" });
+      toast({ title: t("noData"), description: t("noDataToExport"), variant: "destructive" });
       return;
     }
 
@@ -129,7 +131,7 @@ export default function Reports() {
           <h2>${g.eventName}</h2>
           <p class="event-date">${dateLabel}</p>
           <table>
-            <thead><tr><th>Member ID</th><th>Name</th><th>Attendance</th><th>Check-in</th></tr></thead>
+            <thead><tr><th>${t("reportMemberId")}</th><th>${t("reportName")}</th><th>${t("reportAttendance")}</th><th>${t("reportCheckIn")}</th></tr></thead>
             <tbody>${tableRows}</tbody>
           </table>
         `;
@@ -140,7 +142,7 @@ export default function Reports() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Attendance Report</title>
+        <title>${t("attendanceReport")}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
           h1 { font-size: 20px; margin-bottom: 4px; }
@@ -155,8 +157,8 @@ export default function Reports() {
         </style>
       </head>
       <body>
-        <h1>Attendance Report</h1>
-        <p class="meta">Generated: ${new Date(report.createdAt).toLocaleString("id-ID")} | Period: ${PERIOD_LABELS[report.period as PeriodOption] || report.period} | Records: ${report.count}</p>
+        <h1>${t("attendanceReport")}</h1>
+        <p class="meta">${t("generated")}: ${new Date(report.createdAt).toLocaleString("id-ID")} | ${t("period")}: ${PERIOD_LABELS[report.period as PeriodOption] || report.period} | ${t("records")}: ${report.count}</p>
         ${sections}
       </body>
       </html>
@@ -164,7 +166,7 @@ export default function Reports() {
 
     const win = window.open("", "_blank");
     if (!win) {
-      toast({ title: "Popup blocked", description: "Please allow popups for PDF export.", variant: "destructive" });
+      toast({ title: t("error"), description: t("noDataToExport"), variant: "destructive" });
       return;
     }
     win.document.write(html);
@@ -177,7 +179,7 @@ export default function Reports() {
   // ─── Generate report ───────────────────────────────────────────────────────
   const handleGenerateReport = async () => {
     if (period === "custom" && (!customStart || !customEnd)) {
-      toast({ title: "Validasi", description: "Pilih tanggal mulai dan akhir", variant: "destructive" });
+      toast({ title: t("validation"), description: `${t("date")} ${t("required").toLowerCase()}`, variant: "destructive" });
       return;
     }
     setGenerating(true);
@@ -205,8 +207,8 @@ export default function Reports() {
       setGeneratedReports((prev) => [newReport, ...prev]);
 
       toast({
-        title: "Report generated",
-        description: `${data.count} records found across ${data.groups.length} event(s).`,
+        title: t("success"),
+        description: `${data.count} ${t("total").toLowerCase()} ${t("events").toLowerCase()}`,
       });
 
       if (format === "csv") {
@@ -216,8 +218,8 @@ export default function Reports() {
       }
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to generate report",
+        title: t("error"),
+        description: error.response?.data?.message || t("error"),
         variant: "destructive",
       });
     } finally {
@@ -227,7 +229,7 @@ export default function Reports() {
 
   const handleDownload = (report: ReportRecord) => {
     if (!report.count) {
-      toast({ title: "No data", description: "This report has no data rows.", variant: "destructive" });
+      toast({ title: t("noData"), description: t("noDataToExport"), variant: "destructive" });
       return;
     }
     if (report.format === "PDF") {
@@ -244,30 +246,30 @@ export default function Reports() {
     <div className="p-6 md:p-8 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl md:text-4xl font-bold">Reports</h1>
+        <h1 className="text-3xl md:text-4xl font-bold">{t("reports")}</h1>
         <p className="text-muted-foreground mt-1">
-          Generate and download attendance reports
+          {t("viewManageAttendance")}
         </p>
       </div>
 
       {/* Generator */}
       <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-6">Generate New Report</h2>
+        <h2 className="text-xl font-semibold mb-6">{t("add")} {t("reports")}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <div>
-            <Label className="mb-2 block text-sm font-medium">Period</Label>
+            <Label className="mb-2 block text-sm font-medium">{t("date")}</Label>
             <Select value={period} onValueChange={(v) => setPeriod(v as PeriodOption)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="this_week">This Week</SelectItem>
-                <SelectItem value="last_week">Last Week</SelectItem>
-                <SelectItem value="this_month">This Month</SelectItem>
-                <SelectItem value="last_month">Last Month</SelectItem>
-                <SelectItem value="this_year">This Year</SelectItem>
-                <SelectItem value="all_time">All Time</SelectItem>
-                <SelectItem value="custom">Custom Range</SelectItem>
+                <SelectItem value="this_week">{t("thisWeek")}</SelectItem>
+                <SelectItem value="last_week">{t("lastWeek")}</SelectItem>
+                <SelectItem value="this_month">{t("thisMonth")}</SelectItem>
+                <SelectItem value="last_month">{t("lastMonth")}</SelectItem>
+                <SelectItem value="this_year">{t("thisYear")}</SelectItem>
+                <SelectItem value="all_time">{t("allTime")}</SelectItem>
+                <SelectItem value="custom">{t("customRange")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -275,18 +277,18 @@ export default function Reports() {
           {period === "custom" && (
             <>
               <div>
-                <Label className="mb-2 block text-sm font-medium">Tanggal Mulai</Label>
+                <Label className="mb-2 block text-sm font-medium">{t("date")} *</Label>
                 <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
               </div>
               <div>
-                <Label className="mb-2 block text-sm font-medium">Tanggal Akhir</Label>
+                <Label className="mb-2 block text-sm font-medium">{t("date")} *</Label>
                 <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
               </div>
             </>
           )}
 
           <div>
-            <Label className="mb-2 block text-sm font-medium">Format</Label>
+            <Label className="mb-2 block text-sm font-medium">{t("category")}</Label>
             <Select value={format} onValueChange={setFormat}>
               <SelectTrigger>
                 <SelectValue />
@@ -307,17 +309,17 @@ export default function Reports() {
           {generating ? (
             <span className="flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Generating...
+              {t("loading")}
             </span>
           ) : (
-            "Generate Report"
+            <>{t("add")} {t("reports")}</>
           )}
         </Button>
       </Card>
 
       {/* Generated Reports */}
       <div>
-        <h2 className="text-xl font-semibold mb-4">Generated Reports</h2>
+        <h2 className="text-xl font-semibold mb-4">{t("reports")}</h2>
         {generatedReports.length > 0 ? (
           <div className="space-y-3">
             {generatedReports.map((report) => (
@@ -385,9 +387,9 @@ export default function Reports() {
         ) : (
           <Card className="p-8 text-center">
             <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-3 opacity-50" />
-            <p className="text-muted-foreground">No reports generated yet</p>
+            <p className="text-muted-foreground">{t("noReports")}</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Pilih period lalu klik Generate Report
+              {t("date")}, {t("generateReport").toLowerCase()}
             </p>
           </Card>
         )}

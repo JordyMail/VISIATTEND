@@ -10,6 +10,7 @@ import { toast } from "@/components/ui/use-toast";
 import { format, parseISO, isToday, isSameDay } from "date-fns";
 import { id } from "date-fns/locale";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useLanguage } from "@/lib/i18n";
 
 const calendarClassNames = {
   months: "flex flex-col",
@@ -31,6 +32,7 @@ const calendarClassNames = {
 };
 
 export default function ScheduleAttendance() {
+  const { t } = useLanguage();
   const [scheduledDates, setScheduledDates] = useState<Date[]>([]);
   const [pendingDate, setPendingDate] = useState<Date | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -46,7 +48,7 @@ export default function ScheduleAttendance() {
       const dates: Date[] = (r.data.data as string[]).map((d) => parseISO(d));
       setScheduledDates(dates);
     } catch {
-      toast({ title: "Error", description: "Gagal memuat jadwal", variant: "destructive" });
+      toast({ title: t("error"), description: `${t("error")}: ${t("schedules")}`, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -75,12 +77,12 @@ export default function ScheduleAttendance() {
       await attendanceScheduleApi.addDate(toDateStr(pendingDate));
       setScheduledDates((prev) => [...prev, pendingDate]);
       toast({
-        title: "Tanggal ditambahkan",
-        description: `${format(pendingDate, "d MMMM yyyy", { locale: id })} berhasil dijadwalkan`,
+        title: t("success"),
+        description: `${t("selectedDate")}: ${format(pendingDate, "d MMMM yyyy", { locale: id })}`,
       });
       setPendingDate(undefined);
     } catch {
-      toast({ title: "Error", description: "Gagal menyimpan jadwal", variant: "destructive" });
+      toast({ title: t("error"), description: t("announcementSaveFailed"), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -89,7 +91,7 @@ export default function ScheduleAttendance() {
   const handleAddToday = () => {
     const today = new Date();
     if (isScheduled(today)) {
-      toast({ description: "Hari ini sudah terjadwal" });
+      toast({ description: t("todayAlreadyActive") });
       return;
     }
     setPendingDate(today);
@@ -102,9 +104,9 @@ export default function ScheduleAttendance() {
     try {
       await attendanceScheduleApi.removeDate(toDateStr(d));
       setScheduledDates((prev) => prev.filter((s) => !isSameDay(s, d)));
-      toast({ title: "Berhasil", description: "Tanggal dihapus dari jadwal" });
+      toast({ title: t("success"), description: t("removeFromSchedule") });
     } catch {
-      toast({ title: "Error", description: "Gagal menghapus", variant: "destructive" });
+      toast({ title: t("error"), description: t("announcementDeleteFailed"), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -117,9 +119,9 @@ export default function ScheduleAttendance() {
     <div className="p-4 md:p-6 space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Schedule Attendance</h1>
+          <h1 className="text-2xl font-bold">{t("scheduleAttendance")}</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Pilih tanggal kapan attendance dibuka. User hanya bisa attendance pada tanggal yang dipilih.
+            {t("scheduleAttendanceDescription")}
           </p>
         </div>
         <Button
@@ -129,16 +131,14 @@ export default function ScheduleAttendance() {
           className="gap-2 shrink-0"
         >
           <CalendarCheck className="h-4 w-4" />
-          {todayScheduled ? "Hari ini sudah aktif" : "Aktifkan Hari Ini"}
+          {todayScheduled ? t("todayAlreadyActive") : t("activateToday")}
         </Button>
       </div>
 
       <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
         <Info className="h-4 w-4 mt-0.5 shrink-0" />
         <p>
-          Klik tanggal untuk memilih (hijau = dipilih), lalu klik{" "}
-          <strong>"Tambahkan Tanggal"</strong> untuk menyimpan jadwal.
-          Gunakan ikon 🗑 di daftar untuk menghapus.
+          {t("selectDateInstruction")} {t("removeFromSchedule")}.
         </p>
       </div>
 
@@ -208,7 +208,7 @@ export default function ScheduleAttendance() {
                   <div className="flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-700">
                     <CalendarDays className="h-4 w-4 shrink-0" />
                     <span>
-                      Dipilih:{" "}
+                      {t("selectedDate")}:{" "}
                       <strong>{format(pendingDate, "EEEE, d MMMM yyyy", { locale: id })}</strong>
                     </span>
                   </div>
@@ -222,12 +222,12 @@ export default function ScheduleAttendance() {
                     ) : (
                       <Plus className="h-4 w-4" />
                     )}
-                    {saving ? "Menyimpan..." : "Tambahkan Tanggal"}
+                    {saving ? t("saving") : t("addDate")}
                   </Button>
                 </>
               ) : (
                 <p className="text-center text-xs text-muted-foreground py-1">
-                  Klik tanggal di kalender untuk memilih
+                  {t("clickDateToSelect")}
                 </p>
               )}
             </div>
@@ -239,17 +239,16 @@ export default function ScheduleAttendance() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <CalendarDays className="h-4 w-4" />
-              Tanggal Terjadwal
+              {t("scheduledDates")}
               <Badge variant="secondary" className="ml-auto">{scheduledDates.length}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
             {sortedDates.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
-                Belum ada jadwal attendance.
+                {t("noScheduledDates")}.
                 <br />
-                Klik tanggal di kalender lalu tekan{" "}
-                <strong>"Tambahkan Tanggal"</strong>.
+                {t("clickDateToSelect")}.
               </p>
             ) : (
               <ul className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
@@ -268,7 +267,7 @@ export default function ScheduleAttendance() {
                         </span>
                         {todayItem && (
                           <Badge className="bg-green-500 text-white text-xs px-2">
-                            Hari ini
+                            {t("today")}
                           </Badge>
                         )}
                       </div>

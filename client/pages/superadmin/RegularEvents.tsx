@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { regularEventApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface RegularEvent {
   id: number;
@@ -25,6 +26,7 @@ interface RegularEvent {
 }
 
 export default function RegularEventsPage() {
+  const { t } = useLanguage();
   const [events, setEvents] = useState<RegularEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -51,8 +53,8 @@ export default function RegularEventsPage() {
       setEvents(response.data.data || []);
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.response?.data?.message || "Gagal memuat Regular Event",
+        title: t("error"),
+        description: error.response?.data?.message || t("error"),
         variant: "destructive",
       });
     } finally {
@@ -75,8 +77,8 @@ export default function RegularEventsPage() {
   const handleSave = async () => {
     if (!eventName.trim()) {
       return toast({
-        title: "Validasi",
-        description: "Nama event wajib diisi",
+        title: t("validation"),
+        description: `${t("event")} ${t("required").toLowerCase()}`,
         variant: "destructive",
       });
     }
@@ -85,17 +87,17 @@ export default function RegularEventsPage() {
     try {
       if (editing) {
         await regularEventApi.update(editing.id, { eventName: eventName.trim() });
-        toast({ title: "Berhasil", description: "Regular Event berhasil diperbarui" });
+        toast({ title: t("success"), description: t("announcementUpdated") });
       } else {
         await regularEventApi.create({ eventName: eventName.trim() });
-        toast({ title: "Berhasil", description: "Regular Event berhasil dibuat" });
+        toast({ title: t("success"), description: t("announcementCreated") });
       }
       setDialogOpen(false);
       loadEvents();
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.response?.data?.message || "Gagal menyimpan Regular Event",
+        title: t("error"),
+        description: error.response?.data?.message || t("error"),
         variant: "destructive",
       });
     } finally {
@@ -114,13 +116,13 @@ export default function RegularEventsPage() {
     setDeleting(true);
     try {
       await regularEventApi.delete(deletingEvent.id);
-      toast({ title: "Berhasil", description: "Regular Event berhasil dihapus" });
+      toast({ title: t("success"), description: t("announcementDeleted") });
       setDeleteConfirmOpen(false);
       loadEvents();
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.response?.data?.message || "Gagal menghapus Regular Event",
+        title: t("error"),
+        description: error.response?.data?.message || t("error"),
         variant: "destructive",
       });
     } finally {
@@ -140,14 +142,14 @@ export default function RegularEventsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Calendar className="w-6 h-6 text-purple-600" /> Regular Event
+            <Calendar className="w-6 h-6 text-purple-600" /> {t("regularEvent")}
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Daftar event gereja/organisasi yang bersifat berkala dan regular
+            {t("regularEventsDescription")}
           </p>
         </div>
         <Button onClick={openCreate} className="gap-2 bg-purple-600 hover:bg-purple-700 text-white">
-          <Plus className="w-4 h-4" /> Add Regular Event
+          <Plus className="w-4 h-4" /> {t("addRegularEvent")}
         </Button>
       </div>
 
@@ -155,7 +157,7 @@ export default function RegularEventsPage() {
       <div className="flex items-center max-w-sm relative">
         <Search className="w-4 h-4 text-muted-foreground absolute left-3" />
         <Input
-          placeholder="Cari Event Code atau Event Name..."
+          placeholder={t("search")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9"
@@ -171,9 +173,9 @@ export default function RegularEventsPage() {
         <Card>
           <CardContent className="py-16 text-center">
             <Calendar className="w-12 h-12 mx-auto opacity-30 mb-3 text-purple-600" />
-            <p className="text-muted-foreground">Belum ada Regular Event</p>
+            <p className="text-muted-foreground">{t("noResults")}</p>
             <Button onClick={openCreate} className="mt-4 gap-2 bg-purple-600 hover:bg-purple-700 text-white">
-              <Plus className="w-4 h-4" /> Tambah Pertama
+              <Plus className="w-4 h-4" /> {t("addFirst")}
             </Button>
           </CardContent>
         </Card>
@@ -182,10 +184,10 @@ export default function RegularEventsPage() {
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead className="w-[80px] text-center font-semibold">No.</TableHead>
-                <TableHead className="w-[150px] font-semibold">Event Code</TableHead>
-                <TableHead className="font-semibold">Event Name</TableHead>
-                <TableHead className="w-[200px] text-right font-semibold">Action</TableHead>
+                <TableHead className="w-[80px] text-center font-semibold">{t("number")}</TableHead>
+                <TableHead className="w-[150px] font-semibold">{t("eventCode")}</TableHead>
+                <TableHead className="font-semibold">{t("eventName")}</TableHead>
+                <TableHead className="w-[200px] text-right font-semibold">{t("action")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -226,29 +228,29 @@ export default function RegularEventsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editing ? "Edit Regular Event" : "Add Regular Event"}
+              {editing ? t("edit") : t("add")}
             </DialogTitle>
             <DialogDescription>
               {editing
-                ? "Ubah nama regular event. Kode event bersifat permanen."
-                : "Masukkan nama regular event. Kode event akan dibuat otomatis."}
+                ? t("edit")
+                : t("add")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             {editing && (
               <div>
-                <Label className="mb-1.5 block text-muted-foreground">Event Code</Label>
+                <Label className="mb-1.5 block text-muted-foreground">{t("eventCode")}</Label>
                 <Input value={editing.event_code} disabled className="bg-muted font-mono" />
               </div>
             )}
             <div>
               <Label htmlFor="eventName" className="mb-1.5 block">
-                Event Name
+                {t("eventName")}
               </Label>
               <Input
                 id="eventName"
-                placeholder="cth: Sunday Service, Bible Study..."
+                placeholder={t("regularEvent")}
                 value={eventName}
                 onChange={(e) => setEventName(e.target.value)}
                 autoFocus
@@ -258,7 +260,7 @@ export default function RegularEventsPage() {
 
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleSave}
@@ -266,7 +268,7 @@ export default function RegularEventsPage() {
               className="bg-purple-600 hover:bg-purple-700 text-white"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-              Save
+              {t("save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -277,15 +279,15 @@ export default function RegularEventsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-red-600">
-              Delete Regular Event?
+              {t("delete")} {t("regularEvent")}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>"{deletingEvent?.event_name}"</strong>?
+              {t("delete")} <strong>"{deletingEvent?.event_name}"</strong>?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting} onClick={() => setDeleteConfirmOpen(false)}>
-              Cancel
+              {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
@@ -296,7 +298,7 @@ export default function RegularEventsPage() {
               className="bg-red-600 hover:bg-red-700 text-white"
             >
               {deleting && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-              Delete
+              {t("delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

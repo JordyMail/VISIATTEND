@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { memberLeaderboardApi } from "@/services/api";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { useLanguage } from "@/lib/i18n";
 
 interface LeaderboardMember {
   member_id: string;
@@ -16,6 +17,7 @@ interface LeaderboardMember {
 }
 
 export default function Leaderboard() {
+  const { t } = useLanguage();
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardMember[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -82,18 +84,18 @@ export default function Leaderboard() {
             className="absolute top-4 left-4 flex items-center gap-2 text-white/80 hover:text-white transition-all bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full backdrop-blur-sm"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span className="text-sm font-medium">Kembali ke Home</span>
+            <span className="text-sm font-medium">{t("backToHome")}</span>
           </Link>
           <div className="flex flex-col items-center text-center mt-4">
-            <h1 className="text-4xl font-bold md:text-5xl">Leaderboard</h1>
-            <p className="mt-2 text-base text-white/85 md:text-lg">Top Member Points Rankings</p>
+            <h1 className="text-4xl font-bold md:text-5xl">{t("leaderboard")}</h1>
+            <p className="mt-2 text-base text-white/85 md:text-lg">{t("topRankings")}</p>
           </div>
         </section>
 
         <section className="space-y-4 rounded-[30px] border border-white/60 bg-white/70 p-4 shadow-[0_24px_90px_-50px_rgba(15,23,42,0.45)] backdrop-blur-sm md:p-6">
           <div className="flex items-center gap-2 text-2xl font-bold text-slate-900">
             <Crown className="h-6 w-6 text-amber-500" />
-            Top 3 Ranking
+            {t("topThree")}
           </div>
 
           <div className="grid gap-4 md:grid-cols-3 md:items-end">
@@ -110,7 +112,7 @@ export default function Leaderboard() {
                   <div className="mt-14 flex flex-col items-center text-center">
                     <h2 className="text-2xl font-bold text-slate-900">{member.full_name}</h2>
                     <p className="mt-2 text-base text-slate-700">
-                      Kategori: {member.category} | Points: {member.points}
+                      {t("category")}: {member.category} | {t("point")}: {member.points}
                     </p>
                   </div>
                 </Card>
@@ -118,7 +120,7 @@ export default function Leaderboard() {
             })}
             {!loading && podiumData.length === 0 && (
               <Card className="md:col-span-3 rounded-[28px] border border-dashed border-slate-300 bg-slate-50/90 p-8 text-center text-slate-500">
-                Belum ada data leaderboard dari database user.
+                {t("noData")}
               </Card>
             )}
           </div>
@@ -126,8 +128,8 @@ export default function Leaderboard() {
           <Card className="rounded-[28px] border border-slate-200/80 bg-white/90 p-0 shadow-[0_25px_70px_-45px_rgba(148,163,184,0.8)]">
             <div className="flex flex-col gap-3 border-b border-slate-200/80 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6">
               <div>
-                <p className="text-sm font-medium text-slate-500">Leaderboard table</p>
-                <h3 className="text-lg font-semibold text-slate-900">Rank anggota berdasarkan total poin</h3>
+                <p className="text-sm font-medium text-slate-500">{t("leaderboardTable")}</p>
+                <h3 className="text-lg font-semibold text-slate-900">{t("rank")} {t("members").toLowerCase()} {t("point").toLowerCase()}</h3>
               </div>
             </div>
 
@@ -135,10 +137,10 @@ export default function Leaderboard() {
               <table className="w-full min-w-[560px] text-left">
                 <thead>
                   <tr className="text-sm font-semibold text-slate-700">
-                    <th className="px-4 py-3">Rank</th>
-                    <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Category</th>
-                    <th className="px-4 py-3 text-right">Points</th>
+                    <th className="px-4 py-3">{t("rank")}</th>
+                    <th className="px-4 py-3">{t("name")}</th>
+                    <th className="px-4 py-3">{t("category")}</th>
+                    <th className="px-4 py-3 text-right">{t("point")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -158,4 +160,4 @@ export default function Leaderboard() {
       </div>
     </div>
   );
-}
+}

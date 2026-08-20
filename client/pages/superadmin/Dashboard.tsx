@@ -12,9 +12,11 @@ import { useNavigate } from "react-router-dom";
 import { dashboardApi, userApi, attendanceApi } from "@/services/api";
 import { getSessionUser } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 export default function SuperAdminDashboard() {
   const me  = getSessionUser();
+  const { language, t } = useLanguage();
   const nav = useNavigate();
   const [stats, setStats]         = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
@@ -40,18 +42,17 @@ export default function SuperAdminDashboard() {
           admins: users.filter((u: any) => u.role === "admin").length,
           users:  users.filter((u: any) => u.role === "user").length,
         });
-      } catch { toast({ title: "Error", description: "Gagal memuat data", variant: "destructive" }); }
+      } catch { toast({ title: t("error"), description: t("error"), variant: "destructive" }); }
       finally { setLoading(false); }
     })();
   }, []);
 
   const quickActions = [
-    { label: "Tambah Admin",    icon: Users,    path: "/superadmin/members",    color: "bg-blue-500" },
-    { label: "Buat Event",      icon: BookOpen, path: "/superadmin/events",     color: "bg-green-500" },
-    { label: "Kelola Divisi",   icon: Settings, path: "/superadmin/divisions",  color: "bg-purple-500" },
-    { label: "System Settings", icon: ShieldCheck, path: "/superadmin/system", color: "bg-orange-500" },
-    { label: "Audit Log",       icon: Activity, path: "/superadmin/audit",      color: "bg-red-500" },
-    { label: "Laporan",         icon: TrendingUp, path: "/superadmin/reports",  color: "bg-cyan-500" },
+    { label: t("members"), icon: Users, path: "/superadmin/members", color: "bg-blue-500" },
+    { label: t("events"), icon: BookOpen, path: "/superadmin/events", color: "bg-green-500" },
+    { label: t("system"), icon: ShieldCheck, path: "/superadmin/system", color: "bg-orange-500" },
+    { label: t("auditLogs"), icon: Activity, path: "/superadmin/audit", color: "bg-red-500" },
+    { label: t("reports"), icon: TrendingUp, path: "/superadmin/reports", color: "bg-cyan-500" },
   ];
 
   const maxTrend = Math.max(...trend.map((t) => t.present || 0), 1);
@@ -74,9 +75,9 @@ export default function SuperAdminDashboard() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Super Admin Dashboard</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">{t("superAdminDashboard")}</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Selamat datang, {me?.full_name} · {new Date().toLocaleDateString("id-ID", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}
+            {t("welcome")}, {me?.full_name} · {new Date().toLocaleDateString(language === "en" ? "en-US" : "id-ID", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}
           </p>
         </div>
         <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-200">
@@ -87,10 +88,10 @@ export default function SuperAdminDashboard() {
       {/* Main stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label:"Total Member",    value: stats?.totalMembers ?? 0,  icon:Users,         color:"text-blue-600",   bg:"bg-blue-50" },
-          { label:"Event Aktif",     value: stats?.activeEvents ?? 0,  icon:BookOpen,       color:"text-green-600",  bg:"bg-green-50" },
-          { label:"Hadir Hari Ini",  value: `${stats?.todayAttendance?.checkedIn ?? 0}`,   icon:CalendarCheck, color:"text-purple-600", bg:"bg-purple-50" },
-          { label:"Tingkat Kehadiran",value:`${stats?.attendanceRate ?? 0}%`, icon:TrendingUp, color:"text-orange-600", bg:"bg-orange-50" },
+          { label:t("totalMember"), value: stats?.totalMembers ?? 0, icon:Users, color:"text-blue-600", bg:"bg-blue-50" },
+          { label:t("activeEvent"), value: stats?.activeEvents ?? 0, icon:BookOpen, color:"text-green-600", bg:"bg-green-50" },
+          { label:t("presentToday"), value: `${stats?.todayAttendance?.checkedIn ?? 0}`, icon:CalendarCheck, color:"text-purple-600", bg:"bg-purple-50" },
+          { label:t("attendanceRate"), value:`${stats?.attendanceRate ?? 0}%`, icon:TrendingUp, color:"text-orange-600", bg:"bg-orange-50" },
         ].map(({ label, value, icon:Icon, color, bg }) => (
           <Card key={label}>
             <CardContent className="p-4">
@@ -108,14 +109,14 @@ export default function SuperAdminDashboard() {
       <Card>
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold flex items-center gap-2"><Users className="w-4 h-4" /> Komposisi Pengguna</h3>
-            <Button variant="ghost" size="sm" onClick={() => nav("/superadmin/members")}>Kelola →</Button>
+            <h3 className="font-semibold flex items-center gap-2"><Users className="w-4 h-4" /> {t("userComposition")}</h3>
+            <Button variant="ghost" size="sm" onClick={() => nav("/superadmin/members")}>{t("manage")} →</Button>
           </div>
           <div className="grid grid-cols-3 gap-4 mb-4">
             {[
-              { label:"Admin",  count: userStats.admins, color:"bg-blue-500",   textColor:"text-blue-600" },
-              { label:"Member", count: userStats.users,  color:"bg-green-500",  textColor:"text-green-600" },
-              { label:"Total",  count: userStats.total,  color:"bg-gray-500",   textColor:"text-gray-600" },
+              { label:"Admin", count: userStats.admins, color:"bg-blue-500", textColor:"text-blue-600" },
+              { label:t("members"), count: userStats.users, color:"bg-green-500", textColor:"text-green-600" },
+              { label:t("total"), count: userStats.total, color:"bg-gray-500", textColor:"text-gray-600" },
             ].map(({ label, count, color, textColor }) => (
               <div key={label} className="text-center">
                 <p className={`text-2xl font-bold ${textColor}`}>{count}</p>
@@ -125,8 +126,8 @@ export default function SuperAdminDashboard() {
           </div>
           {userStats.total > 0 && (
             <div className="flex h-3 rounded-full overflow-hidden gap-0.5">
-              <div className="bg-blue-500  transition-all" style={{ width:`${(userStats.admins/userStats.total)*100}%` }} title="Admin" />
-              <div className="bg-green-500 transition-all" style={{ width:`${(userStats.users/userStats.total)*100}%`  }} title="Member" />
+              <div className="bg-blue-500  transition-all" style={{ width:`${(userStats.admins/userStats.total)*100}%` }} title={t("manage")} />
+              <div className="bg-green-500 transition-all" style={{ width:`${(userStats.users/userStats.total)*100}%`  }} title={t("members")} />
             </div>
           )}
         </CardContent>
@@ -136,7 +137,7 @@ export default function SuperAdminDashboard() {
         {/* Quick actions */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Aksi Cepat</CardTitle>
+            <CardTitle className="text-base">{t("quickActions")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-3">
@@ -157,12 +158,12 @@ export default function SuperAdminDashboard() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" /> Tren Kehadiran 7 Hari
+              <TrendingUp className="w-4 h-4" /> {t("attendanceTrend")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {trend.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Belum ada data</p>
+              <p className="text-sm text-muted-foreground text-center py-4">{t("noData")}</p>
             ) : trend.map((t) => (
               <div key={t.attendance_date} className="flex items-center gap-3">
                 <span className="text-xs text-muted-foreground w-24 flex-shrink-0">
@@ -183,14 +184,14 @@ export default function SuperAdminDashboard() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
-              <Activity className="w-4 h-4" /> Aktivitas Sistem Terbaru
+              <Activity className="w-4 h-4" /> {t("systemActivity")}
             </CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => nav("/superadmin/audit")}>Lihat Semua →</Button>
+            <Button variant="ghost" size="sm" onClick={() => nav("/superadmin/audit")}>{t("viewAll")} →</Button>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           {activities.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Belum ada aktivitas</p>
+            <p className="text-sm text-muted-foreground text-center py-8">{t("noActivity")}</p>
           ) : (
             <div className="divide-y max-h-64 overflow-y-auto">
               {activities.map((a) => (

@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "@/components/ui/use-toast";
 import { clearPendingRegistrationProfile, getPendingRegistrationProfile, setCurrentAttendanceUser } from "@/lib/attendanceFlow";
 import { faceAiApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 const REQUIRED_SAMPLES = 3;
 const MAX_CAPTURE_WIDTH = 640;
@@ -39,6 +40,7 @@ const getOverlayStyle = (faceDetection: FaceDetection, frameSize: FrameSize) => 
 
 export default function FaceRegistrationTraining() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const previewRequestRef = useRef(false);
@@ -47,7 +49,7 @@ export default function FaceRegistrationTraining() {
   const [sampleCount, setSampleCount] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [statusText, setStatusText] = useState("Arahkan wajah ke kamera lalu ambil 3 sampel training.");
+  const [statusText, setStatusText] = useState(t("faceRegistration"));
   const [faceDetection, setFaceDetection] = useState<FaceDetection | null>(null);
   const [frameSize, setFrameSize] = useState<FrameSize>({ width: 16, height: 9 });
 
@@ -71,7 +73,7 @@ export default function FaceRegistrationTraining() {
         }
         setCameraReady(true);
       } catch (error) {
-        setCameraError("Kamera tidak bisa diakses. Pastikan izin camera sudah diberikan.");
+        setCameraError(`${t("error")}: ${t("faceRegistration")}`);
       }
     };
 
@@ -147,15 +149,15 @@ export default function FaceRegistrationTraining() {
   const finalizeRegistration = async (activeSessionId: string) => {
     if (!profile) {
       toast({
-        title: "Registration data missing",
-        description: "Data registrasi awal tidak ditemukan. Isi data lagi terlebih dahulu.",
+        title: t("error"),
+        description: t("required"),
         variant: "destructive",
       });
       navigate("/attendance/registration");
       return;
     }
 
-    setStatusText("Training selesai. Menyimpan profil wajah...");
+    setStatusText(t("saving"));
 
     try {
       const response = await faceAiApi.finalizeRegistration({
@@ -167,14 +169,14 @@ export default function FaceRegistrationTraining() {
       setCurrentAttendanceUser(savedProfile);
       clearPendingRegistrationProfile();
       toast({
-        title: "Registrasi wajah berhasil",
-        description: "Profil wajah selesai ditraining dan user baru sudah dibuat.",
+        title: t("success"),
+        description: t("faceRegistration"),
       });
       navigate("/user-dashboard");
     } catch (error: any) {
       toast({
-        title: "Training gagal",
-        description: error.response?.data?.message || "Gagal menyimpan hasil training wajah.",
+        title: t("error"),
+        description: error.response?.data?.message || t("announcementSaveFailed"),
         variant: "destructive",
       });
       setProcessing(false);
@@ -185,8 +187,8 @@ export default function FaceRegistrationTraining() {
     const frame = captureFrame();
     if (!frame) {
       toast({
-        title: "Capture gagal",
-        description: "Frame kamera tidak tersedia.",
+        title: t("error"),
+        description: t("noData"),
         variant: "destructive",
       });
       return;
@@ -195,7 +197,7 @@ export default function FaceRegistrationTraining() {
     setProcessing(true);
     setFaceDetection(null);
     setFrameSize({ width: frame.width, height: frame.height });
-    setStatusText("Memproses sampel wajah...");
+    setStatusText(t("loading"));
 
     try {
       const response = await faceAiApi.captureRegistration({
@@ -209,9 +211,9 @@ export default function FaceRegistrationTraining() {
       setFaceDetection(result.faceDetection ?? null);
 
       if (result.duplicateCapture) {
-        setStatusText("Sampel terlalu mirip dengan capture sebelumnya. Coba ubah angle wajah sedikit.");
+        setStatusText(t("validation"));
       } else {
-        setStatusText(`Sampel ${result.sampleCount}/${REQUIRED_SAMPLES} berhasil direkam.`);
+        setStatusText(`${result.sampleCount}/${REQUIRED_SAMPLES} ${t("success")}`);
       }
 
       if (result.readyForProfile) {
@@ -222,11 +224,11 @@ export default function FaceRegistrationTraining() {
       setProcessing(false);
     } catch (error: any) {
       toast({
-        title: "Capture gagal",
-        description: error.response?.data?.message || "Wajah belum terdeteksi dengan jelas.",
+        title: t("error"),
+        description: error.response?.data?.message || t("noResults"),
         variant: "destructive",
       });
-      setStatusText("Capture gagal. Pastikan wajah terlihat jelas lalu coba lagi.");
+      setStatusText(t("error"));
       setFaceDetection(error.response?.data?.data?.faceDetection ?? null);
       setProcessing(false);
     }
@@ -239,10 +241,10 @@ export default function FaceRegistrationTraining() {
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center gap-2 text-[#e3dcff] text-xs font-semibold uppercase tracking-wider">
               <ShieldCheck className="h-3.5 w-3.5" />
-              Face Registration Training
+              {t("faceRegistration")}
             </div>
-            <h1 className="text-xl font-bold sm:text-2xl text-white">Training wajah 3 kali untuk registrasi awal</h1>
-            <p className="text-xs text-white/85">Setelah 3 sampel valid direkam, sistem akan langsung membuat user baru dan masuk ke dashboard user.</p>
+            <h1 className="text-xl font-bold sm:text-2xl text-white">{t("faceRegistration")}</h1>
+            <p className="text-xs text-white/85">{t("registration")}</p>
           </div>
         </section>
 
@@ -277,10 +279,10 @@ export default function FaceRegistrationTraining() {
                   onClick={handleCapture}
                 >
                   {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-                  Capture Training Sample
+                  {t("add")} {t("faceRegistration")}
                 </Button>
 
-                <Button type="button" variant="outline" className="h-12 rounded-2xl gap-2" onClick={() => navigate("/attendance/registration")}>Kembali ke Form</Button>
+                <Button type="button" variant="outline" className="h-12 rounded-2xl gap-2" onClick={() => navigate("/attendance/registration")}>{t("back")}</Button>
               </div>
             </CardContent>
           </Card>
@@ -292,8 +294,8 @@ export default function FaceRegistrationTraining() {
                   <ScanFace className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900 leading-tight">Training Progress</h2>
-                  <p className="text-xs text-slate-500">Wajib 3 sampel wajah valid.</p>
+                  <h2 className="text-lg font-semibold text-slate-900 leading-tight">{t("loading")}</h2>
+                  <p className="text-xs text-slate-500">{t("required")}</p>
                 </div>
               </div>
 
@@ -302,7 +304,7 @@ export default function FaceRegistrationTraining() {
               </div>
 
               <div className="flex-grow flex flex-col justify-center items-center rounded-2xl bg-slate-50 p-4 text-center min-h-[100px]">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Captured Samples</p>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{t("total")}</p>
                 <p className="mt-2 text-5xl font-extrabold text-slate-900 tracking-tight">{sampleCount}/{REQUIRED_SAMPLES}</p>
               </div>
 
@@ -313,7 +315,7 @@ export default function FaceRegistrationTraining() {
               {sampleCount >= REQUIRED_SAMPLES && (
                 <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-sm flex-shrink-0">
                   <CheckCircle2 className="h-4 w-4" />
-                  3 sampel sudah cukup. Sistem sedang menyiapkan profil user.
+                  {t("success")}
                 </div>
               )}
             </CardContent>

@@ -1,8 +1,10 @@
 // client/pages/Index.tsx
 import { DemoResponse } from "@shared/api";
 import { useEffect, useState } from "react";
+import { useLanguage } from "@/lib/i18n";
 
 export default function Index() {
+  const { t } = useLanguage();
   const [exampleFromServer, setExampleFromServer] = useState("");
   // Fetch users on component mount
   useEffect(() => {
@@ -50,11 +52,10 @@ export default function Index() {
               strokeDashoffset="75"
             />
           </svg>
-          Generating your app...
+          {t("generatingApp")}
         </h1>
         <p className="mt-4 text-slate-600 max-w-md">
-          Watch the chat on the left for updates that might need your attention
-          to finish generating
+          {t("generationNotice")}
         </p>
         <p className="mt-4 hidden max-w-md">{exampleFromServer}</p>
       </div>

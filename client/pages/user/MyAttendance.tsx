@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { attendanceApi, eventApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface AttendanceRecord {
   id: number;
@@ -42,6 +43,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function UserMyAttendance() {
+  const { t } = useLanguage();
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [events, setEvents]   = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,7 +70,7 @@ export default function UserMyAttendance() {
       });
       setRecords(r.data.data);
     } catch {
-      toast({ title: "Error", description: "Gagal memuat data kehadiran", variant: "destructive" });
+      toast({ title: t("error"), description: `${t("error")}: ${t("attendance")}`, variant: "destructive" });
     } finally { setLoading(false); }
   };
 
@@ -128,22 +130,22 @@ export default function UserMyAttendance() {
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Riwayat Kehadiran</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Data kehadiran pribadi kamu</p>
+          <h1 className="text-2xl font-bold">{t("myAttendance")}</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("viewManageAttendance")}</p>
         </div>
         <Button variant="outline" onClick={exportCSV} className="gap-2">
-          <Download className="w-4 h-4" /> Export CSV
+          <Download className="w-4 h-4" /> {t("exportCsv")}
         </Button>
       </div>
 
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: "Total",      value: records.length, color: "text-foreground" },
-          { label: "Hadir",      value: present,        color: "text-green-600" },
-          { label: "Terlambat",  value: late,           color: "text-yellow-600" },
-          { label: "Absen",      value: absent,         color: "text-red-600" },
-          { label: "Izin/Sakit", value: excused,        color: "text-blue-600" },
+          { label: t("total"),       value: records.length, color: "text-foreground" },
+          { label: t("present"),     value: present,        color: "text-green-600" },
+          { label: t("late"),        value: late,           color: "text-yellow-600" },
+          { label: t("absent"),      value: absent,         color: "text-red-600" },
+          { label: t("excusedSick"), value: excused,        color: "text-blue-600" },
         ].map(({ label, value, color }) => (
           <Card key={label}>
             <CardContent className="p-3">
@@ -160,35 +162,35 @@ export default function UserMyAttendance() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
-              <Input className="pl-9" placeholder="Cari event..." value={search}
+              <Input className="pl-9" placeholder={`${t("search")}...`} value={search}
                 onChange={(e) => setSearch(e.target.value)} />
             </div>
             <Select value={filterEvent} onValueChange={setFilterEvent}>
-              <SelectTrigger><SelectValue placeholder="Semua event" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("allEvents")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Semua Event</SelectItem>
+                <SelectItem value="all">{t("allEvents")}</SelectItem>
                 {events.map((e) => (
                   <SelectItem key={e.id} value={e.id.toString()}>{e.event_code} – {e.event_name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger><SelectValue placeholder="Semua status" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("all")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                <SelectItem value="present">Hadir</SelectItem>
-                <SelectItem value="late">Terlambat</SelectItem>
-                <SelectItem value="absent">Absen</SelectItem>
-                <SelectItem value="excused">Izin</SelectItem>
-                <SelectItem value="sick">Sakit</SelectItem>
+                <SelectItem value="all">{t("all")}</SelectItem>
+                <SelectItem value="present">{t("present")}</SelectItem>
+                <SelectItem value="late">{t("late")}</SelectItem>
+                <SelectItem value="absent">{t("absent")}</SelectItem>
+                <SelectItem value="excused">{t("excused")}</SelectItem>
+                <SelectItem value="sick">{t("sick")}</SelectItem>
               </SelectContent>
             </Select>
             <Input type="date" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} />
             <Input type="date" value={filterEnd}   onChange={(e) => setFilterEnd(e.target.value)} />
           </div>
           <div className="flex gap-2 mt-3">
-            <Button onClick={handleFilter} className="gap-2"><Filter className="w-4 h-4" /> Filter</Button>
-            <Button variant="outline" onClick={handleReset}>Reset</Button>
+            <Button onClick={handleFilter} className="gap-2"><Filter className="w-4 h-4" /> {t("filter")}</Button>
+            <Button variant="outline" onClick={handleReset}>{t("clear")}</Button>
           </div>
         </CardContent>
       </Card>
@@ -204,12 +206,12 @@ export default function UserMyAttendance() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tanggal</TableHead>
-                  <TableHead>Event</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Masuk</TableHead>
-                  <TableHead>Keluar</TableHead>
-                  <TableHead>Keterangan</TableHead>
+                  <TableHead>{t("date")}</TableHead>
+                  <TableHead>{t("event")}</TableHead>
+                  <TableHead>{t("statusToday")}</TableHead>
+                  <TableHead>{t("checkIn")}</TableHead>
+                  <TableHead>{t("checkOut")}</TableHead>
+                  <TableHead>{t("notes")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -238,7 +240,7 @@ export default function UserMyAttendance() {
                 )) : (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
-                      Tidak ada data kehadiran
+                      {t("noData")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -249,7 +251,7 @@ export default function UserMyAttendance() {
       </Card>
 
       <p className="text-xs text-muted-foreground text-right">
-        Menampilkan {filtered.length} dari {records.length} data · Tingkat kehadiran: <strong>{pct}%</strong>
+        {t("showingRecords")} {filtered.length} / {records.length} · {t("attendanceRate")}: <strong>{pct}%</strong>
       </p>
     </div>
   );

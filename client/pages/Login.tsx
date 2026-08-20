@@ -3,9 +3,11 @@ import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, LogIn, Mail, Lock, Shield } from "lucide-react";
 import { setSession, clearSession, getSessionUser } from "@/lib/auth";
 import { authApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,7 +36,7 @@ export default function Login() {
     setError("");
 
     if (!email || !password) {
-      setError("Email dan password wajib diisi");
+      setError(`${t("emailAddress")} and ${t("password")} ${t("required").toLowerCase()}`);
       setTimeout(() => setError(""), 3000);
       return;
     }
@@ -69,7 +71,7 @@ export default function Login() {
         navigate("/user/dashboard");
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message || "Email atau password salah";
+      const msg = err.response?.data?.message || `${t("emailAddress")} or ${t("password")} is incorrect`;
       setError(msg);
       setTimeout(() => setError(""), 4000);
     } finally {
@@ -99,7 +101,7 @@ export default function Login() {
           navigate("/login");
         }
       } else {
-        setError("Kode 2FA salah");
+        setError("2FA code is incorrect");
       }
     } finally {
       setLoading(false);
@@ -110,7 +112,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 relative overflow-hidden">
       <div className={`absolute top-4 right-4 flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-gray-200 transition-all duration-700 delay-300 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"}`}>
         <Shield className="w-4 h-4 text-green-600" />
-        <span className="text-xs text-gray-600">Secure Connection</span>
+        <span className="text-xs text-gray-600">{t("secureConnection")}</span>
       </div>
 
       <div className="absolute inset-0 bg-grid-slate-200 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] -z-10" />
@@ -124,7 +126,7 @@ export default function Login() {
             VISIATTEND
           </h1>
           <p className="text-gray-500 mt-2 animate-fade-in-up">
-            Secure Attendance Management System
+            {t("secureAttendanceSystem")}
           </p>
         </div>
 
@@ -141,7 +143,7 @@ export default function Login() {
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                   <Mail className="w-4 h-4 text-gray-400" />
-                  Email Address
+                  {t("emailAddress")}
                 </label>
                 <div className="relative group">
                   <input
@@ -193,21 +195,21 @@ export default function Login() {
                     disabled={loading}
                   />
                   <span className="text-sm text-gray-600 group-hover:text-gray-900 transition-colors duration-300">
-                    Remember me
+                    {t("rememberMe")}
                   </span>
                 </label>
                 <Link
                   to="/forgot-password"
                   className="text-sm text-blue-600 hover:text-blue-700 hover:underline transition-all duration-300 hover:translate-x-1"
                 >
-                  Forgot Password?
+                  {t("forgotPassword")}
                 </Link>
               </div>
 
               <div className="bg-blue-50/50 rounded-lg p-3 border border-blue-100">
                 <p className="text-xs text-gray-600 flex items-center gap-2">
                   <Shield className="w-3 h-3 text-blue-600 animate-pulse" />
-                  Your data is encrypted and secure
+                  {t("encryptedSecure")}
                 </p>
               </div>
 
@@ -219,12 +221,12 @@ export default function Login() {
                 {loading ? (
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Logging in...</span>
+                    <span>{t("loggingIn")}</span>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center gap-2">
                     <LogIn className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
-                    <span>Login</span>
+                    <span>{t("login")}</span>
                   </div>
                 )}
               </button>
@@ -232,8 +234,8 @@ export default function Login() {
           ) : (
             <form onSubmit={handleTwoFactorSubmit} className="space-y-6">
               <div className="text-center mb-4">
-                <h3 className="text-lg font-semibold">Two-Factor Authentication</h3>
-                <p className="text-sm text-gray-500">Enter the 6-digit code from your authenticator app</p>
+                <h3 className="text-lg font-semibold">{t("twoFactorAuthentication")}</h3>
+                <p className="text-sm text-gray-500">{t("twoFactorPrompt")}</p>
               </div>
 
               {error && (
@@ -256,7 +258,7 @@ export default function Login() {
                 disabled={loading || twoFactorCode.length !== 6}
                 className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl font-medium disabled:opacity-50 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
               >
-                {loading ? "Verifying..." : "Verify"}
+                {loading ? t("verifying") : t("verify")}
               </button>
               <button
                 type="button"

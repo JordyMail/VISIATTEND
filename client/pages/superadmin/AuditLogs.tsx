@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { settingsApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface ActivityLog {
   id: number; action: string; entity_type?: string; entity_id?: number;
@@ -42,6 +43,7 @@ const ACTION_COLOR: Record<string, string> = {
 const PAGE_SIZE = 50;
 
 export default function AuditLogs() {
+  const { t } = useLanguage();
   const [logs, setLogs]       = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [offset, setOffset]   = useState(0);
@@ -58,7 +60,7 @@ export default function AuditLogs() {
       else         setLogs((prev) => [...prev, ...data]);
       setHasMore(data.length === PAGE_SIZE);
       setOffset(off + data.length);
-    } catch { toast({ title: "Error", description: "Gagal memuat audit log", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), description: `${t("error")}: ${t("auditLogs")}`, variant: "destructive" }); }
     finally { setLoading(false); }
   }, []);
 
@@ -99,16 +101,16 @@ export default function AuditLogs() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Activity className="w-6 h-6" /> Audit Log
+            <Activity className="w-6 h-6" /> {t("auditLogs")}
           </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Histori seluruh aktivitas sistem</p>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("systemActivity")}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => load(0)} className="gap-2">
-            <RefreshCw className="w-4 h-4" /> Refresh
+            <RefreshCw className="w-4 h-4" /> {t("clear")}
           </Button>
           <Button variant="outline" onClick={exportCSV} className="gap-2">
-            <Download className="w-4 h-4" /> Export CSV
+            <Download className="w-4 h-4" /> {t("exportCsv")}
           </Button>
         </div>
       </div>
@@ -118,21 +120,21 @@ export default function AuditLogs() {
         <div className="flex flex-wrap gap-3">
           <div className="relative flex-1 min-w-48">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Cari user, aksi, deskripsi..."
+            <Input className="pl-9" placeholder={t("search")}
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Select value={filterAction} onValueChange={setFilterAction}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Semua aksi" />
+              <SelectValue placeholder={t("all")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Aksi</SelectItem>
+              <SelectItem value="all">{t("all")}</SelectItem>
               {uniqueActions.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <p className="text-xs text-muted-foreground mt-2">
-          Menampilkan {filtered.length} dari {logs.length} log dimuat
+          {t("showingRecords")} {filtered.length} / {logs.length} {t("auditLogs").toLowerCase()}
         </p>
       </Card>
 
@@ -147,11 +149,11 @@ export default function AuditLogs() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Waktu</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Aksi</TableHead>
-                  <TableHead>Entity</TableHead>
-                  <TableHead>Deskripsi</TableHead>
+                  <TableHead>{t("time")}</TableHead>
+                  <TableHead>{t("memberLabel")}</TableHead>
+                  <TableHead>{t("actionsLabel")}</TableHead>
+                  <TableHead>{t("event")}</TableHead>
+                  <TableHead>{t("description")}</TableHead>
                   <TableHead>IP</TableHead>
                 </TableRow>
               </TableHeader>
@@ -180,7 +182,7 @@ export default function AuditLogs() {
                 )) : (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
-                      Tidak ada log ditemukan
+                      {t("noResults")}
                     </TableCell>
                   </TableRow>
                 )}

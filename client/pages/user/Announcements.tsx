@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { announcementApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface Announcement {
   id: number; title: string; body: string; pinned: boolean;
@@ -13,6 +14,7 @@ interface Announcement {
 }
 
 export default function UserAnnouncements() {
+  const { t } = useLanguage();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -20,7 +22,7 @@ export default function UserAnnouncements() {
   useEffect(() => {
     announcementApi.getAll()
       .then((r) => setAnnouncements(r.data.data))
-      .catch(() => toast({ title: "Error", description: "Gagal memuat pengumuman", variant: "destructive" }))
+      .catch(() => toast({ title: t("error"), description: t("announcementLoadFailed"), variant: "destructive" }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -50,7 +52,7 @@ export default function UserAnnouncements() {
               <h3 className="font-semibold text-base">{a.title}</h3>
               {a.pinned && (
                 <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-300 text-xs flex-shrink-0">
-                  📌 Penting
+                  📌 {t("important")}
                 </Badge>
               )}
             </div>
@@ -74,12 +76,12 @@ export default function UserAnnouncements() {
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Pengumuman</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Informasi dan pemberitahuan terkini</p>
+        <h1 className="text-2xl font-bold">{t("announcements")}</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">{t("important")}</p>
       </div>
 
       <Input
-        placeholder="Cari pengumuman..."
+        placeholder={`${t("search")} ${t("announcements").toLowerCase()}...`}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="max-w-md"
@@ -93,7 +95,7 @@ export default function UserAnnouncements() {
         <Card>
           <CardContent className="py-16 text-center">
             <Bell className="w-12 h-12 mx-auto text-muted-foreground opacity-30 mb-3" />
-            <p className="text-muted-foreground">Tidak ada pengumuman</p>
+            <p className="text-muted-foreground">{t("noAnnouncements")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -101,7 +103,7 @@ export default function UserAnnouncements() {
           {pinned.length > 0 && (
             <div className="space-y-3">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                📌 Pengumuman Penting
+                {t("important")} {t("announcements")}
               </h2>
               {pinned.map((a) => <AnnouncementCard key={a.id} a={a} />)}
             </div>
@@ -110,7 +112,7 @@ export default function UserAnnouncements() {
             <div className="space-y-3">
               {pinned.length > 0 && (
                 <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Pengumuman Lainnya
+                  {t("announcements")}
                 </h2>
               )}
               {regular.map((a) => <AnnouncementCard key={a.id} a={a} />)}

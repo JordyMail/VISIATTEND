@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { divisionApi, userApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface Division {
   id: number; name: string; description?: string;
@@ -25,6 +26,7 @@ interface User { id: number; full_name: string; jabatan?: string; }
 const defaultForm = { name: "", description: "", leaderId: "" };
 
 export default function SuperAdminDivisions() {
+  const { t } = useLanguage();
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [users, setUsers]         = useState<User[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -43,7 +45,7 @@ export default function SuperAdminDivisions() {
     try {
       const r = await divisionApi.getAll();
       setDivisions(r.data.data);
-    } catch { toast({ title: "Error", description: "Gagal memuat divisi", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), description: `${t("error")}: ${t("divisions")}`, variant: "destructive" }); }
     finally { setLoading(false); }
   };
 
@@ -55,17 +57,17 @@ export default function SuperAdminDivisions() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) return toast({ title: "Validasi", description: "Nama divisi wajib diisi", variant: "destructive" });
+    if (!form.name.trim()) return toast({ title: t("validation"), description: `${t("name")} ${t("required").toLowerCase()}`, variant: "destructive" });
     setSaving(true);
     try {
       const payload = { name: form.name, description: form.description || undefined, leaderId: form.leaderId ? parseInt(form.leaderId) : undefined };
       if (editing) await divisionApi.update(editing.id, payload);
       else         await divisionApi.create(payload);
-      toast({ title: "Berhasil", description: editing ? "Divisi diperbarui" : "Divisi dibuat" });
+      toast({ title: t("success"), description: editing ? t("profileUpdated") : t("add") });
       setDialogOpen(false);
       load();
     } catch (e: any) {
-      toast({ title: "Error", description: e.response?.data?.message || "Gagal menyimpan", variant: "destructive" });
+      toast({ title: t("error"), description: e.response?.data?.message || t("error"), variant: "destructive" });
     } finally { setSaving(false); }
   };
 
@@ -73,7 +75,7 @@ export default function SuperAdminDivisions() {
     try {
       await divisionApi.update(d.id, { isActive: !d.is_active });
       load();
-    } catch { toast({ title: "Error", description: "Gagal mengubah status", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), description: t("error"), variant: "destructive" }); }
   };
 
   return (
@@ -81,11 +83,11 @@ export default function SuperAdminDivisions() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Layers className="w-6 h-6" /> Manajemen Divisi
+            <Layers className="w-6 h-6" /> {t("divisions")}
           </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Kelola divisi dan pelayanan dalam organisasi</p>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("manage")}</p>
         </div>
-        <Button onClick={openCreate} className="gap-2"><Plus className="w-4 h-4" /> Tambah Divisi</Button>
+        <Button onClick={openCreate} className="gap-2"><Plus className="w-4 h-4" /> {t("add")}</Button>
       </div>
 
       {loading ? (
@@ -96,8 +98,8 @@ export default function SuperAdminDivisions() {
         <Card>
           <CardContent className="py-16 text-center">
             <Layers className="w-12 h-12 mx-auto opacity-30 mb-3" />
-            <p className="text-muted-foreground">Belum ada divisi</p>
-            <Button onClick={openCreate} className="mt-4 gap-2"><Plus className="w-4 h-4" /> Tambah Pertama</Button>
+            <p className="text-muted-foreground">{t("noDivisions")}</p>
+            <Button onClick={openCreate} className="mt-4 gap-2"><Plus className="w-4 h-4" /> {t("addFirst")}</Button>
           </CardContent>
         </Card>
       ) : (
@@ -112,7 +114,7 @@ export default function SuperAdminDivisions() {
                     </div>
                     <div>
                       <p className="font-semibold">{d.name}</p>
-                      {!d.is_active && <Badge variant="outline" className="text-xs bg-gray-100 text-gray-500">Nonaktif</Badge>}
+                      {!d.is_active && <Badge variant="outline" className="text-xs bg-gray-100 text-gray-500">{t("inactive")}</Badge>}
                     </div>
                   </div>
                   <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => openEdit(d)}>
@@ -123,7 +125,7 @@ export default function SuperAdminDivisions() {
                 {d.leader_name && (
                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3">
                     <Users className="w-3.5 h-3.5" />
-                    <span>Leader: <span className="font-medium text-foreground">{d.leader_name}</span></span>
+                    <span>{t("leader")}: <span className="font-medium text-foreground">{d.leader_name}</span></span>
                   </div>
                 )}
                 <div className="flex items-center justify-between pt-3 border-t">
@@ -131,7 +133,7 @@ export default function SuperAdminDivisions() {
                     {new Date(d.created_at).toLocaleDateString("id-ID", { month:"short", year:"numeric" })}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{d.is_active ? "Aktif" : "Nonaktif"}</span>
+                    <span className="text-xs text-muted-foreground">{d.is_active ? t("present") : t("inactive")}</span>
                     <Switch checked={d.is_active} onCheckedChange={() => handleToggleActive(d)} className="scale-75" />
                   </div>
                 </div>
@@ -145,26 +147,26 @@ export default function SuperAdminDivisions() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Divisi" : "Tambah Divisi Baru"}</DialogTitle>
-            <DialogDescription>Divisi digunakan untuk mengelompokkan anggota dalam organisasi</DialogDescription>
+            <DialogTitle>{editing ? t("edit") : t("add")} {t("divisions")}</DialogTitle>
+            <DialogDescription>{t("divisionDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="mb-1.5 block">Nama Divisi *</Label>
-              <Input placeholder="cth: Worship, Youth, Komsel..."
+              <Label className="mb-1.5 block">{t("name")} *</Label>
+              <Input placeholder={t("name")}
                 value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
-              <Label className="mb-1.5 block">Deskripsi</Label>
-              <Input placeholder="Deskripsi singkat divisi..."
+              <Label className="mb-1.5 block">{t("description")}</Label>
+              <Input placeholder={t("description")}
                 value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
             <div>
-              <Label className="mb-1.5 block">Kepala Divisi</Label>
+              <Label className="mb-1.5 block">{t("leader")}</Label>
               <Select value={form.leaderId} onValueChange={(v) => setForm({ ...form, leaderId: v })}>
-                <SelectTrigger><SelectValue placeholder="Pilih kepala divisi (opsional)" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t("selectParticipantAccess")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unassigned">Belum ditentukan</SelectItem>
+                  <SelectItem value="unassigned">{t("notAssigned")}</SelectItem>
                   {users.map((u) => (
                     <SelectItem key={u.id} value={u.id.toString()}>
                       {u.full_name}{u.jabatan ? ` (${u.jabatan.replace(/_/g," ")})` : ""}
@@ -175,10 +177,10 @@ export default function SuperAdminDivisions() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>{t("cancel")}</Button>
             <Button onClick={handleSave} disabled={saving} className="gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editing ? "Simpan" : "Tambah"}
+              {editing ? t("save") : t("add")}
             </Button>
           </DialogFooter>
         </DialogContent>

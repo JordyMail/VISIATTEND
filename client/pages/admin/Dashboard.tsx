@@ -10,6 +10,7 @@ import {
 import { dashboardApi, attendanceApi } from "@/services/api";
 import { getSessionUser } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface DashboardStats {
   totalMembers: number; activeEvents: number; attendanceRate: number;
@@ -18,6 +19,7 @@ interface DashboardStats {
 
 export default function AdminDashboard() {
   const me = getSessionUser();
+  const { language, t } = useLanguage();
   const [stats, setStats]         = useState<DashboardStats | null>(null);
   const [activities, setActivities] = useState<any[]>([]);
   const [trend, setTrend]         = useState<any[]>([]);
@@ -35,7 +37,7 @@ export default function AdminDashboard() {
         setActivities(aR.data.data);
         setTrend(tR.data.data);
       } catch {
-        toast({ title: "Error", description: "Gagal memuat dashboard", variant: "destructive" });
+        toast({ title: t("error"), description: `${t("error")}: ${t("dashboard")}`, variant: "destructive" });
       } finally { setLoading(false); }
     };
     load();
@@ -49,9 +51,9 @@ export default function AdminDashboard() {
 
   const greeting = () => {
     const h = new Date().getHours();
-    if (h < 12) return "Selamat Pagi";
-    if (h < 17) return "Selamat Siang";
-    return "Selamat Malam";
+    if (h < 12) return t("morning");
+    if (h < 17) return t("afternoon");
+    return t("evening");
   };
 
   const ACTION_COLOR: Record<string, string> = {
@@ -77,17 +79,17 @@ export default function AdminDashboard() {
           {greeting()}, {me?.full_name?.split(" ")[0]} 👋
         </h1>
         <p className="text-muted-foreground text-sm mt-0.5">
-          Dashboard Admin · {new Date().toLocaleDateString("id-ID", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}
+          {t("adminDashboard")} · {new Date().toLocaleDateString(language === "en" ? "en-US" : "id-ID", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}
         </p>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: "Total Member",    value: stats?.totalMembers  ?? 0, icon: Users,         color: "text-blue-600",   bg: "bg-blue-50" },
-          { label: "Event Aktif",     value: stats?.activeEvents  ?? 0, icon: BookOpen,       color: "text-green-600",  bg: "bg-green-50" },
-          { label: "Hadir Hari Ini",  value: `${stats?.todayAttendance.checkedIn ?? 0}/${stats?.totalMembers ?? 0}`, icon: CalendarCheck, color: "text-purple-600", bg: "bg-purple-50" },
-          { label: "Tingkat Kehadiran", value: `${stats?.attendanceRate ?? 0}%`, icon: TrendingUp, color: "text-orange-600", bg: "bg-orange-50" },
+          { label: t("totalMember"), value: stats?.totalMembers ?? 0, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
+          { label: t("activeEvent"), value: stats?.activeEvents ?? 0, icon: BookOpen, color: "text-green-600", bg: "bg-green-50" },
+          { label: t("presentToday"), value: `${stats?.todayAttendance.checkedIn ?? 0}/${stats?.totalMembers ?? 0}`, icon: CalendarCheck, color: "text-purple-600", bg: "bg-purple-50" },
+          { label: t("attendanceRate"), value: `${stats?.attendanceRate ?? 0}%`, icon: TrendingUp, color: "text-orange-600", bg: "bg-orange-50" },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <Card key={label}>
             <CardContent className="p-4">
@@ -107,12 +109,12 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <UserCheck className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold">Kehadiran Hari Ini</h3>
+              <h3 className="font-semibold">{t("todayAttendance")}</h3>
             </div>
             <div className="flex gap-3 text-sm">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" /> Hadir: {stats?.todayAttendance.checkedIn}</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" /> Pending: {stats?.todayAttendance.pending}</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" /> Absen: {stats?.todayAttendance.absent}</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" /> {t("present")}: {stats?.todayAttendance.checkedIn}</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" /> {t("pending")}: {stats?.todayAttendance.pending}</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" /> {t("absent")}: {stats?.todayAttendance.absent}</span>
             </div>
           </div>
           <div className="flex gap-1 h-4 rounded-full overflow-hidden bg-muted">
@@ -135,12 +137,12 @@ export default function AdminDashboard() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" /> Tren Kehadiran 7 Hari
+              <TrendingUp className="w-4 h-4" /> {t("attendanceTrend")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {trend.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Belum ada data</p>
+              <p className="text-sm text-muted-foreground text-center py-4">{t("noData")}</p>
             ) : trend.map((t) => (
               <div key={t.attendance_date} className="flex items-center gap-3">
                 <span className="text-xs text-muted-foreground w-20 flex-shrink-0">
@@ -159,12 +161,12 @@ export default function AdminDashboard() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="w-4 h-4" /> Aktivitas Terbaru
+              <Clock className="w-4 h-4" /> {t("recentActivity")}
             </CardTitle>
           </CardHeader>
           <CardContent className="overflow-hidden">
             {activities.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Tidak ada aktivitas</p>
+              <p className="text-sm text-muted-foreground text-center py-4">{t("noActivity")}</p>
             ) : (
               <div className="space-y-2 max-h-72 overflow-y-auto">
                 {activities.map((a) => (
@@ -175,7 +177,7 @@ export default function AdminDashboard() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs truncate">{a.description}</p>
                       <p className="text-xs text-muted-foreground">
-                        {a.user_name || "System"} · {new Date(a.created_at).toLocaleString("id-ID")}
+                        {a.user_name || t("systemUser")} · {new Date(a.created_at).toLocaleString(language === "en" ? "en-US" : "id-ID")}
                       </p>
                     </div>
                   </div>

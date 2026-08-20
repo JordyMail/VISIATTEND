@@ -4,7 +4,7 @@ import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, Calendar, ClipboardList, BarChart3,
   Settings, LogOut, ChevronLeft, ChevronRight, Megaphone,
-  QrCode, ListChecks, Trophy, ShieldCheck, Layers, FileText,
+  QrCode, ListChecks, Trophy, ShieldCheck, FileText,
   UserCircle, CheckSquare, Bell, Menu, X,
   HelpCircle, Camera,
 } from "lucide-react";
@@ -15,57 +15,56 @@ import {
 import { getSession, clearSession, setSession } from "@/lib/auth";
 import { authApi } from "@/services/api";
 import type { AppRole } from "@/lib/auth";
+import { useLanguage } from "@/lib/i18n";
+import type { TranslationKey } from "@/lib/i18n";
 import { clearCurrentAttendanceUser, clearPendingRegistrationProfile } from "@/lib/attendanceFlow";
 
 type NavItem = {
   to: string;
   icon: React.ElementType;
-  label: string;
+  label: TranslationKey;
 };
 
 const SUPER_ADMIN_NAV: NavItem[] = [
-  { to: "/superadmin/dashboard",           icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/superadmin/members",             icon: Users,           label: "Members" },
-  { to: "/superadmin/events",              icon: Calendar,        label: "Events" },
-  { to: "/superadmin/regular-events",      icon: Calendar,        label: "Regular Event" },
-  { to: "/superadmin/attendance",          icon: ClipboardList,   label: "Attendance" },
-
-  { to: "/superadmin/announcements",       icon: Megaphone,       label: "Announcements" },
-  { to: "/superadmin/reports",             icon: BarChart3,       label: "Reports" },
-  { to: "/superadmin/leaderboard",         icon: Trophy,          label: "Leaderboard" },
-  { to: "/superadmin/divisions",           icon: Layers,          label: "Divisions" },
-  { to: "/superadmin/audit",              icon: FileText,        label: "Audit Logs" },
-  { to: "/superadmin/system",              icon: ShieldCheck,     label: "System" },
-  { to: "/superadmin/settings",            icon: Settings,        label: "Settings" },
+  { to: "/superadmin/dashboard",           icon: LayoutDashboard, label: "dashboard" },
+  { to: "/superadmin/members",             icon: Users,           label: "members" },
+  { to: "/superadmin/events",              icon: Calendar,        label: "events" },
+  { to: "/superadmin/regular-events",      icon: Calendar,        label: "regularEvent" },
+  { to: "/superadmin/announcements",       icon: Megaphone,       label: "announcements" },
+  { to: "/superadmin/reports",             icon: BarChart3,       label: "reports" },
+  { to: "/superadmin/leaderboard",         icon: Trophy,          label: "leaderboard" },
+  { to: "/superadmin/audit",              icon: FileText,        label: "auditLogs" },
+  { to: "/superadmin/system",              icon: ShieldCheck,     label: "system" },
+  { to: "/superadmin/settings",            icon: Settings,        label: "settings" },
 ];
 
 const ADMIN_NAV: NavItem[] = [
-  { to: "/admin/dashboard",            icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/admin/members",              icon: Users,           label: "Members" },
-  { to: "/admin/events",               icon: Calendar,        label: "Events" },
-  { to: "/admin/announcements",        icon: Megaphone,       label: "Announcements" },
-  { to: "/admin/qr",                   icon: QrCode,          label: "QR Manager" },
-  { to: "/admin/reports",              icon: BarChart3,       label: "Reports" },
-  { to: "/admin/leaderboard",          icon: Trophy,          label: "Leaderboard" },
-  { to: "/admin/settings",             icon: Settings,        label: "Settings" },
+  { to: "/admin/dashboard",            icon: LayoutDashboard, label: "dashboard" },
+  { to: "/admin/members",              icon: Users,           label: "members" },
+  { to: "/admin/events",               icon: Calendar,        label: "events" },
+  { to: "/admin/announcements",        icon: Megaphone,       label: "announcements" },
+  { to: "/admin/qr",                   icon: QrCode,          label: "qrManager" },
+  { to: "/admin/reports",              icon: BarChart3,       label: "reports" },
+  { to: "/admin/leaderboard",          icon: Trophy,          label: "leaderboard" },
+  { to: "/admin/settings",             icon: Settings,        label: "settings" },
 ];
 
 const ATTENDANCE_NAV: NavItem[] = [
-  { to: "/attendance/home",            icon: LayoutDashboard, label: "Attendance Home" },
-  { to: "/attendance/registration",    icon: ClipboardList,   label: "Registration" },
-  { to: "/attendance/face-registration", icon: Users,          label: "Face Registration" },
-  { to: "/attendance/face-attendance", icon: CheckSquare,     label: "Face Attendance" },
+  { to: "/attendance/home",            icon: LayoutDashboard, label: "attendanceHome" },
+  { to: "/attendance/registration",    icon: ClipboardList,   label: "registration" },
+  { to: "/attendance/face-registration", icon: Users,          label: "faceRegistration" },
+  { to: "/attendance/face-attendance", icon: CheckSquare,     label: "faceAttendance" },
 ];
 
 const USER_NAV: NavItem[] = [
-  { to: "/user/dashboard",     icon: LayoutDashboard, label: "Home" },
-  { to: "/user/checkin",       icon: CheckSquare,     label: "Check In" },
-  { to: "/user/attendance",    icon: ClipboardList,   label: "My Attendance" },
-  { to: "/user/schedules",     icon: Calendar,        label: "Schedules" },
-  { to: "/user/announcements", icon: Bell,            label: "Announcements" },
-  { to: "/user/leaderboard",   icon: Trophy,          label: "Leaderboard" },
-  { to: "/user/profile",       icon: UserCircle,      label: "Profile" },
-  { to: "/user/questions",     icon: HelpCircle,      label: "Jawab Soal" },
+  { to: "/user/dashboard",     icon: LayoutDashboard, label: "home" },
+  { to: "/user/checkin",       icon: CheckSquare,     label: "checkIn" },
+  { to: "/user/attendance",    icon: ClipboardList,   label: "myAttendance" },
+  { to: "/user/schedules",     icon: Calendar,        label: "schedules" },
+  { to: "/user/announcements", icon: Bell,            label: "announcements" },
+  { to: "/user/leaderboard",   icon: Trophy,          label: "leaderboard" },
+  { to: "/user/profile",       icon: UserCircle,      label: "profile" },
+  { to: "/user/questions",     icon: HelpCircle,      label: "questions" },
 ];
 
 const NAV_MAP: Record<AppRole, NavItem[]> = {
@@ -93,6 +92,7 @@ interface Props { role: AppRole; }
 
 export default function AppLayout({ role }: Props) {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const session  = getSession();
   const user     = session?.user;
   const navItems = NAV_MAP[role] || USER_NAV;
@@ -123,14 +123,15 @@ export default function AppLayout({ role }: Props) {
 
   const handleLogout = async () => {
     if (role === "user") {
+      try { await authApi.logout(); } catch { /* ignore */ }
       clearCurrentAttendanceUser();
       clearPendingRegistrationProfile();
-      navigate("/attendance/home");
-    } else {
-      try { await authApi.logout(); } catch { /* ignore */ }
-      clearSession();
-      navigate("/login");
     }
+    else {
+      try { await authApi.logout(); } catch { /* ignore */ }
+    }
+    clearSession();
+    navigate("/login");
   };
 
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
@@ -143,9 +144,7 @@ export default function AppLayout({ role }: Props) {
       <div className="flex items-center justify-between p-4 border-b border-gray-700 min-h-[64px] flex-shrink-0">
         {(!collapsed || mobile) && (
           <div className="flex items-center gap-2 overflow-hidden">
-            <div className={`w-8 h-8 rounded-lg ${ROLE_COLOR[role]} flex items-center justify-center flex-shrink-0`}>
-              <span className="text-white font-bold text-sm">V</span>
-            </div>
+            <img src="/logo-resc.png" alt="Logo" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
             <div className="overflow-hidden">
               <p className="font-bold text-sm truncate">VISIATTEND</p>
               <p className="text-xs text-gray-400">{ROLE_LABEL[role]}</p>
@@ -178,7 +177,7 @@ export default function AppLayout({ role }: Props) {
             }
           >
             <item.icon className="w-5 h-5 flex-shrink-0" />
-            {(!collapsed || mobile) && <span className="truncate">{item.label}</span>}
+            {(!collapsed || mobile) && <span className="truncate">{t(item.label)}</span>}
           </NavLink>
         ))}
 
@@ -189,7 +188,7 @@ export default function AppLayout({ role }: Props) {
             className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors text-emerald-400 hover:bg-emerald-600 hover:text-white"
           >
             <Camera className="w-5 h-5 flex-shrink-0" />
-            {(!collapsed || mobile) && <span className="truncate">Attendance Mode</span>}
+            {(!collapsed || mobile) && <span className="truncate">{t("attendance")}</span>}
           </button>
         )}
       </nav>
@@ -205,7 +204,9 @@ export default function AppLayout({ role }: Props) {
             </div>
             <div className="overflow-hidden flex-1">
               <p className="text-sm font-medium truncate text-white">{user?.full_name || "User"}</p>
-              <p className="text-xs text-gray-400 truncate">{user?.jabatan || user?.role}</p>
+              <p className="text-xs text-gray-400 truncate">
+                {role === "admin" ? "Admin" : role === "super_admin" ? "Super Admin" : user?.jabatan || user?.role}
+              </p>
             </div>
           </div>
         ) : null}
@@ -214,7 +215,7 @@ export default function AppLayout({ role }: Props) {
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-red-600 hover:text-white transition-colors"
         >
           <LogOut className="w-4 h-4 flex-shrink-0" />
-          {(!collapsed || mobile) && <span>Logout</span>}
+          {(!collapsed || mobile) && <span>{t("logout")}</span>}
         </button>
       </div>
     </aside>
@@ -228,19 +229,19 @@ export default function AppLayout({ role }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Camera className="w-5 h-5 text-emerald-600" />
-              Masuk ke Mode Attendance?
+              {t("attendance")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Anda akan keluar dari akun <strong>{role === "super_admin" ? "Super Admin" : "Admin"}</strong> dan masuk ke halaman Attendance Home. Apakah anda yakin?
+              {t("logout")} <strong>{role === "super_admin" ? t("superAdminDashboard") : t("adminDashboard")}</strong>. {t("homeAttendance")}?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleAttendanceModeConfirm}
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
             >
-              Ya, Masuk Attendance Mode
+              {t("confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

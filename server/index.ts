@@ -31,7 +31,7 @@ import {
   handleUpdateRegularEvent,
   handleDeleteRegularEvent,
 } from "./routes/regularEvent.js";
-import { getActiveEvent } from "./utils/timezone.js";
+import { getActiveEvent, getWIBDateTime } from "./utils/timezone.js";
 import nodemailer from "nodemailer";
 
 // ─── Email transporter ────────────────────────────────────────────────────────
@@ -236,9 +236,42 @@ async function ensureEventScheduleSchema() {
   }
 }
 
+async function ensurePhotoColumnSchema() {
+  try {
+    const pool = await getConnection();
+    // Ensure avatar_url exists on users, widened to NVARCHAR(MAX) for base64 storage
+    await pool.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('users') AND name = 'avatar_url'
+      )
+        ALTER TABLE users ADD avatar_url NVARCHAR(MAX) NULL;
+      ELSE IF EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('users') AND name = 'avatar_url' AND max_length <> -1
+      )
+        ALTER TABLE users ALTER COLUMN avatar_url NVARCHAR(MAX) NULL;
+    `);
+    // Ensure photo_profile exists on user_member, widened to NVARCHAR(MAX)
+    await pool.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('user_member') AND name = 'photo_profile'
+      )
+        ALTER TABLE user_member ADD photo_profile NVARCHAR(MAX) NULL;
+      ELSE IF EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('user_member') AND name = 'photo_profile' AND max_length <> -1
+      )
+        ALTER TABLE user_member ALTER COLUMN photo_profile NVARCHAR(MAX) NULL;
+    `);
+  } catch (e) {
+    console.warn('[startup] ensurePhotoColumnSchema skipped:', (e as any)?.message);
+  }
+}
+
 export function createServer() {
   // Run schema fix in background (non-blocking, best-effort)
   ensureEventScheduleSchema();
+  ensurePhotoColumnSchema();
 
   const app = express();
 
@@ -248,8 +281,8 @@ export function createServer() {
       credentials: true,
     })
   );
-  app.use(express.json({ limit: "5mb" }));
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: "15mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
   // ════════════════════════════════════════════════════════════════════════════
   // PUBLIC — AUTH
@@ -1116,11 +1149,20 @@ export function createServer() {
     }
   });
 
-  // GET check if today has an event (public — used by attendance landing flow)
-  app.get("/api/attendance-schedule/today", async (_req, res) => {
+  // GET check if today has an active event. Attendance Mode uses a temporary session,
+  // so this status endpoint must remain available without JWT authentication.
+  app.get("/api/attendance-schedule/today", async (req: any, res) => {
     try {
       const pool = await getConnection();
-      const activeEvent = await getActiveEvent(pool);
+      let memberId: string | null = null;
+      if (req.user?.role === "user") {
+        const userResult = await pool
+          .request()
+          .input("id", sql.Int, req.user.id)
+          .query("SELECT member_id FROM users WHERE id=@id");
+        memberId = userResult.recordset[0]?.member_id ?? null;
+      }
+      const activeEvent = await getActiveEvent(pool, memberId);
       res.json({ 
         success: true, 
         isOpen: activeEvent !== null,
@@ -2076,16 +2118,8 @@ app.get(
         const lateMin = parseInt(settR.recordset[0]?.setting_value || "15");
 
         let status = "present";
-        const schedR = await pool
-          .request()
-          .input("eid", sql.Int, targetEvent.id)
-          .input("d", sql.Date, today)
-          .query(
-            "SELECT start_time FROM schedules WHERE event_id=@eid AND scheduled_date=@d"
-          );
-
-        if (schedR.recordset.length) {
-          const [h, m] = schedR.recordset[0].start_time
+        if (targetEvent.start_time) {
+          const [h, m] = String(targetEvent.start_time)
             .split(":")
             .map(Number);
           const schedStart = new Date();
@@ -3108,8 +3142,9 @@ app.get(
               ] || [],
           },
         });
-      } catch {
-        res.status(500).json({ success: false, message: "DB error" });
+      } catch (err: any) {
+        console.error('[settings/profile GET]', err?.message);
+        res.status(500).json({ success: false, message: err?.message || "DB error" });
       }
     }
   );
@@ -3144,8 +3179,9 @@ app.get(
              WHERE u.id = @id;`
           );
         res.json({ success: true, message: "Profile updated" });
-      } catch {
-        res.status(500).json({ success: false, message: "DB error" });
+      } catch (err: any) {
+        console.error('[settings/profile PUT]', err?.message);
+        res.status(500).json({ success: false, message: err?.message || "DB error" });
       }
     }
   );
@@ -3424,15 +3460,18 @@ app.get(
         .query("SELECT member_id FROM users WHERE id=@uid");
       const memberId: string | null = mRes.recordset[0]?.member_id ?? null;
 
-      // Get all events that have questions and user can access.
+      // Get all events that have questions and user can access, restricted to today's date (WIB).
       // Locking an event only prevents admin edits; it must not hide its game.
       // Access rule: participant_access='Everyone' → all users can play
-      const evRes = await pool.request().query(`
+      const { dateStr: todayStr } = getWIBDateTime();
+      const evRes = await pool.request()
+        .input("today", sql.Date, todayStr)
+        .query(`
         SELECT DISTINCT es.id as event_id, es.event_name, es.date_event, es.start_time, es.end_time,
                es.participant_access, es.is_locked
         FROM event_schedule es
         INNER JOIN questions q ON q.event_id = es.id AND q.is_active = 1
-        WHERE es.participant_access = 'Everyone'
+        WHERE es.participant_access = 'Everyone' AND es.date_event = @today
         ORDER BY es.date_event DESC
       `);
 
@@ -3947,6 +3986,14 @@ app.use((req: any, res: any, next: any) => {
   // (Vite dev server yang handle, bukan Express)
   next();
 });
+
+  // Catch body-parser errors (e.g. PayloadTooLargeError) as clean JSON
+  app.use((err: any, _req: any, res: any, next: any) => {
+    if (err?.type === "entity.too.large" || err?.status === 413) {
+      return res.status(413).json({ success: false, message: "Ukuran foto terlalu besar (maks 15MB)" });
+    }
+    next(err);
+  });
 
   return app;
 }

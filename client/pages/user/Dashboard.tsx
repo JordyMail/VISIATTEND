@@ -9,6 +9,7 @@ import {
 import { attendanceApi, announcementApi, userDashboardApi } from "@/services/api";
 import { getSessionUser } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface Stats {
   total: number; present: number; points: number;
@@ -26,6 +27,7 @@ interface Announcement {
 
 export default function UserDashboard() {
   const user = getSessionUser();
+  const { t } = useLanguage();
   const [stats, setStats]     = useState<Stats | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -51,7 +53,7 @@ export default function UserDashboard() {
         })));
         setAnnouncements(annR.data.data.slice(0, 4));
       } catch {
-        toast({ title: "Error", description: "Failed to load dashboard", variant: "destructive" });
+        toast({ title: t("error"), description: `${t("error")}: ${t("dashboard")}`, variant: "destructive" });
       } finally { setLoading(false); }
     };
     load();
@@ -59,9 +61,9 @@ export default function UserDashboard() {
 
   const greeting = () => {
     const h = new Date().getHours();
-    if (h < 12) return "Selamat Pagi";
-    if (h < 17) return "Selamat Siang";
-    return "Selamat Malam";
+    if (h < 12) return t("morning");
+    if (h < 17) return t("afternoon");
+    return t("evening");
   };
 
   const EVENT_TYPE_COLOR: Record<string, string> = {
@@ -100,7 +102,7 @@ export default function UserDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <CheckCircle2 className="w-4 h-4 text-green-500" />
-              <p className="text-xs text-muted-foreground">Hadir</p>
+              <p className="text-xs text-muted-foreground">{t("present")}</p>
             </div>
             <p className="text-2xl font-bold text-green-600">{stats?.present ?? 0}</p>
           </CardContent>
@@ -109,7 +111,7 @@ export default function UserDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Award className="w-4 h-4 text-blue-500" />
-              <p className="text-xs text-muted-foreground">Point</p>
+              <p className="text-xs text-muted-foreground">{t("points")}</p>
             </div>
             <p className="text-2xl font-bold text-blue-600">{stats?.points ?? 0}</p>
           </CardContent>
@@ -118,7 +120,7 @@ export default function UserDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Flame className="w-4 h-4 text-orange-500" />
-              <p className="text-xs text-muted-foreground">Streak</p>
+              <p className="text-xs text-muted-foreground">{t("streak")}</p>
             </div>
             <p className="text-2xl font-bold text-orange-600">{stats?.streak ?? 0}</p>
           </CardContent>
@@ -131,7 +133,7 @@ export default function UserDashboard() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-primary" />
-              <p className="font-semibold">Tingkat Kehadiran</p>
+              <p className="font-semibold">{t("attendanceRate")}</p>
             </div>
             <span className="text-2xl font-bold text-primary">
               {stats?.attendance_percentage ?? 0}%
@@ -139,7 +141,7 @@ export default function UserDashboard() {
           </div>
           <Progress value={stats?.attendance_percentage ?? 0} className="h-3" />
           <p className="text-xs text-muted-foreground mt-2">
-            {stats?.total ?? 0} total sesi terdaftar
+            {stats?.total ?? 0} {t("registeredSessions")}
           </p>
         </CardContent>
       </Card>
@@ -150,12 +152,12 @@ export default function UserDashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <CalendarDays className="w-4 h-4" />
-              Jadwal Mendatang
+              {t("upcomingSchedules")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {schedules.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Tidak ada jadwal mendatang</p>
+              <p className="text-sm text-muted-foreground text-center py-4">{t("noUpcomingSchedules")}</p>
             ) : schedules.map((s) => (
               <div key={s.id} className="flex items-start gap-3 p-2 rounded-lg bg-muted/50">
                 <div className="flex-1 min-w-0">
@@ -179,16 +181,16 @@ export default function UserDashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Bell className="w-4 h-4" />
-              Pengumuman
+              {t("announcements")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {announcements.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Tidak ada pengumuman</p>
+              <p className="text-sm text-muted-foreground text-center py-4">{t("noAnnouncements")}</p>
             ) : announcements.map((a) => (
               <div key={a.id} className={`p-3 rounded-lg border ${a.pinned ? "border-yellow-300 bg-yellow-50" : "bg-muted/50"}`}>
                 <div className="flex items-center gap-2 mb-1">
-                  {a.pinned && <span className="text-xs text-yellow-600 font-medium">📌 Penting</span>}
+                  {a.pinned && <span className="text-xs text-yellow-600 font-medium">📌 {t("important")}</span>}
                   <p className="text-sm font-semibold">{a.title}</p>
                 </div>
                 <p className="text-xs text-muted-foreground line-clamp-2">{a.body}</p>

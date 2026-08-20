@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { memberLeaderboardApi } from "@/services/api";
 import { getSessionUser } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface LeaderboardEntry {
   member_id: string;
@@ -20,6 +21,7 @@ const MEDALS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
 export default function UserLeaderboard() {
   const me = getSessionUser();
+  const { t } = useLanguage();
   const [data, setData] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,7 +39,7 @@ export default function UserLeaderboard() {
         setData([]);
       }
     } catch {
-      toast({ title: "Error", description: "Gagal memuat leaderboard", variant: "destructive" });
+      toast({ title: t("error"), description: `${t("error")}: ${t("leaderboard")}`, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -53,9 +55,9 @@ export default function UserLeaderboard() {
     <div className="p-4 md:p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Trophy className="w-6 h-6 text-yellow-500" /> Leaderboard Anggota
+          <Trophy className="w-6 h-6 text-yellow-500" /> {t("leaderboard")}
         </h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Ranking poin seluruh anggota organisasi</p>
+        <p className="text-muted-foreground text-sm mt-0.5">{t("allMembersRanking")}</p>
       </div>
 
       {myData && (
@@ -67,15 +69,15 @@ export default function UserLeaderboard() {
                   {myRank <= 3 && myRank > 0 ? MEDALS[myRank] : `#${myRank}`}
                 </div>
                 <div>
-                  <p className="font-semibold">Ranking Kamu: #{myRank}</p>
+                  <p className="font-semibold">{t("rank")}: #{myRank}</p>
                   <p className="text-sm text-muted-foreground">
-                    Kategori: {myData.category}
+                    {t("category")}: {myData.category}
                   </p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-bold text-primary">{myData.points} Poin</p>
-                <p className="text-xs text-muted-foreground">Total akumulasi</p>
+                <p className="text-2xl font-bold text-primary">{myData.points} {t("points")}</p>
+                <p className="text-xs text-muted-foreground">{t("total")}</p>
               </div>
             </div>
           </CardContent>
@@ -90,7 +92,7 @@ export default function UserLeaderboard() {
         <Card>
           <CardContent className="py-16 text-center">
             <Trophy className="w-12 h-12 mx-auto text-muted-foreground opacity-30 mb-3" />
-            <p className="text-muted-foreground">Belum ada data poin</p>
+            <p className="text-muted-foreground">{t("memberPointsData")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -114,7 +116,7 @@ export default function UserLeaderboard() {
                       </div>
                       <p className="font-semibold text-sm truncate">{entry.full_name}</p>
                       <p className="text-xs text-muted-foreground truncate">{entry.category}</p>
-                      <p className="text-xl font-bold text-primary mt-2">{entry.points} Poin</p>
+                      <p className="text-xl font-bold text-primary mt-2">{entry.points} {t("points")}</p>
                     </CardContent>
                   </Card>
                 );
@@ -126,7 +128,7 @@ export default function UserLeaderboard() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Medal className="w-4 h-4" /> Selengkapnya
+                  <Medal className="w-4 h-4" /> {t("viewAll")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -134,12 +136,12 @@ export default function UserLeaderboard() {
                   <table className="w-full">
                     <thead className="bg-muted/50 text-left text-sm font-semibold text-slate-700">
                       <tr>
-                        <th className="px-4 py-3">Rank</th>
-                        <th className="px-4 py-3">Nama</th>
-                        <th className="px-4 py-3">Kategori</th>
+                        <th className="px-4 py-3">{t("rank")}</th>
+                        <th className="px-4 py-3">{t("name")}</th>
+                        <th className="px-4 py-3">{t("category")}</th>
                         <th className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <Zap className="w-3 h-3 text-purple-500" /> Poin
+                            <Zap className="w-3 h-3 text-purple-500" /> {t("points")}
                           </div>
                         </th>
                       </tr>

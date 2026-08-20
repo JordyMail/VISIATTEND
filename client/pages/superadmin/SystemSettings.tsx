@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { settingsApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface SystemSettings {
   org_name: string; org_logo_url: string;
@@ -22,6 +23,7 @@ interface SystemSettings {
 }
 
 export default function SystemSettings() {
+  const { t } = useLanguage();
   const [settings, setSettings] = useState<SystemSettings>({
     org_name: "", org_logo_url: "",
     lateness_threshold: 15, attendance_window: 120,
@@ -36,7 +38,7 @@ export default function SystemSettings() {
   useEffect(() => {
     settingsApi.getSystemSettings()
       .then((r) => setSettings((prev) => ({ ...prev, ...r.data.data })))
-      .catch(() => toast({ title: "Error", description: "Gagal memuat pengaturan", variant: "destructive" }))
+      .catch(() => toast({ title: t("error"), description: t("error"), variant: "destructive" }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -44,9 +46,9 @@ export default function SystemSettings() {
     setSaving(true);
     try {
       await settingsApi.updateSystemSettings(settings);
-      toast({ title: "Berhasil", description: "Pengaturan sistem disimpan" });
+      toast({ title: t("success"), description: t("languageSaved") });
     } catch (e: any) {
-      toast({ title: "Error", description: e.response?.data?.message || "Gagal menyimpan", variant: "destructive" });
+      toast({ title: t("error"), description: e.response?.data?.message || t("error"), variant: "destructive" });
     } finally { setSaving(false); }
   };
 
@@ -85,24 +87,24 @@ export default function SystemSettings() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ShieldCheck className="w-6 h-6 text-purple-600" /> System Settings
+            <ShieldCheck className="w-6 h-6 text-purple-600" /> {t("settings")}
           </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Konfigurasi sistem — hanya super admin</p>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("manageProfileSecurity")}</p>
         </div>
         <Button onClick={handleSave} disabled={saving} className="gap-2">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          Simpan Semua
+          {t("saveChanges")}
         </Button>
       </div>
 
       {/* Organization */}
-      <SectionCard icon={Building} title="Informasi Organisasi">
+      <SectionCard icon={Building} title={t("system")}>
         <div>
-          <Label className="mb-1.5 block">Nama Organisasi</Label>
-          <Input value={settings.org_name} onChange={(e) => set("org_name", e.target.value)} placeholder="Nama gereja / organisasi" />
+          <Label className="mb-1.5 block">{t("fullName")}</Label>
+          <Input value={settings.org_name} onChange={(e) => set("org_name", e.target.value)} placeholder={t("organizationRole")} />
         </div>
         <div>
-          <Label className="mb-1.5 block">URL Logo (opsional)</Label>
+          <Label className="mb-1.5 block">{t("urlLogoOptional")}</Label>
           <Input value={settings.org_logo_url} onChange={(e) => set("org_logo_url", e.target.value)} placeholder="https://..." />
           {settings.org_logo_url && (
             <img src={settings.org_logo_url} alt="logo preview" className="h-12 mt-2 rounded object-contain" onError={(e) => (e.currentTarget.style.display = "none")} />
@@ -111,22 +113,22 @@ export default function SystemSettings() {
       </SectionCard>
 
       {/* Attendance */}
-      <SectionCard icon={Clock} title="Pengaturan Absensi">
+      <SectionCard icon={Clock} title={t("attendance")}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <Label className="mb-1.5 block">Batas Terlambat (menit)</Label>
+            <Label className="mb-1.5 block">{t("lateThreshold")}</Label>
             <Input type="number" min={1} max={120} value={settings.lateness_threshold}
               onChange={(e) => set("lateness_threshold", parseInt(e.target.value) || 15)} />
-            <p className="text-xs text-muted-foreground mt-1">Menit setelah jadwal = terlambat</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("minutesAfterSchedule")}</p>
           </div>
           <div>
-            <Label className="mb-1.5 block">Window Absensi (menit)</Label>
+            <Label className="mb-1.5 block">{t("attendanceWindow")}</Label>
             <Input type="number" min={30} max={480} value={settings.attendance_window}
               onChange={(e) => set("attendance_window", parseInt(e.target.value) || 120)} />
-            <p className="text-xs text-muted-foreground mt-1">Durasi absensi dibuka</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("attendanceWindowDescription")}</p>
           </div>
           <div>
-            <Label className="mb-1.5 block">QR Berlaku (menit)</Label>
+            <Label className="mb-1.5 block">{t("qrValid")}</Label>
             <Select value={String(settings.qr_expiry_minutes)} onValueChange={(v) => set("qr_expiry_minutes", parseInt(v))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -138,36 +140,36 @@ export default function SystemSettings() {
           </div>
         </div>
         <div className="pt-2 space-y-4 border-t">
-          <ToggleRow label="Self Check-in" desc="Izinkan anggota check-in sendiri via tombol / QR" setting="allow_self_checkin" />
-          <ToggleRow label="Notifikasi Email" desc="Kirim notifikasi email untuk event absensi" setting="enable_notifications" />
+          <ToggleRow label={t("selfCheckIn")} desc={t("selfCheckInDescription")} setting="allow_self_checkin" />
+          <ToggleRow label={t("emailNotifications")} desc={t("emailNotificationsDescription")} setting="enable_notifications" />
         </div>
       </SectionCard>
 
       {/* Leaderboard */}
-      <SectionCard icon={Trophy} title="Pengaturan Leaderboard">
-        <ToggleRow label="Aktifkan Leaderboard" desc="Tampilkan ranking kehadiran kepada semua anggota" setting="ranking_enabled" />
-        <ToggleRow label="Streak Kehadiran" desc="Hitung dan tampilkan streak kehadiran berturut-turut" setting="streak_enabled" />
+      <SectionCard icon={Trophy} title={t("leaderboard")}>
+        <ToggleRow label={t("leaderboard")} desc={t("allMembersRanking")} setting="ranking_enabled" />
+        <ToggleRow label={t("attendanceStreak")} desc={t("attendanceStreakDescription")} setting="streak_enabled" />
         <div>
-          <Label className="mb-1.5 block">Periode Ranking Default</Label>
+          <Label className="mb-1.5 block">{t("defaultRankingPeriod")}</Label>
           <Select value={settings.ranking_period} onValueChange={(v) => set("ranking_period", v)}>
             <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="week">Minggu Ini</SelectItem>
-              <SelectItem value="month">Bulan Ini</SelectItem>
-              <SelectItem value="semester">6 Bulan</SelectItem>
+              <SelectItem value="week">{t("thisWeekLabel")}</SelectItem>
+              <SelectItem value="month">{t("thisMonthLabel")}</SelectItem>
+              <SelectItem value="semester">{t("sixMonths")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </SectionCard>
 
       {/* System */}
-      <SectionCard icon={Settings} title="Pengaturan Sistem">
-        <ToggleRow label="Auto Backup" desc="Backup database otomatis setiap hari" setting="auto_backup" />
+      <SectionCard icon={Settings} title={t("settings")}>
+        <ToggleRow label={t("autoBackup")} desc={t("autoBackupDescription")} setting="auto_backup" />
         <div className="pt-2 border-t">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-red-600">Maintenance Mode</p>
-              <p className="text-xs text-muted-foreground">Nonaktifkan akses sistem untuk semua pengguna kecuali super admin</p>
+              <p className="text-sm font-medium text-red-600">{t("maintenanceMode")}</p>
+              <p className="text-xs text-muted-foreground">{t("maintenanceDescription")}</p>
             </div>
             <Switch
               checked={!!settings.maintenance_mode}
@@ -177,7 +179,7 @@ export default function SystemSettings() {
           </div>
           {settings.maintenance_mode && (
             <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              ⚠️ Maintenance mode aktif — anggota dan admin tidak dapat login
+              {t("maintenanceActive")}
             </div>
           )}
         </div>

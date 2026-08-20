@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { RouteGuard } from "./components/guards/RouteGuard";
 import { getSession } from "@/lib/auth";
+import { LanguageProvider } from "@/lib/i18n";
 
 // Public
 import Login from "@/pages/Login";
@@ -19,7 +20,6 @@ import { Layout } from "@/components/Layout";
 // Super Admin pages
 import SuperAdminDashboard from "@/pages/superadmin/Dashboard";
 import SystemSettings from "@/pages/superadmin/SystemSettings";
-import DivisionsPage from "@/pages/superadmin/Divisions";
 import AuditLogs from "@/pages/superadmin/AuditLogs";
 import RegularEventsPage from "@/pages/superadmin/RegularEvents";
 
@@ -81,10 +81,11 @@ const ScrollToTop = () => {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <BrowserRouter>
+    <LanguageProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <BrowserRouter>
           <ScrollToTop />
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -106,11 +107,9 @@ export default function App() {
           <Route path="members" element={<Members />} />
           <Route path="events" element={<Events />} />
           <Route path="regular-events" element={<RegularEventsPage />} />
-          <Route path="attendance" element={<Attendance />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="reports" element={<Reports />} />
           <Route path="leaderboard" element={<AdminLeaderboard />} />
-          <Route path="divisions" element={<DivisionsPage />} />
           <Route path="system" element={<SystemSettings />} />
           <Route path="audit" element={<AuditLogs />} />
           <Route path="settings" element={<AdminSettings />} />
@@ -226,8 +225,9 @@ export default function App() {
 
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </LanguageProvider>
   );
 }

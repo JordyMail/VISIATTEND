@@ -12,11 +12,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { attendanceApi, eventApi, attendanceScheduleApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface Event { id: number; event_code: string; event_name: string; event_type: string; }
 
 export default function UserCheckin() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [isAttendanceOpen, setIsAttendanceOpen] = useState<boolean | null>(null);
   const [events, setEvents]   = useState<Event[]>([]);
   const [eventId, setEventId] = useState("");
@@ -74,7 +76,7 @@ export default function UserCheckin() {
           stopScanning();
           
           // Auto check-in dengan token yang di-scan
-          toast({ title: "QR Terdeteksi!", description: "Memproses check-in..." });
+          toast({ title: t("success"), description: t("loading") });
           handleCheckin(decodedText);
         },
         (errorMessage: string) => {
@@ -85,8 +87,8 @@ export default function UserCheckin() {
     } catch (err: any) {
       console.error('Scanner error:', err);
       toast({ 
-        title: "Error", 
-        description: "Gagal mengakses kamera. Pastikan kamera diizinkan.", 
+        title: t("error"), 
+        description: t("noData"), 
         variant: "destructive" 
       });
       setScanning(false);
@@ -109,9 +111,9 @@ export default function UserCheckin() {
     const useToken = token || qrToken;
     
     if (mode === "button" && !eventId)
-      return toast({ title: "Pilih event terlebih dahulu", variant: "destructive" });
+      return toast({ title: `${t("event")} ${t("required").toLowerCase()}`, variant: "destructive" });
     if ((mode === "qr" || mode === "scan") && !useToken?.trim())
-      return toast({ title: "Masukkan kode QR atau scan terlebih dahulu", variant: "destructive" });
+      return toast({ title: `${t("qrManager")} ${t("required").toLowerCase()}`, variant: "destructive" });
 
     setLoading(true);
     setSuccess(null);
@@ -123,13 +125,13 @@ export default function UserCheckin() {
       const r = await attendanceApi.checkIn(payload);
       const { status, message } = r.data;
       setSuccess({ status, message });
-      toast({ title: "Check-in berhasil!", description: message });
+      toast({ title: t("success"), description: message });
       setQrToken("");
       setEventId("");
       loadTodayAttendance();
     } catch (err: any) {
-      const msg = err.response?.data?.message || "Check-in gagal";
-      toast({ title: "Gagal", description: msg, variant: "destructive" });
+      const msg = err.response?.data?.message || t("error");
+      toast({ title: t("error"), description: msg, variant: "destructive" });
     } finally { setLoading(false); }
   };
 
@@ -142,11 +144,11 @@ export default function UserCheckin() {
   };
 
   const STATUS_LABEL: Record<string, string> = {
-    present: "Hadir",
-    late: "Terlambat",
-    absent: "Absen",
-    excused: "Izin",
-    sick: "Sakit",
+    present: t("present"),
+    late: t("late"),
+    absent: t("absent"),
+    excused: t("excusedSick"),
+    sick: t("excusedSick"),
   };
 
   return (
@@ -159,23 +161,23 @@ export default function UserCheckin() {
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
               <CalendarDays className="h-8 w-8 text-red-500" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Attendance Belum Dibuka</h2>
+            <h2 className="text-xl font-bold text-gray-900">{t("attendanceNotOpen")}</h2>
             <p className="mt-2 text-sm text-gray-500">
-              Attendance hari ini belum dijadwalkan oleh admin. Silakan coba lagi pada tanggal yang telah ditentukan.
+              {t("attendanceNotOpenDescription")}
             </p>
             <button
               onClick={() => navigate("/user/dashboard")}
               className="mt-6 w-full rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary/90"
             >
-              ← Back Home
+              ← {t("backHome")}
             </button>
           </div>
         </div>
       )}
 
       <div>
-        <h1 className="text-2xl font-bold">Check In</h1>
-        <p className="text-muted-foreground mt-1">Catat kehadiran kamu hari ini</p>
+        <h1 className="text-2xl font-bold">{t("checkIn")}</h1>
+        <p className="text-muted-foreground mt-1">{t("todayAttendance")}</p>
       </div>
 
       {/* Success */}
@@ -184,7 +186,7 @@ export default function UserCheckin() {
           <CardContent className="p-4 flex items-center gap-3">
             <CheckCircle2 className="w-8 h-8 text-green-600 flex-shrink-0" />
             <div>
-              <p className="font-semibold text-green-800">Check-in berhasil!</p>
+              <p className="font-semibold text-green-800">{t("success")}</p>
               <p className="text-sm text-green-700">{success.message}</p>
               <Badge className={`mt-1 text-xs ${STATUS_BADGE[success.status]}`}>
                 {STATUS_LABEL[success.status] || success.status}
@@ -197,7 +199,7 @@ export default function UserCheckin() {
       {/* Mode selector */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Metode Check-in</CardTitle>
+          <CardTitle className="text-base">{t("checkIn")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-3 gap-2">
@@ -232,10 +234,10 @@ export default function UserCheckin() {
 
           {mode === "button" && (
             <div className="space-y-2">
-              <Label>Pilih Event</Label>
+              <Label>{t("event")}</Label>
               <Select value={eventId} onValueChange={setEventId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Pilih event hari ini..." />
+                  <SelectValue placeholder={t("event")} />
                 </SelectTrigger>
                 <SelectContent>
                   {events.map((e) => (
@@ -250,9 +252,9 @@ export default function UserCheckin() {
 
           {mode === "qr" && (
             <div className="space-y-2">
-              <Label>Kode QR / Token</Label>
+              <Label>{t("qrAttendanceCode")}</Label>
               <Input
-                placeholder="Masukkan kode QR dari admin..."
+                placeholder={t("verificationCode")}
                 value={qrToken}
                 onChange={(e) => setQrToken(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleCheckin()}
@@ -265,7 +267,7 @@ export default function UserCheckin() {
 
           {mode === "scan" && (
             <div className="space-y-2">
-              <Label>Scan QR Code</Label>
+              <Label>{t("scanQrForCheckIn")}</Label>
               
               {/* QR Scanner Area */}
               {!scanning ? (
@@ -300,9 +302,9 @@ export default function UserCheckin() {
               disabled={loading}
             >
               {loading ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Memproses...</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> {t("processing")}</>
               ) : (
-                <><CheckCircle2 className="w-4 h-4" /> Check In Sekarang</>
+                <><CheckCircle2 className="w-4 h-4" /> {t("checkInNow")}</>
               )}
             </Button>
           )}
@@ -313,7 +315,7 @@ export default function UserCheckin() {
       {todayAttendance.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Kehadiran Hari Ini</CardTitle>
+            <CardTitle className="text-base">{t("todayAttendanceTitle")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {todayAttendance.map((a) => (

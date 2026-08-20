@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
 import { getCurrentAttendanceUser } from "@/lib/attendanceFlow";
 import { userDashboardApi } from "@/services/api";
+import { useLanguage } from "@/lib/i18n";
 
 // Fallback if question has no time limit set
 const DEFAULT_TIME_LIMIT = 15;
@@ -37,6 +38,7 @@ type PageState =
 
 export default function QuestionSistem() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const currentUser = getCurrentAttendanceUser();
 
   const [pageState, setPageState] = useState<PageState>("loading");
@@ -78,6 +80,9 @@ export default function QuestionSistem() {
     };
   }, [pageState, activeQuestion]);
 
+    const createQuestionSchema = (t: (key: import("@/lib/i18n").TranslationKey) => string) => z.object({
+      questionText: z.string({ required_error: t("questionTextRequired") }),
+    });
   const loadQuestion = async () => {
     try {
       const res = await userDashboardApi.getQuestions({
@@ -154,8 +159,8 @@ export default function QuestionSistem() {
     } finally {
       setSubmitting(false);
       toast({
-        title: "⏰ Waktu Habis",
-        description: "Waktu menjawab habis. Jawaban dianggap salah.",
+        title: t("error"),
+        description: t("loading"),
         variant: "destructive",
       });
       navigate("/user-dashboard");
@@ -183,18 +188,18 @@ export default function QuestionSistem() {
       const pts: number | null = result?.pointsEarned ?? null;
 
       if (correct) {
-        toast({ title: "✅ Jawaban Benar!", description: `Anda mendapat ${pts} poin! Kembali ke dashboard...` });
+        toast({ title: t("success"), description: `${pts} ${t("points")}` });
       } else {
         toast({
-          title: "❌ Jawaban Salah",
-          description: result?.message || "Belum ada poin yang ditambahkan.",
+          title: t("error"),
+          description: result?.message || t("noData"),
           variant: "destructive",
         });
       }
     } catch (err: any) {
       toast({
-        title: "Submit Gagal",
-        description: err.response?.data?.message || "Gagal mengirim jawaban.",
+        title: t("error"),
+        description: err.response?.data?.message || t("error"),
         variant: "destructive",
       });
     } finally {
@@ -221,7 +226,7 @@ export default function QuestionSistem() {
       <div className="min-h-screen bg-gradient-to-br from-[#0f0c29] via-[#302b63] to-[#24243e] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 text-white">
           <Loader2 className="w-12 h-12 animate-spin text-violet-400" />
-          <p className="text-lg font-medium text-white/70">Memuat pertanyaan...</p>
+          <p className="text-lg font-medium text-white/70">{t("loading")}</p>
         </div>
       </div>
     );
@@ -231,10 +236,10 @@ export default function QuestionSistem() {
     return (
       <StatusScreen
         icon={<XCircle className="w-16 h-16 text-red-400" />}
-        title="Sesi Tidak Ditemukan"
-        message="Silakan lakukan attendance terlebih dahulu."
+        title={t("error")}
+        message={t("silakanAttendance")}
         onBack={goBack}
-        backLabel="Kembali ke Beranda"
+        backLabel={t("backToHome")}
       />
     );
   }
@@ -243,10 +248,10 @@ export default function QuestionSistem() {
     return (
       <StatusScreen
         icon={<BookOpen className="w-16 h-16 text-violet-400" />}
-        title="Belum Attendance Hari Ini"
-        message="Pertanyaan hanya tersedia untuk member yang sudah attendance hari ini."
+        title={t("attendanceNotOpen")}
+        message={t("questionsAttendanceOnly")}
         onBack={goBack}
-        backLabel="Kembali"
+        backLabel={t("back")}
       />
     );
   }
@@ -255,10 +260,10 @@ export default function QuestionSistem() {
     return (
       <StatusScreen
         icon={<BookOpen className="w-16 h-16 text-violet-400" />}
-        title="Tidak Ada Pertanyaan"
-        message="Belum ada pertanyaan untuk hari ini. Cek kembali nanti."
+        title={t("noResults")}
+        message={t("noQuestionsToday")}
         onBack={goBack}
-        backLabel="Kembali"
+        backLabel={t("back")}
       />
     );
   }
@@ -267,10 +272,10 @@ export default function QuestionSistem() {
     return (
       <StatusScreen
         icon={<CheckCircle2 className="w-16 h-16 text-emerald-400" />}
-        title="Sudah Dijawab"
-        message="Anda sudah menjawab pertanyaan hari ini. Selamat!"
+        title={t("success")}
+        message={t("alreadyAnsweredToday")}
         onBack={goBack}
-        backLabel="Kembali ke Dashboard"
+        backLabel={t("backToDashboard")}
       />
     );
   }
@@ -286,7 +291,7 @@ export default function QuestionSistem() {
           className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
-          <span className="text-sm">Kembali</span>
+          <span className="text-sm">{t("back")}</span>
         </button>
         <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
           <Clock3 className={`w-4 h-4 ${timerColour}`} />
@@ -303,9 +308,9 @@ export default function QuestionSistem() {
               <BookOpen className="w-5 h-5 text-violet-300" />
             </div>
             <div>
-              <p className="text-white/50 text-xs uppercase tracking-widest">Bible Study Quiz</p>
+              <p className="text-white/50 text-xs uppercase tracking-widest">{t("bibleStudyQuiz")}</p>
               <p className="text-white font-semibold">
-                {activeQuestion?.points} Poin · Pilihan Ganda
+                {activeQuestion?.points} {t("point")} · {t("multipleChoice")}
               </p>
             </div>
           </div>

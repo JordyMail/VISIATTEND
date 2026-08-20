@@ -197,12 +197,13 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
       .input("email", sql.NVarChar, profile?.email ?? null)
       .input("name", sql.NVarChar, resolvedName)
       .query(`
-        SELECT TOP 1 id, member_id, name, email, category
-        FROM user_member
+        SELECT TOP 1 um.id, um.member_id, um.name, um.email, um.category, u.is_active
+        FROM user_member um
+        LEFT JOIN users u ON u.member_id = um.member_id
         WHERE
-          (@email IS NOT NULL AND LOWER(email) = LOWER(@email))
-          OR LOWER(name) = LOWER(@name)
-        ORDER BY CASE WHEN @email IS NOT NULL AND LOWER(email) = LOWER(@email) THEN 0 ELSE 1 END, id ASC
+          (@email IS NOT NULL AND LOWER(um.email) = LOWER(@email))
+          OR LOWER(um.name) = LOWER(@name)
+        ORDER BY CASE WHEN @email IS NOT NULL AND LOWER(um.email) = LOWER(@email) THEN 0 ELSE 1 END, um.id ASC
       `);
 
     const member = memberResult.recordset[0];
@@ -210,6 +211,15 @@ export const handleVerifyAttendance: RequestHandler = async (req, res) => {
       res.status(404).json({
         success: false,
         message: "Data member tidak ditemukan. Silakan registrasi data member terlebih dahulu.",
+      });
+      return;
+    }
+
+    if (!member.is_active) {
+      res.status(403).json({
+        success: false,
+        message: "Akun anggota sedang dinonaktifkan dan tidak dapat melakukan attendance.",
+        code: "ACCOUNT_DEACTIVATED",
       });
       return;
     }

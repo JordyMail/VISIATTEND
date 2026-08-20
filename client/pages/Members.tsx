@@ -1,6 +1,6 @@
 // client/pages/Members.tsx
 import { useState, useEffect } from "react";
-import { Edit2, Trash2, Eye, EyeOff, RotateCcw, Loader2 } from "lucide-react";
+import { Edit2, Trash2, Eye, EyeOff, RotateCcw, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { userApi } from "@/services/api";
 import { getSessionUser, isRole } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
 interface User {
   id: number; full_name: string; member_id: string; email: string;
@@ -47,6 +48,7 @@ const defaultForm = {
 };
 
 export default function Members() {
+  const { t } = useLanguage();
   const me       = getSessionUser();
   const isSA     = isRole("super_admin");
   const [users, setUsers]       = useState<User[]>([]);
@@ -63,6 +65,9 @@ export default function Members() {
   const [form, setForm]             = useState(defaultForm);
   const [newPassword, setNewPassword] = useState("");
   const [showPw, setShowPw]         = useState(false);
+  const [adminDialogOpen, setAdminDialogOpen] = useState(false);
+  const [adminSaving, setAdminSaving] = useState(false);
+  const [adminForm, setAdminForm] = useState({ fullName: "", email: "", password: "" });
 
   useEffect(() => {
     load();
@@ -73,7 +78,7 @@ export default function Members() {
     try {
       const r = await userApi.getAll();
       setUsers(r.data.data);
-    } catch { toast({ title: "Error", description: "Gagal memuat anggota", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), description: `${t("error")}: ${t("members")}`, variant: "destructive" }); }
     finally { setLoading(false); }
   };
 
@@ -92,9 +97,9 @@ export default function Members() {
 
   const handleSave = async () => {
     if (!form.fullName.trim() || !form.email.trim())
-      return toast({ title: "Validasi", description: "Nama dan email wajib diisi", variant: "destructive" });
+      return toast({ title: t("validation"), description: `${t("name")} ${t("required").toLowerCase()}`, variant: "destructive" });
     if (!editing && (!form.password || form.password.length < 8))
-      return toast({ title: "Validasi", description: "Password baru minimal 8 karakter", variant: "destructive" });
+      return toast({ title: t("validation"), description: t("minimumCharacters"), variant: "destructive" });
 
     setSaving(true);
     try {
@@ -107,21 +112,21 @@ export default function Members() {
       };
       if (editing) await userApi.update(editing.id, payload);
       else         await userApi.create(payload);
-      toast({ title: "Berhasil", description: editing ? "Anggota diperbarui" : "Anggota ditambahkan" });
+      toast({ title: t("success"), description: editing ? t("profileUpdated") : t("add") });
       setDialogOpen(false);
       load();
     } catch (e: any) {
-      toast({ title: "Error", description: e.response?.data?.message || "Gagal menyimpan", variant: "destructive" });
+      toast({ title: t("error"), description: e.response?.data?.message || t("error"), variant: "destructive" });
     } finally { setSaving(false); }
   };
 
   const handleToggle = async (u: User) => {
     try {
       await userApi.toggleStatus(u.id);
-      toast({ title: "Berhasil", description: `${u.full_name} ${u.is_active ? "dinonaktifkan" : "diaktifkan"}` });
+      toast({ title: t("success"), description: `${u.full_name}: ${u.is_active ? t("inactive") : t("present")}` });
       load();
     } catch (e: any) {
-      toast({ title: "Error", description: e.response?.data?.message || "Gagal mengubah status", variant: "destructive" });
+      toast({ title: t("error"), description: e.response?.data?.message || t("error"), variant: "destructive" });
     }
   };
 
@@ -129,25 +134,52 @@ export default function Members() {
     if (!selectedUser) return;
     try {
       await userApi.delete(selectedUser.id);
-      toast({ title: "Berhasil", description: `${selectedUser.full_name} dihapus` });
+      toast({ title: t("success"), description: `${selectedUser.full_name}: ${t("delete")}` });
       setDeleteDialogOpen(false); setSelectedUser(null); load();
     } catch (e: any) {
-      toast({ title: "Error", description: e.response?.data?.message || "Gagal menghapus", variant: "destructive" });
+      toast({ title: t("error"), description: e.response?.data?.message || t("error"), variant: "destructive" });
     }
   };
 
   const handleResetPassword = async () => {
     if (!selectedUser || !newPassword) return;
     if (newPassword.length < 8)
-      return toast({ title: "Validasi", description: "Password minimal 8 karakter", variant: "destructive" });
+      return toast({ title: t("validation"), description: t("minimumCharacters"), variant: "destructive" });
     setSaving(true);
     try {
       await userApi.resetPassword(selectedUser.id, newPassword);
-      toast({ title: "Berhasil", description: `Password ${selectedUser.full_name} berhasil direset` });
+      toast({ title: t("success"), description: `${t("password")} ${selectedUser.full_name}: ${t("success").toLowerCase()}` });
       setResetDialogOpen(false); setSelectedUser(null); setNewPassword("");
     } catch (e: any) {
-      toast({ title: "Error", description: e.response?.data?.message || "Gagal reset password", variant: "destructive" });
+      toast({ title: t("error"), description: e.response?.data?.message || t("error"), variant: "destructive" });
     } finally { setSaving(false); }
+  };
+
+  const handleAddAdmin = async () => {
+    if (!adminForm.fullName.trim() || !adminForm.email.trim() || !adminForm.password) {
+      return toast({ title: t("validation"), description: `${t("adminName")}, ${t("adminEmail")}, ${t("adminPassword")} ${t("required").toLowerCase()}`, variant: "destructive" });
+    }
+    if (adminForm.password.length < 8) {
+      return toast({ title: t("validation"), description: t("minimumCharacters"), variant: "destructive" });
+    }
+
+    setAdminSaving(true);
+    try {
+      await userApi.create({
+        fullName: adminForm.fullName.trim(),
+        email: adminForm.email.trim(),
+        password: adminForm.password,
+        role: "admin",
+      });
+      toast({ title: t("success"), description: t("adminCreated") });
+      setAdminForm({ fullName: "", email: "", password: "" });
+      setAdminDialogOpen(false);
+      await load();
+    } catch (e: any) {
+      toast({ title: t("error"), description: e.response?.data?.message || t("error"), variant: "destructive" });
+    } finally {
+      setAdminSaving(false);
+    }
   };
 
   return (
@@ -155,32 +187,37 @@ export default function Members() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Manajemen Anggota</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Kelola akun anggota, admin, dan hak akses</p>
+          <h1 className="text-2xl font-bold">{t("members")}</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("manageProfileSecurity")}</p>
         </div>
+        {isSA && (
+          <Button onClick={() => setAdminDialogOpen(true)} className="gap-2">
+            <Plus className="w-4 h-4" /> {t("addAdmin")}
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
       <Card className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
           <Select value={filterRole} onValueChange={setFilterRole}>
-            <SelectTrigger><SelectValue placeholder="Semua role" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder={t("all")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Role</SelectItem>
-              {isSA && <SelectItem value="admin">Admin</SelectItem>}
-              <SelectItem value="user">User</SelectItem>
+              <SelectItem value="all">{t("all")}</SelectItem>
+              {isSA && <SelectItem value="admin">{t("adminOperational")}</SelectItem>}
+              <SelectItem value="user">{t("userMember")}</SelectItem>
             </SelectContent>
           </Select>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger><SelectValue placeholder="Semua status" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder={t("all")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Status</SelectItem>
-              <SelectItem value="active">Aktif</SelectItem>
-              <SelectItem value="inactive">Nonaktif</SelectItem>
+              <SelectItem value="all">{t("all")}</SelectItem>
+              <SelectItem value="active">{t("active")}</SelectItem>
+              <SelectItem value="inactive">{t("inactive")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <p className="text-xs text-muted-foreground mt-2">{filtered.length} anggota ditemukan</p>
+        <p className="text-xs text-muted-foreground mt-2">{filtered.length} {t("memberLabel").toLowerCase()} {t("noResults").toLowerCase()}</p>
       </Card>
 
       {/* Table */}
@@ -192,12 +229,12 @@ export default function Members() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nama</TableHead>
+                  <TableHead>{t("name")}</TableHead>
                   <TableHead>ID</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
+                  <TableHead>{t("category")}</TableHead>
+                  <TableHead>{t("management")}</TableHead>
+                  <TableHead>{t("status")}</TableHead>
+                  <TableHead className="text-right">{t("actionsLabel")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -223,35 +260,37 @@ export default function Members() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={u.is_active ? STATUS_COLOR.active : STATUS_COLOR.inactive}>
-                        {u.is_active ? "Aktif" : "Nonaktif"}
+                        {u.is_active ? t("present") : t("inactive")}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
+                      {(!isSA && u.role === "admin") ? null : (
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => openEdit(u)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title={t("edit")} onClick={() => openEdit(u)}>
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" title={u.is_active ? "Nonaktifkan" : "Aktifkan"}
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title={u.is_active ? t("inactive") : t("present")}
                           onClick={() => handleToggle(u)} disabled={u.id === me?.id}>
                           {u.is_active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Reset Password"
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title={t("resetPassword")}
                           onClick={() => { setSelectedUser(u); setNewPassword(""); setResetDialogOpen(true); }}>
                           <RotateCcw className="w-3.5 h-3.5" />
                         </Button>
                         {isSA && u.id !== me?.id && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Hapus"
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title={t("delete")}
                             onClick={() => { setSelectedUser(u); setDeleteDialogOpen(true); }}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                         )}
                       </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 )) : (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
-                      Tidak ada anggota ditemukan
+                      {t("noMembersFound")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -260,6 +299,60 @@ export default function Members() {
           </div>
         )}
       </Card>
+
+      {/* Add Admin Dialog */}
+      <Dialog open={adminDialogOpen} onOpenChange={(open) => {
+        setAdminDialogOpen(open);
+        if (!open) setAdminForm({ fullName: "", email: "", password: "" });
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("addAdmin")}</DialogTitle>
+            <DialogDescription>{t("addAdminDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="mb-1.5 block">{t("adminName")} *</Label>
+              <Input
+                name="new-admin-name"
+                autoComplete="off"
+                value={adminForm.fullName}
+                placeholder={t("adminName")}
+                onChange={(e) => setAdminForm({ ...adminForm, fullName: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="mb-1.5 block">{t("adminEmail")} *</Label>
+              <Input
+                type="email"
+                name="new-admin-email"
+                autoComplete="off"
+                value={adminForm.email}
+                placeholder={t("adminEmail")}
+                onChange={(e) => setAdminForm({ ...adminForm, email: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="mb-1.5 block">{t("adminPassword")} *</Label>
+              <Input
+                type="password"
+                name="new-admin-password"
+                autoComplete="new-password"
+                value={adminForm.password}
+                placeholder={t("minimumCharacters")}
+                onChange={(e) => setAdminForm({ ...adminForm, password: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdminDialogOpen(false)}>{t("cancel")}</Button>
+            <Button onClick={handleAddAdmin} disabled={adminSaving} className="gap-2">
+              {adminSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {t("addAdmin")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -273,51 +366,38 @@ export default function Members() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <Label className="mb-1.5 block">Nama Lengkap *</Label>
-                <Input placeholder="Nama lengkap..." value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
+                <Label className="mb-1.5 block">{t("fullName")} *</Label>
+                <Input placeholder={t("fullName")} value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
               </div>
               <div>
-                <Label className="mb-1.5 block">Member ID</Label>
-                <Input placeholder="Auto-generate jika kosong" value={form.memberId}
+                <Label className="mb-1.5 block">{t("memberId")}</Label>
+                <Input placeholder={t("memberId")} value={form.memberId}
                   onChange={(e) => setForm({ ...form, memberId: e.target.value })} disabled={!!editing} />
               </div>
               <div>
-                <Label className="mb-1.5 block">No. HP</Label>
-                <Input placeholder="08xxxxxxxxxx" value={form.phoneNumber} onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })} />
+                <Label className="mb-1.5 block">{t("phoneNumber")}</Label>
+                <Input placeholder={t("phoneNumber")} value={form.phoneNumber} onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })} />
               </div>
               <div className="col-span-2">
-                <Label className="mb-1.5 block">Email *</Label>
-                <Input type="email" placeholder="email@domain.com" value={form.email}
+                <Label className="mb-1.5 block">{t("emailAddress")} *</Label>
+                  <Input type="email" placeholder={t("emailAddress")} value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={!!editing} />
-                {editing && <p className="text-xs text-muted-foreground mt-1">Email tidak dapat diubah</p>}
+                {editing && <p className="text-xs text-muted-foreground mt-1">{t("emailCannotChange")}</p>}
               </div>
               {!editing && (
                 <div className="col-span-2">
-                  <Label className="mb-1.5 block">Password *</Label>
-                  <Input type="password" placeholder="Minimal 8 karakter" value={form.password}
+                  <Label className="mb-1.5 block">{t("password")} *</Label>
+                  <Input type="password" placeholder={t("minimumCharacters")} value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })} />
-                </div>
-              )}
-              {isSA && (
-                <div className="col-span-2">
-                  <Label className="mb-1.5 block">Role Sistem</Label>
-                  <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as any })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="user">User (Member)</SelectItem>
-                      <SelectItem value="admin">Admin (Operasional)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground mt-1">Role sistem menentukan hak akses dashboard</p>
                 </div>
               )}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>{t("cancel")}</Button>
             <Button onClick={handleSave} disabled={saving} className="gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editing ? "Simpan" : "Tambah Anggota"}
+              {editing ? t("save") : t("add")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -327,27 +407,27 @@ export default function Members() {
       <Dialog open={resetDialogOpen} onOpenChange={(o) => { if (!o) { setResetDialogOpen(false); setSelectedUser(null); } }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Reset Password</DialogTitle>
+            <DialogTitle>{t("resetPassword")}</DialogTitle>
             <DialogDescription>Reset password untuk {selectedUser?.full_name}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="mb-1.5 block">Password Baru *</Label>
+              <Label className="mb-1.5 block">{t("newPassword")} *</Label>
               <div className="relative">
-                <Input type={showPw ? "text" : "password"} placeholder="Minimal 8 karakter"
+                <Input type={showPw ? "text" : "password"} placeholder={t("minimumCharacters")}
                   value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
                 <button type="button" onClick={() => setShowPw(!showPw)}
                   className="absolute right-3 top-2.5 text-xs text-muted-foreground hover:text-foreground">
-                  {showPw ? "Sembunyikan" : "Tampilkan"}
+                  {showPw ? t("hide") : t("show")}
                 </button>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Sesi aktif pengguna akan dihapus setelah password direset.
+              {t("activeSessionReset")}
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setResetDialogOpen(false); setSelectedUser(null); }}>Batal</Button>
+            <Button variant="outline" onClick={() => { setResetDialogOpen(false); setSelectedUser(null); }}>{t("cancel")}</Button>
             <Button onClick={handleResetPassword} disabled={saving || !newPassword} className="gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />} Reset
             </Button>
@@ -359,15 +439,15 @@ export default function Members() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Hapus Anggota</AlertDialogTitle>
+            <AlertDialogTitle>{t("delete")} {t("memberLabel")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Hapus <strong>{selectedUser?.full_name}</strong>? Seluruh data kehadiran akan ikut terhapus. Tindakan ini tidak dapat dibatalkan.
+              {t("deleteMemberConfirmation").replace("{name}", selectedUser?.full_name || "")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Hapus Permanen
+              {t("permanentDelete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

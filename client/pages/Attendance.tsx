@@ -53,27 +53,18 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { attendanceApi, userApi, eventApi } from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage } from "@/lib/i18n";
 
-const attendanceFormSchema = z.object({
-  attendanceDate: z.string({
-    required_error: "Date is required",
-  }),
-  userId: z.string({
-    required_error: "Member is required",
-  }),
-  eventId: z.string({
-    required_error: "Event is required",
-  }),
-  checkInTime: z.string({
-    required_error: "Check-in time is required",
-  }),
+const createAttendanceFormSchema = (t: (key: import("@/lib/i18n").TranslationKey) => string) => z.object({
+  attendanceDate: z.string({ required_error: t("attendanceRequired") }),
+  userId: z.string({ required_error: t("memberRequired") }),
+  eventId: z.string({ required_error: t("eventRequired") }),
+  checkInTime: z.string({ required_error: t("checkInTimeRequired") }),
   checkOutTime: z.string().optional(),
   status: z.enum(["present", "late", "excused", "sick", "absent"], {
-    required_error: "Status is required",
+    required_error: t("statusRequired"),
   }),
 });
-
-type AttendanceFormValues = z.infer<typeof attendanceFormSchema>;
 
 interface AttendanceRecord {
   id: number;
@@ -111,6 +102,7 @@ interface Event {
 }
 
 export default function Attendance() {
+  const { t } = useLanguage();
   const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
@@ -125,8 +117,10 @@ export default function Attendance() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<number | null>(null);
 
+  const formSchema = createAttendanceFormSchema(t);
+  type AttendanceFormValues = z.infer<typeof formSchema>;
   const form = useForm<AttendanceFormValues>({
-    resolver: zodResolver(attendanceFormSchema),
+    resolver: zodResolver(formSchema),
     defaultValues: {
       attendanceDate: format(new Date(), "yyyy-MM-dd"),
       userId: "",
@@ -137,6 +131,9 @@ export default function Attendance() {
     },
   });
 
+    const createAttendanceFormSchema = (t: (key: import("@/lib/i18n").TranslationKey) => string) => z.object({
+      attendanceDate: z.string({ required_error: t("attendanceRequired") }),
+    });
   useEffect(() => {
     fetchData();
   }, []);
@@ -155,9 +152,16 @@ export default function Attendance() {
       setEvents(eventsRes.data.data || []);
     } catch (error: any) {
       console.error('Error fetching data:', error);
+            setLoading(true);
+            const [attendanceRes, usersRes, eventsRes] = await Promise.all([
+              attendanceApi.getAll(),
+              userApi.getAll({ isActive: true }),
+              eventApi.getAll({ isActive: true }),
+            ]);
+      
       toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to load attendance data",
+        title: t("error"),
+        description: error.response?.data?.message || t("attendanceDataLoadFailed"),
         variant: "destructive",
       });
     } finally {
@@ -197,16 +201,16 @@ export default function Attendance() {
     try {
       await attendanceApi.delete(recordToDelete);
       toast({
-        title: "Success",
-        description: "Attendance record deleted successfully",
+        title: t("success"),
+        description: t("attendanceRecordDeleted"),
       });
       fetchData();
       setDeleteDialogOpen(false);
       setRecordToDelete(null);
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to delete attendance record",
+        title: t("error"),
+        description: error.response?.data?.message || t("deleteAttendanceRecordFailed"),
         variant: "destructive",
       });
     }
@@ -224,8 +228,8 @@ export default function Attendance() {
           notes: data.status === "excused" ? "Excused absence" : data.status === "sick" ? "Medical leave" : undefined,
         });
         toast({
-          title: "Success",
-          description: "Attendance record updated successfully",
+          title: t("success"),
+          description: t("attendanceRecordUpdated"),
         });
       } else {
         await attendanceApi.create({
@@ -239,8 +243,8 @@ export default function Attendance() {
           notes: data.status === "excused" ? "Excused absence" : data.status === "sick" ? "Medical leave" : undefined,
         });
         toast({
-          title: "Success",
-          description: "Attendance record created successfully",
+          title: t("success"),
+          description: t("attendanceRecordCreated"),
         });
       }
 
@@ -249,8 +253,8 @@ export default function Attendance() {
       fetchData();
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to save attendance record",
+        title: t("error"),
+        description: error.response?.data?.message || t("attendanceRecordSaveFailed"),
         variant: "destructive",
       });
     }
@@ -287,11 +291,11 @@ export default function Attendance() {
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; className: string }> = {
-      present: { label: "Present", className: "bg-green-100 text-green-700 border-green-200" },
-      late: { label: "Late", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-      excused: { label: "Excused", className: "bg-blue-100 text-blue-700 border-blue-200" },
-      sick: { label: "Sick", className: "bg-purple-100 text-purple-700 border-purple-200" },
-      absent: { label: "Absent", className: "bg-red-100 text-red-700 border-red-200" },
+      present: { label: t("present"), className: "bg-green-100 text-green-700 border-green-200" },
+      late: { label: t("late"), className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+      excused: { label: t("excusedSick").split(" /")[0], className: "bg-blue-100 text-blue-700 border-blue-200" },
+      sick: { label: t("sick"), className: "bg-purple-100 text-purple-700 border-purple-200" },
+      absent: { label: t("absent"), className: "bg-red-100 text-red-700 border-red-200" },
     };
     
     const config = statusMap[status] || statusMap.present;
@@ -334,8 +338,8 @@ export default function Attendance() {
   const handleExportCSV = () => {
     if (filteredAttendances.length === 0) {
       toast({
-        title: "Info",
-        description: "No data to export",
+        title: t("noData"),
+        description: t("noDataToExport"),
       });
       return;
     }
@@ -368,8 +372,8 @@ export default function Attendance() {
     URL.revokeObjectURL(url);
     
     toast({
-      title: "Success",
-      description: "Report exported successfully",
+      title: t("success"),
+      description: t("reportExported"),
     });
   };
 
@@ -394,9 +398,9 @@ export default function Attendance() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Attendance Management</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">{t("attendanceManagement")}</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            View and manage attendance records
+            {t("viewManageAttendance")}
           </p>
         </div>
         <div className="flex gap-2 flex-col md:flex-row w-full md:w-auto">
@@ -406,17 +410,17 @@ export default function Attendance() {
             className="gap-2 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary"
           >
             <Link to="/attendance/home">
-              Home Attendance
+              {t("homeAttendance")}
               <ArrowRight className="w-4 h-4" />
             </Link>
           </Button>
           <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
             <Download className="w-4 h-4" />
-            Export CSV
+            {t("exportCsv")}
           </Button>
           <Button onClick={openNewDialog} className="gap-2 flex-1 md:flex-none">
             <Plus className="w-4 h-4" />
-            Manual Entry
+            {t("manualEntry")}
           </Button>
         </div>
       </div>
@@ -424,23 +428,23 @@ export default function Attendance() {
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card className="p-3 md:p-4">
-          <p className="text-xs md:text-sm text-muted-foreground mb-1">Total Records</p>
+          <p className="text-xs md:text-sm text-muted-foreground mb-1">{t("totalRecords")}</p>
           <p className="text-xl md:text-2xl font-bold">{totalRecords}</p>
         </Card>
         <Card className="p-3 md:p-4 border-l-4 border-l-green-500">
-          <p className="text-xs md:text-sm text-muted-foreground mb-1">Present</p>
+          <p className="text-xs md:text-sm text-muted-foreground mb-1">{t("present")}</p>
           <p className="text-xl md:text-2xl font-bold text-green-600">{presentCount}</p>
         </Card>
         <Card className="p-3 md:p-4 border-l-4 border-l-yellow-500">
-          <p className="text-xs md:text-sm text-muted-foreground mb-1">Late</p>
+          <p className="text-xs md:text-sm text-muted-foreground mb-1">{t("late")}</p>
           <p className="text-xl md:text-2xl font-bold text-yellow-600">{lateCount}</p>
         </Card>
         <Card className="p-3 md:p-4 border-l-4 border-l-blue-500">
-          <p className="text-xs md:text-sm text-muted-foreground mb-1">Excused/Sick</p>
+          <p className="text-xs md:text-sm text-muted-foreground mb-1">{t("excusedSick")}</p>
           <p className="text-xl md:text-2xl font-bold text-blue-600">{excusedSickCount}</p>
         </Card>
         <Card className="p-3 md:p-4 border-l-4 border-l-red-500">
-          <p className="text-xs md:text-sm text-muted-foreground mb-1">Absent</p>
+          <p className="text-xs md:text-sm text-muted-foreground mb-1">{t("absent")}</p>
           <p className="text-xl md:text-2xl font-bold text-red-600">{absentCount}</p>
         </Card>
       </div>
@@ -451,7 +455,7 @@ export default function Attendance() {
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name, ID or email..."
+              placeholder={t("searchNameIdEmail")}
               className="pl-9"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -459,10 +463,10 @@ export default function Attendance() {
           </div>
           <Select value={filterEvent} onValueChange={setFilterEvent}>
             <SelectTrigger>
-              <SelectValue placeholder="Filter by event" />
+              <SelectValue placeholder={t("filterByEventLabel")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Events</SelectItem>
+              <SelectItem value="all">{t("allEventsLabel")}</SelectItem>
               {events.map((evt) => (
                 <SelectItem key={evt.id} value={evt.id.toString()}>
                   {evt.event_code} - {evt.event_name}
@@ -472,27 +476,27 @@ export default function Attendance() {
           </Select>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger>
-              <SelectValue placeholder="Filter by status" />
+              <SelectValue placeholder={t("filterByStatus")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="present">Present</SelectItem>
-              <SelectItem value="late">Late</SelectItem>
-              <SelectItem value="excused">Excused</SelectItem>
-              <SelectItem value="sick">Sick</SelectItem>
-              <SelectItem value="absent">Absent</SelectItem>
+              <SelectItem value="all">{t("allStatuses")}</SelectItem>
+              <SelectItem value="present">{t("present")}</SelectItem>
+              <SelectItem value="late">{t("late")}</SelectItem>
+              <SelectItem value="excused">{t("excusedSick").split(" /")[0]}</SelectItem>
+              <SelectItem value="sick">{t("sick")}</SelectItem>
+              <SelectItem value="absent">{t("absent")}</SelectItem>
             </SelectContent>
           </Select>
           <Input
             type="date"
             value={filterDate}
             onChange={(e) => setFilterDate(e.target.value)}
-            placeholder="Filter by date"
+            placeholder={t("filterByDate")}
           />
         </div>
         {filteredAttendances.length !== attendances.length && (
           <p className="text-xs text-muted-foreground mt-3">
-            Showing {filteredAttendances.length} of {attendances.length} records
+            {t("recordsShown")} {filteredAttendances.length} / {attendances.length}
           </p>
         )}
       </Card>
@@ -503,14 +507,14 @@ export default function Attendance() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="whitespace-nowrap">Date</TableHead>
-                <TableHead className="whitespace-nowrap">Member ID</TableHead>
-                <TableHead className="whitespace-nowrap">Member Name</TableHead>
-                <TableHead className="whitespace-nowrap">Event</TableHead>
-                <TableHead className="whitespace-nowrap">Check-in</TableHead>
-                <TableHead className="whitespace-nowrap">Check-out</TableHead>
-                <TableHead className="whitespace-nowrap">Status</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
+                <TableHead className="whitespace-nowrap">{t("date")}</TableHead>
+                <TableHead className="whitespace-nowrap">{t("memberId")}</TableHead>
+                <TableHead className="whitespace-nowrap">{t("memberName")}</TableHead>
+                <TableHead className="whitespace-nowrap">{t("event")}</TableHead>
+                <TableHead className="whitespace-nowrap">{t("checkIn")}</TableHead>
+                <TableHead className="whitespace-nowrap">{t("checkOut")}</TableHead>
+                <TableHead className="whitespace-nowrap">{t("status")}</TableHead>
+                <TableHead className="whitespace-nowrap text-right">{t("actionsLabel")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -543,7 +547,7 @@ export default function Attendance() {
                           size="icon"
                           onClick={() => openEditDialog(record)}
                           className="h-8 w-8"
-                          title="Edit"
+                          title={t("edit")}
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
@@ -555,7 +559,7 @@ export default function Attendance() {
                             setDeleteDialogOpen(true);
                           }}
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          title="Delete"
+                          title={t("delete")}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -566,7 +570,7 @@ export default function Attendance() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
-                    No attendance records found
+                    {t("noResults")}
                   </TableCell>
                 </TableRow>
               )}
@@ -580,12 +584,12 @@ export default function Attendance() {
         <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingRecord ? "Edit Attendance Record" : "Manual Attendance Entry"}
+              {editingRecord ? t("edit") : t("manualEntry")}
             </DialogTitle>
             <DialogDescription>
               {editingRecord 
-                ? "Edit the attendance record details below." 
-                : "Fill in the details to create a new attendance record."}
+                ? t("attendanceRecordUpdated")
+                : t("attendanceRecordCreated")}
             </DialogDescription>
           </DialogHeader>
 
@@ -596,7 +600,7 @@ export default function Attendance() {
                 name="attendanceDate" 
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Date *</FormLabel>
+                    <FormLabel>{t("date")} *</FormLabel>
                     <FormControl>
                       <Input
                         type="date"
@@ -613,11 +617,11 @@ export default function Attendance() {
                 name="userId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Member *</FormLabel>
+                    <FormLabel>{t("memberLabel")} *</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a member" />
+                          <SelectValue placeholder={t("memberLabel")} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -638,11 +642,11 @@ export default function Attendance() {
                 name="eventId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Event *</FormLabel>
+                    <FormLabel>{t("event")} *</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select an event" />
+                          <SelectValue placeholder={t("event")} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -664,7 +668,7 @@ export default function Attendance() {
                   name="checkInTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Check-in *</FormLabel>
+                      <FormLabel>{t("checkIn")} *</FormLabel>
                       <FormControl>
                         <Input type="time" {...field} />
                       </FormControl>
@@ -678,7 +682,7 @@ export default function Attendance() {
                   name="checkOutTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Check-out</FormLabel>
+                      <FormLabel>{t("checkOut")}</FormLabel>
                       <FormControl>
                         <Input type="time" {...field} />
                       </FormControl>
@@ -693,19 +697,19 @@ export default function Attendance() {
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Status *</FormLabel>
+                    <FormLabel>{t("status") } *</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select status" />
+                          <SelectValue placeholder={t("status")} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="present">Present</SelectItem>
-                        <SelectItem value="late">Late</SelectItem>
-                        <SelectItem value="excused">Excused</SelectItem>
-                        <SelectItem value="sick">Sick</SelectItem>
-                        <SelectItem value="absent">Absent</SelectItem>
+                        <SelectItem value="present">{t("present")}</SelectItem>
+                        <SelectItem value="late">{t("late")}</SelectItem>
+                        <SelectItem value="excused">{t("excused")}</SelectItem>
+                        <SelectItem value="sick">{t("sick")}</SelectItem>
+                        <SelectItem value="absent">{t("absent")}</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -715,10 +719,10 @@ export default function Attendance() {
 
               <DialogFooter className="gap-2">
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
+                  {t("cancel")}
                 </Button>
                 <Button type="submit">
-                  {editingRecord ? "Update" : "Create"}
+                  {editingRecord ? t("edit") : t("add")}
                 </Button>
               </DialogFooter>
             </form>
@@ -730,15 +734,15 @@ export default function Attendance() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Attendance Record</AlertDialogTitle>
+            <AlertDialogTitle>{t("delete")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this attendance record? This action cannot be undone.
+              {t("cannotUndo")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
+              {t("delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

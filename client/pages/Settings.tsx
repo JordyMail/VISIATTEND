@@ -1,6 +1,6 @@
 // client/pages/Settings.tsx  (Admin & SuperAdmin shared settings)
 import { useState, useEffect } from "react";
-import { Save, Eye, EyeOff, Loader2, User, Lock, Activity } from "lucide-react";
+import { Save, Eye, EyeOff, Loader2, User, Lock, Activity, Languages } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import {
 import { settingsApi } from "@/services/api";
 import { getSessionUser, getSession, setSession, clearSession } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
+import { useLanguage, type Language } from "@/lib/i18n";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const JABATAN_LABEL: Record<string, string> = {
   preacher:      "Preacher / Pembina",
@@ -37,6 +39,7 @@ const ACTION_COLOR: Record<string, string> = {
 };
 
 export default function Settings() {
+  const { language, setLanguage, t } = useLanguage();
   const sessionUser = getSessionUser();
   const isSuperAdmin = sessionUser?.role === 'super_admin';
   const [loading, setLoading] = useState(true);
@@ -76,8 +79,8 @@ export default function Settings() {
     } catch (error: any) {
       console.error('Error loading settings:', error);
       toast({ 
-        title: "Error", 
-        description: error.response?.data?.message || "Gagal memuat pengaturan", 
+        title: t("error"), 
+        description: error.response?.data?.message || t("error"), 
         variant: "destructive" 
       });
     } finally { 
@@ -87,7 +90,7 @@ export default function Settings() {
 
   const handleSaveProfile = async () => {
     if (!profile.full_name.trim()) {
-      toast({ title: "Validasi", description: "Nama wajib diisi", variant: "destructive" });
+      toast({ title: t("validation"), description: `${t("fullName")} ${t("required").toLowerCase()}`, variant: "destructive" });
       return;
     }
     
@@ -117,12 +120,12 @@ export default function Settings() {
         });
       }
       
-      toast({ title: "Berhasil", description: "Profil berhasil diperbarui" });
+      toast({ title: t("success"), description: t("profileUpdated") });
       await loadData(); // Reload data to get fresh info
     } catch (e: any) {
       toast({ 
-        title: "Error", 
-        description: e.response?.data?.message || "Gagal menyimpan profil", 
+        title: t("error"), 
+        description: e.response?.data?.message || t("error"), 
         variant: "destructive" 
       });
     } finally { 
@@ -132,19 +135,19 @@ export default function Settings() {
 
   const handleChangePassword = async () => {
     if (!passwords.currentPassword) {
-      toast({ title: "Validasi", description: "Password saat ini wajib diisi", variant: "destructive" });
+      toast({ title: t("validation"), description: `${t("password")} ${t("required").toLowerCase()}`, variant: "destructive" });
       return;
     }
     if (!passwords.newPassword) {
-      toast({ title: "Validasi", description: "Password baru wajib diisi", variant: "destructive" });
+      toast({ title: t("validation"), description: `${t("newPassword")} ${t("required").toLowerCase()}`, variant: "destructive" });
       return;
     }
     if (passwords.newPassword.length < 8) {
-      toast({ title: "Validasi", description: "Password baru minimal 8 karakter", variant: "destructive" });
+      toast({ title: t("validation"), description: t("minimumCharacters"), variant: "destructive" });
       return;
     }
     if (passwords.newPassword !== passwords.confirmPassword) {
-      toast({ title: "Validasi", description: "Konfirmasi password tidak cocok", variant: "destructive" });
+      toast({ title: t("validation"), description: t("passwordMismatch"), variant: "destructive" });
       return;
     }
     
@@ -156,7 +159,7 @@ export default function Settings() {
       });
       
       setPasswords({ currentPassword: "", newPassword: "", confirmPassword: "" });
-      toast({ title: "Berhasil", description: "Password berhasil diubah" });
+      toast({ title: t("success"), description: t("profileUpdated") });
       
       // Optional: Clear sensitive data from memory after timeout
       setTimeout(() => {
@@ -164,8 +167,8 @@ export default function Settings() {
       }, 3000);
     } catch (e: any) {
       toast({ 
-        title: "Error", 
-        description: e.response?.data?.message || "Gagal mengubah password", 
+        title: t("error"), 
+        description: e.response?.data?.message || t("error"), 
         variant: "destructive" 
       });
     } finally { 
@@ -196,8 +199,8 @@ export default function Settings() {
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Pengaturan Akun</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Kelola profil dan keamanan akun kamu</p>
+        <h1 className="text-2xl font-bold">{t("accountSettings")}</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("manageProfileSecurity")}</p>
       </div>
 
       {/* Profile preview card */}
@@ -239,17 +242,41 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Languages className="w-4 h-4" /> {t("language")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label>{t("language")}</Label>
+          <Select value={language} onValueChange={(value) => {
+            setLanguage(value as Language);
+            toast({ title: t("language"), description: t("languageSaved") });
+          }}>
+            <SelectTrigger className="max-w-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="en">{t("english")}</SelectItem>
+              <SelectItem value="id">{t("indonesian")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">{t("languageDescription")}</p>
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="profile" className="w-full">
         <TabsList className={`grid ${isSuperAdmin ? 'grid-cols-3' : 'grid-cols-2'} w-full max-w-sm`}>
           <TabsTrigger value="profile" className="gap-1.5">
-            <User className="w-3.5 h-3.5" /> Profil
+            <User className="w-3.5 h-3.5" /> {t("profile")}
           </TabsTrigger>
           <TabsTrigger value="password" className="gap-1.5">
-            <Lock className="w-3.5 h-3.5" /> Password
+            <Lock className="w-3.5 h-3.5" /> {t("password")}
           </TabsTrigger>
           {isSuperAdmin && (
             <TabsTrigger value="activity" className="gap-1.5">
-              <Activity className="w-3.5 h-3.5" /> Aktivitas
+              <Activity className="w-3.5 h-3.5" /> {t("activity")}
             </TabsTrigger>
           )}
         </TabsList>
@@ -258,12 +285,12 @@ export default function Settings() {
         <TabsContent value="profile" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Informasi Profil</CardTitle>
+              <CardTitle className="text-base">{t("profileInfo")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <Label className="mb-1.5 block">Nama Lengkap</Label>
+                  <Label className="mb-1.5 block">{t("fullName")}</Label>
                   <Input 
                     value={profile.full_name}
                     onChange={(e) => setProfile({ ...profile, full_name: e.target.value })} 
@@ -271,16 +298,16 @@ export default function Settings() {
                   />
                 </div>
                 <div>
-                  <Label className="mb-1.5 block">Email</Label>
+                  <Label className="mb-1.5 block">{t("emailAddress")}</Label>
                   <Input disabled value={profile.email} className="bg-muted" />
-                  <p className="text-xs text-muted-foreground mt-1">Email tidak dapat diubah</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t("emailCannotChange")}</p>
                 </div>
                 <div>
-                  <Label className="mb-1.5 block">Member ID</Label>
+                  <Label className="mb-1.5 block">{t("memberId")}</Label>
                   <Input disabled value={profile.member_id} className="bg-muted" />
                 </div>
                 <div>
-                  <Label className="mb-1.5 block">Nomor HP</Label>
+                  <Label className="mb-1.5 block">{t("phoneNumber")}</Label>
                   <Input 
                     placeholder="08xxxxxxxxxx" 
                     value={profile.phone_number || ""}
@@ -288,15 +315,15 @@ export default function Settings() {
                   />
                 </div>
                 <div>
-                  <Label className="mb-1.5 block">Jabatan</Label>
+                  <Label className="mb-1.5 block">{t("organizationRole")}</Label>
                   <Input disabled value={JABATAN_LABEL[profile.jabatan] || profile.jabatan || "-"} className="bg-muted" />
                 </div>
                 <div>
-                  <Label className="mb-1.5 block">Divisi</Label>
+                  <Label className="mb-1.5 block">{t("divisions")}</Label>
                   <Input disabled value={profile.division || "-"} className="bg-muted" />
                 </div>
                 <div className="sm:col-span-2">
-                  <Label className="mb-1.5 block">URL Foto Profil (opsional)</Label>
+                  <Label className="mb-1.5 block">{t("profilePhotoUrl")}</Label>
                   <Input 
                     placeholder="https://example.com/avatar.jpg" 
                     value={profile.avatar_url || ""}
@@ -319,14 +346,14 @@ export default function Settings() {
         <TabsContent value="password" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Ubah Password</CardTitle>
+              <CardTitle className="text-base">{t("password")} {t("edit").toLowerCase()}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 max-w-md">
               {(["currentPassword", "newPassword", "confirmPassword"] as const).map((field) => {
                 const labels = {
-                  currentPassword: "Password Saat Ini",
-                  newPassword: "Password Baru",
-                  confirmPassword: "Konfirmasi Password Baru",
+                  currentPassword: t("currentPassword"),
+                  newPassword: t("newPassword"),
+                  confirmPassword: t("confirmNewPassword"),
                 };
                 const key = field === "currentPassword" ? "current" : field === "newPassword" ? "new" : "confirm";
                 return (
@@ -337,7 +364,7 @@ export default function Settings() {
                         type={showPw[key as keyof typeof showPw] ? "text" : "password"}
                         value={passwords[field]}
                         onChange={(e) => setPasswords({ ...passwords, [field]: e.target.value })}
-                        placeholder={field === "currentPassword" ? "••••••••" : "Minimal 8 karakter"}
+                        placeholder={field === "currentPassword" ? "••••••••" : t("minimumCharacters")}
                       />
                       <button
                         type="button"
@@ -351,10 +378,10 @@ export default function Settings() {
                       </button>
                     </div>
                     {field === "newPassword" && (
-                      <p className="text-xs text-muted-foreground mt-1">Minimal 8 karakter (huruf, angka, atau simbol)</p>
+                      <p className="text-xs text-muted-foreground mt-1">{t("passwordRequirements")}</p>
                     )}
                     {field === "confirmPassword" && passwords.confirmPassword && passwords.newPassword !== passwords.confirmPassword && (
-                      <p className="text-xs text-red-500 mt-1">Password tidak cocok</p>
+                      <p className="text-xs text-red-500 mt-1">{t("passwordMismatchShort")}</p>
                     )}
                   </div>
                 );
@@ -365,7 +392,7 @@ export default function Settings() {
                 className="gap-2"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Ubah Password
+                {t("password")} {t("edit").toLowerCase()}
               </Button>
             </CardContent>
           </Card>
@@ -375,16 +402,16 @@ export default function Settings() {
         <TabsContent value="activity" className="mt-4">
           <Card className="overflow-hidden">
             <CardHeader className="border-b">
-              <CardTitle className="text-base">Aktivitas Akun Terakhir</CardTitle>
+              <CardTitle className="text-base">{t("accountActivity")}</CardTitle>
               <p className="text-xs text-muted-foreground mt-1">Menampilkan {logs.length} aktivitas terbaru</p>
             </CardHeader>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[100px]">Aksi</TableHead>
-                    <TableHead>Deskripsi</TableHead>
-                    <TableHead className="w-[180px]">Waktu</TableHead>
+                    <TableHead className="w-[100px]">{t("actions")}</TableHead>
+                    <TableHead>{t("actionDescription")}</TableHead>
+                    <TableHead className="w-[180px]">{t("time")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
